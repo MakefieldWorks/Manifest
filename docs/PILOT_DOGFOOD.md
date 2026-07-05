@@ -19,7 +19,14 @@ bun run typecheck
 bun run test
 bun run test:e2e
 bun run package:verify
+bun run test:dogfood -- --project ./tmp/pilot-dogfood
 ```
+
+`package:verify` builds and inspects the host package. On macOS it also ad-hoc
+signs and verifies the local unsigned `.app` bundle so launch-blocking signature
+issues are caught before manual testing. `test:dogfood` then opens the generated
+project through the Electron E2E harness. The final OS shell launch still needs a
+manual Finder/Explorer pass.
 
 ## Core Workflow
 
@@ -34,6 +41,27 @@ bun run package:verify
 - Compare `generated-04` to `dogfood-edit-pass`.
 - Confirm added, moved, renamed, property-changed, and order-only changes are legible.
 - Restore `generated-04` and confirm search results and tree selection still behave normally.
+
+## Windows Handoff
+
+Switch to the Windows machine after the macOS verification commands above pass
+and the dogfood project has been generated or copied over. From
+`C:\code\Manifest`, run:
+
+```powershell
+bun install
+bun run typecheck
+bun run test
+bun run test:e2e
+bun run package:verify
+bun run generate:project -- --output ./tmp/pilot-dogfood --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424 --force
+bun run test:dogfood -- --project ./tmp/pilot-dogfood
+```
+
+After the automated checks pass, manually open `dist\win-unpacked\Manifest.exe`
+and verify the native Windows frame, taskbar icon, Open Recent menu, file-open
+flow, close/quit save behavior, and snapshot compare readability on the packaged
+build.
 
 ## Notes To Capture
 

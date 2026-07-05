@@ -1,7 +1,8 @@
 // Git service tests use real git repos in temp directories, never mocks.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { GitService } from '../../../src/main/git-service'
@@ -17,8 +18,8 @@ beforeEach(() => {
   git = new GitService(noopLogger)
 })
 
-afterEach(() => {
-  rmSync(tmpDir, { recursive: true, force: true })
+afterEach(async () => {
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 function runGit(args: string[]) {

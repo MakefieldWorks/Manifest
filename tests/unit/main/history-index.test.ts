@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { mkdirSync, existsSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import Database from 'better-sqlite3'
@@ -18,9 +19,9 @@ beforeEach(() => {
   svc.open(projectPath)
 })
 
-afterEach(() => {
+afterEach(async () => {
   svc.close()
-  rmSync(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 function node(id: string, name: string, parentId: string | null, order = 0, properties: Record<string, string | number | boolean | null> = {}): ManifestNode {

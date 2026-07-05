@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import {
@@ -16,8 +17,8 @@ beforeEach(() => {
   mkdirSync(tmpDir, { recursive: true })
 })
 
-afterEach(() => {
-  rmSync(tmpDir, { recursive: true, force: true })
+afterEach(async () => {
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 function storePath(): string {

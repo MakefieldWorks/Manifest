@@ -157,7 +157,7 @@
   let toastTimer:   ReturnType<typeof setTimeout> | null = null
   let unsubscribeMenuCommands: (() => void) | null = null
   let unsubscribeProjectOpenFromOs: (() => void) | null = null
-  const brandMark = '/manifest-mark.svg'
+  const brandMark = './manifest-mark.svg'
   const WORKSPACE_SETTINGS_SAVE_DELAY_MS = 250
   const desktopChrome = window.api.platform
 

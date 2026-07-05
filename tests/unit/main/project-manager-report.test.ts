@@ -1,7 +1,8 @@
 // Unit tests for diff-report export in ProjectManager. Stub git serves two
 // snapshot manifests so buildReport runs the real loadAndDiff + formatters.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
@@ -58,7 +59,7 @@ beforeEach(() => {
 afterEach(async () => {
   manager?.cancelAutosave()
   await manager?.flushAndClose()
-  rmSync(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 describe('buildReport', () => {

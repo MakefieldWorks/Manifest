@@ -2,12 +2,13 @@
 
 import { execFileSync } from 'child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
-import { join, resolve } from 'path'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
 
 import { listPackage } from '@electron/asar'
 import plist from 'plist'
 
-const ROOT_DIR = resolve(new URL('..', import.meta.url).pathname)
+const ROOT_DIR = fileURLToPath(new URL('..', import.meta.url))
 const DIST_DIR = join(ROOT_DIR, 'dist')
 const REQUIRED_ASSETS = [
   join(ROOT_DIR, 'resources', 'manifest.svg'),
@@ -78,6 +79,9 @@ function buildHostPackage() {
 function verifyMacBundle() {
   const appBundle = findBundle(DIST_DIR, '.app')
   assert(appBundle, `Could not find a packaged .app bundle under ${DIST_DIR}`)
+
+  run('codesign', ['--force', '--deep', '--sign', '-', appBundle])
+  run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
 
   const infoPlistPath = join(appBundle, 'Contents', 'Info.plist')
   ensureFile(infoPlistPath)

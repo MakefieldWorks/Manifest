@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { RecentProjectsStore, getRecentDocumentPath } from '../../../src/main/recent-projects'
@@ -15,9 +16,9 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'))
 })
 
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers()
-  rmSync(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 function project(path: string, name = 'Lab'): Project {

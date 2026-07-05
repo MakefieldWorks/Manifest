@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, rmSync } from 'fs'
+import { mkdirSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
@@ -30,10 +31,10 @@ beforeEach(async () => {
   expect(created.ok).toBe(true)
 })
 
-afterEach(() => {
+afterEach(async () => {
   manager.cancelAutosave()
   manager.discardCurrentProject()
-  rmSync(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 describe('ProjectManager close semantics', () => {
