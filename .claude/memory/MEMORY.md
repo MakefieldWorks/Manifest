@@ -13,3 +13,7 @@ Project-scoped memory for Manifest. User-scoped preferences and Svelte 5 gotchas
 - [Diff/report export](project_report_export.md) — Markdown/CSV export of the snapshot diff; pure formatter over diffProjects/diffTemplates; on branch feat/report-export
 - [Native ABI rebuild order](feedback-native-abi-rebuild-order.md) — better-sqlite3: rebuild:native:node for unit, rebuild:native:electron for E2E/dev; never leave it node-built
 - [Reference force-delete/unlink](project_reference_force_delete.md) — PR #19: force-delete clears blocking references; detection gated on live reference fields + template defaults, NOT a blanket string scan (ids aren't loader-enforced uuidv7)
+- [Windows tmpDir cleanup after SQLite close](feedback-windows-tmpdir-cleanup.md) — rmSync's maxRetries/retryDelay are a no-op on Windows; use async fs.promises.rm() instead
+- [Shebang breaks vite-node](feedback-shebang-breaks-vite-node.md) — a script with `#!/usr/bin/env node` fails with a misleading SyntaxError when transitively imported by a Vitest test
+- [ESM ROOT_DIR doubles drive letter on Windows](feedback-esm-root-dir-windows.md) — `resolve(new URL('..', import.meta.url).pathname)` breaks on Windows; use `fileURLToPath()` instead
+- [Renderer absolute asset path breaks packaged app](feedback-renderer-absolute-asset-path.md) — `'/manifest-mark.svg'` string literal works in dev (server root) but 404s under `file://` in the packaged build; must be relative (`'./manifest-mark.svg'`)
