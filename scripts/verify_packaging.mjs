@@ -79,6 +79,9 @@ function verifyMacBundle() {
   const appBundle = findBundle(DIST_DIR, '.app')
   assert(appBundle, `Could not find a packaged .app bundle under ${DIST_DIR}`)
 
+  run('codesign', ['--force', '--deep', '--sign', '-', appBundle])
+  run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle])
+
   const infoPlistPath = join(appBundle, 'Contents', 'Info.plist')
   ensureFile(infoPlistPath)
 
