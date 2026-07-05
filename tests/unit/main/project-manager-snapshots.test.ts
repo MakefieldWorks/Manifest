@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
@@ -37,7 +38,7 @@ beforeEach(async () => {
 afterEach(async () => {
   manager.cancelAutosave()
   await manager.flushAndClose()
-  rmSync(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 describe('snapshot workflow', () => {
@@ -373,7 +374,7 @@ describe('per-node history index integration', () => {
   afterEach(async () => {
     isolatedManager.cancelAutosave()
     await isolatedManager.flushAndClose()
-    rmSync(isolatedTmp, { recursive: true, force: true })
+    await rm(isolatedTmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
   })
 
   it('writes per-node history rows on snapshotCreate', async () => {
@@ -460,7 +461,7 @@ describe('per-node history index integration', () => {
       expect(listed.data.some((s) => s.name === 'still-works')).toBe(true)
     } finally {
       await faultyManager.flushAndClose()
-      rmSync(tmp, { recursive: true, force: true })
+      await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
     }
   })
 
@@ -478,9 +479,9 @@ describe('per-node history index integration', () => {
 
     // Close, wipe history.db, reopen — backfill should run on openProject.
     await isolatedManager.flushAndClose()
-    rmSync(join(isolatedProjectDir, '.manifest', 'index', 'history.db'), { force: true })
-    rmSync(join(isolatedProjectDir, '.manifest', 'index', 'history.db-shm'), { force: true })
-    rmSync(join(isolatedProjectDir, '.manifest', 'index', 'history.db-wal'), { force: true })
+    await rm(join(isolatedProjectDir, '.manifest', 'index', 'history.db'), { force: true, maxRetries: 10, retryDelay: 300 })
+    await rm(join(isolatedProjectDir, '.manifest', 'index', 'history.db-shm'), { force: true, maxRetries: 10, retryDelay: 300 })
+    await rm(join(isolatedProjectDir, '.manifest', 'index', 'history.db-wal'), { force: true, maxRetries: 10, retryDelay: 300 })
 
     const igit = new GitService(noopLogger as any)
     const refreshedHistory = new HistoryIndexService()

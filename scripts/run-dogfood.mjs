@@ -3,8 +3,9 @@
 import { execFileSync } from 'child_process'
 import { existsSync } from 'fs'
 import { join, resolve } from 'path'
+import { fileURLToPath } from 'url'
 
-const ROOT_DIR = resolve(new URL('..', import.meta.url).pathname)
+const ROOT_DIR = fileURLToPath(new URL('..', import.meta.url))
 
 function usage() {
   console.error('Usage: bun run test:dogfood -- --project <project-dir>')

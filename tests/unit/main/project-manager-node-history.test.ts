@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdirSync, rmSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import Database from 'better-sqlite3'
@@ -31,7 +32,7 @@ beforeEach(async () => {
 afterEach(async () => {
   manager.cancelAutosave()
   await manager.flushAndClose()
-  rmSync(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 describe('nodeHistory IPC', () => {

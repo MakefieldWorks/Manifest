@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 // Domain-authentic synthetic data generator for dogfooding/perf/demo.
 //
 // Models a software-integration lab (the kind that mimics shipboard equipment

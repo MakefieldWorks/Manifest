@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
@@ -25,7 +26,7 @@ beforeEach(() => {
 afterEach(async () => {
   manager?.cancelAutosave()
   await manager?.flushAndClose()
-  rmSync(tmpRoot, { recursive: true, force: true })
+  await rm(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
 function manifest(name = 'Cloud Lab') {
