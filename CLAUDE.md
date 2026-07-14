@@ -8,14 +8,6 @@ Electron + TypeScript + Svelte 5 + Tailwind + electron-vite.
 See `docs/ARCHITECTURE.md` for the full technical spec.
 See `docs/ROADMAP.md` for the phase plan.
 
-> **Project memory:** At session bootstrap — *before* processing the first user
-> prompt — read every file under `.claude/memory/`. This is a one-time setup
-> read, not a per-request action; the "Skill routing" rule below still governs
-> the first action taken in response to any individual request. Memory files
-> capture the current state of in-flight features, design decisions, and
-> project conventions, and are committed to the repo so they are identical on
-> every machine.
-
 ## Commands
 
 <!-- Fill in once Phase 1 scaffold is wired up -->
@@ -53,16 +45,3 @@ Framework: **Vitest** (unit + integration) + **Playwright** (E2E)
 - Validation functions live in `src/shared/validation.ts`. Never duplicate them.
 - Error codes live in `src/shared/errors.ts`. Use `SCREAMING_SNAKE` constants.
 - All IPC responses use `Result<T>` — never throw across the IPC boundary.
-
-## Skill routing
-
-When the user's request matches an available skill, ALWAYS invoke it using the Skill
-tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
-
-Key routing rules:
-- Architecture review → invoke plan-eng-review
-- Product/scope decisions → invoke plan-ceo-review
-- Ship, push, create PR → invoke ship
-- QA, test the app → invoke qa
-- Code review, check diff → invoke review
-- Bugs, errors, "why is this broken" → invoke investigate
