@@ -10,7 +10,8 @@ export const PROJECT_DOCUMENT_EXTENSION = '.manifestproject'
 
 /** Projects created before the dedicated document extension was introduced. */
 export const LEGACY_PROJECT_DOCUMENT_FILE = 'manifest.json'
-const MAX_LEGACY_LAUNCHER_BYTES = 4 * 1024
+/** Legacy launchers are tiny JSON pointers, never project documents. */
+export const MAX_LEGACY_LAUNCHER_BYTES = 4 * 1024
 
 export interface ProjectDocumentLocation {
   path: string

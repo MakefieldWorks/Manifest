@@ -83,6 +83,18 @@ describe('resolveProjectOpenTarget', () => {
     expect(isLegacyProjectLauncher(documentPath)).toBe(false)
   })
 
+  it('rejects an oversized external launcher without parsing it', () => {
+    const launcher = join(tmpDir, 'Large Launcher.manifestproject')
+    writeFileSync(launcher, JSON.stringify({ projectPath: '.', filler: 'x'.repeat(5_000) }), 'utf8')
+
+    const result = resolveProjectOpenTarget(launcher)
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION_FAILED', message: 'Manifest project launcher is too large' },
+    })
+  })
+
   it('rejects unsupported files', () => {
     const path = join(tmpDir, 'notes.txt')
     writeFileSync(path, 'not a project', 'utf8')
