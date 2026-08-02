@@ -73,7 +73,7 @@ These items were explicitly deferred during the 2026-04-10 eng review of the tre
 **Context:** Design doc recommends this. Promoted into pilot-readiness work as a constrained MVP after dogfood produces at least one representative data shape.
 **Effort:** M (human) -> S (CC+gstack)
 **Priority:** P1.5
-**Depends on:** Stable manifest.json schema, dogfood fixture/data shape
+**Depends on:** Stable Manifest.manifestproject schema, dogfood fixture/data shape
 
 ### User-Defined Property Schema
 **What:** Let users define expected properties per node type (e.g., "Instruments must have serial_number, firmware_version").

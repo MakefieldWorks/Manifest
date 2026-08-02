@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { basename, dirname, join } from 'path'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { basename, dirname } from 'path'
 import type { Project } from '../shared/types'
+import { findProjectDocument } from './project-launcher'
 
 export interface WindowBounds {
   x: number
@@ -98,7 +99,7 @@ export class AppSettingsStore {
       lastProject: workspace.lastProject
         ? {
             ...workspace.lastProject,
-            exists: existsSync(join(workspace.lastProject.path, 'manifest.json')),
+            exists: findProjectDocument(workspace.lastProject.path) !== null,
           }
         : null,
     }

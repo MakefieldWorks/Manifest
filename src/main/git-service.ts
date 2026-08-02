@@ -3,16 +3,14 @@
 // Runs operations through a serial queue to prevent .git/index.lock contention.
 
 import { execFile } from 'child_process'
-import { existsSync } from 'fs'
-import { join } from 'path'
 import { promisify } from 'util'
 import type { GitStatus, Snapshot } from '../shared/types'
 import type { Logger } from './logger'
-import { PROJECT_LAUNCHER_FILE } from './project-launcher'
+import { LEGACY_PROJECT_DOCUMENT_FILE, PROJECT_DOCUMENT_FILE } from './project-launcher'
 
 const execFileAsync = promisify(execFile)
 
-// Node's default execFile stdout cap is 1 MB. A manifest.json can be much
+// Node's default execFile stdout cap is 1 MB. A project document can be much
 // larger (the project itself allows up to 50 MB), and `git show` / `for-each-ref`
 // output scales with project and snapshot count — so reading a snapshot manifest
 // for a large project would otherwise fail with ENOBUFS. Allow comfortably more.
@@ -106,10 +104,7 @@ export class GitService {
 
   async initialCommit(projectDir: string): Promise<void> {
     await this.queue.enqueue(async () => {
-      await execFileAsync('git', ['add', 'manifest.json'], { cwd: projectDir })
-      if (existsSync(join(projectDir, PROJECT_LAUNCHER_FILE))) {
-        await execFileAsync('git', ['add', PROJECT_LAUNCHER_FILE], { cwd: projectDir })
-      }
+      await execFileAsync('git', ['add', PROJECT_DOCUMENT_FILE], { cwd: projectDir })
       await execFileAsync(
         'git',
         ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '-m', 'Initial project'],
@@ -121,7 +116,10 @@ export class GitService {
 
   async createSnapshot(projectDir: string, name: string): Promise<Snapshot> {
     return this.queue.enqueue(async () => {
-      await execFileAsync('git', ['add', 'manifest.json'], { cwd: projectDir })
+      await execFileAsync('git', ['add', PROJECT_DOCUMENT_FILE], { cwd: projectDir })
+      // The first snapshot after opening a legacy project records the document
+      // rename in Git. Old tags remain readable through the fallback below.
+      await execFileAsync('git', ['rm', '--ignore-unmatch', LEGACY_PROJECT_DOCUMENT_FILE], { cwd: projectDir })
       await execFileAsync(
         'git',
         ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '--allow-empty', '-m', name],
@@ -173,22 +171,31 @@ export class GitService {
 
   async readSnapshotManifest(projectDir: string, name: string): Promise<string> {
     return this.queue.enqueue(async () => {
-      const { stdout } = await execFileAsync('git', ['show', `${SNAPSHOT_TAG_PREFIX}${name}:manifest.json`], {
-        cwd: projectDir,
-        maxBuffer: MAX_GIT_BUFFER,
-      })
-      return stdout
+      return this.readProjectDocumentAt(projectDir, SNAPSHOT_TAG_PREFIX + name)
     })
   }
 
   async readHeadManifest(projectDir: string): Promise<string> {
     return this.queue.enqueue(async () => {
-      const { stdout } = await execFileAsync('git', ['show', 'HEAD:manifest.json'], {
+      return this.readProjectDocumentAt(projectDir, 'HEAD')
+    })
+  }
+
+  private async readProjectDocumentAt(projectDir: string, ref: string): Promise<string> {
+    try {
+      const { stdout } = await execFileAsync('git', ['show', `${ref}:${PROJECT_DOCUMENT_FILE}`], {
         cwd: projectDir,
         maxBuffer: MAX_GIT_BUFFER,
       })
       return stdout
-    })
+    } catch (error) {
+      if (!isMissingGitPath(error)) throw error
+      const { stdout } = await execFileAsync('git', ['show', `${ref}:${LEGACY_PROJECT_DOCUMENT_FILE}`], {
+        cwd: projectDir,
+        maxBuffer: MAX_GIT_BUFFER,
+      })
+      return stdout
+    }
   }
 
   private async readSnapshotUnchecked(projectDir: string, name: string): Promise<Snapshot> {
@@ -220,4 +227,11 @@ export class GitService {
       note: null,
     }
   }
+}
+
+function isMissingGitPath(error: unknown): boolean {
+  const stderr = error && typeof error === 'object' && 'stderr' in error
+    ? String((error as { stderr?: unknown }).stderr ?? '')
+    : ''
+  return /exists on disk, but not in|does not exist in|path .* does not exist/i.test(stderr)
 }

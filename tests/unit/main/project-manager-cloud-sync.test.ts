@@ -68,14 +68,14 @@ describe('cloud sync project warnings', () => {
     expect(result.data.projectWarnings).toEqual(expectedWarnings)
     expect(manager.getCurrent()?.projectWarnings).toEqual(expectedWarnings)
 
-    const persisted = JSON.parse(readFileSync(join(parent, 'Cloud Lab', 'manifest.json'), 'utf8'))
+    const persisted = JSON.parse(readFileSync(join(parent, 'Cloud Lab', 'Manifest.manifestproject'), 'utf8'))
     expect(persisted.projectWarnings).toBeUndefined()
   })
 
   it('returns a runtime warning when opening a project inside a synced folder', async () => {
     const projectDir = join(tmpRoot, 'OneDrive - Lab', 'Cloud Lab')
     mkdirSync(projectDir, { recursive: true })
-    writeFileSync(join(projectDir, 'manifest.json'), JSON.stringify(manifest(), null, 2), 'utf8')
+    writeFileSync(join(projectDir, 'Manifest.manifestproject'), JSON.stringify(manifest(), null, 2), 'utf8')
 
     const result = await manager.openProject(projectDir)
 
@@ -97,7 +97,7 @@ describe('cloud sync project warnings', () => {
     expect(update.data.projectWarnings).toEqual(expectedWarnings)
 
     await manager.saveProject()
-    const persisted = JSON.parse(readFileSync(join(projectDir, 'manifest.json'), 'utf8'))
+    const persisted = JSON.parse(readFileSync(join(projectDir, 'Manifest.manifestproject'), 'utf8'))
     expect(persisted.projectWarnings).toBeUndefined()
   })
 

@@ -45,7 +45,7 @@ function manifest() {
 }
 
 async function open(): Promise<void> {
-  writeFileSync(join(tmpDir, 'manifest.json'), JSON.stringify(manifest(), null, 2), 'utf8')
+  writeFileSync(join(tmpDir, 'Manifest.manifestproject'), JSON.stringify(manifest(), null, 2), 'utf8')
   manager = new ProjectManager(noopGit as any, noopLogger as any)
   const r = await manager.openProject(tmpDir)
   expect(r.ok).toBe(true)
@@ -243,7 +243,7 @@ describe('applyImportCsv — update-on-key', () => {
         ...extra,
       ],
     }
-    writeFileSync(join(tmpDir, 'manifest.json'), JSON.stringify(m, null, 2), 'utf8')
+    writeFileSync(join(tmpDir, 'Manifest.manifestproject'), JSON.stringify(m, null, 2), 'utf8')
     manager = new ProjectManager(noopGit as any, noopLogger as any)
     const r = await manager.openProject(tmpDir)
     expect(r.ok).toBe(true)

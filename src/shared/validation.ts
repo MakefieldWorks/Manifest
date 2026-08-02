@@ -17,7 +17,7 @@ const SNAPSHOT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 const PROPERTY_KEY_RE = /^[a-zA-Z0-9_]+$/
 
 // Lowercase alphanumeric + hyphens. Must start alphanumeric. Max 64 chars.
-// Used for template ids (slugs): human-readable and stable in manifest.json.
+// Used for template ids (slugs): human-readable and stable in Manifest.manifestproject.
 const TEMPLATE_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 // Date values: strict calendar date YYYY-MM-DD.

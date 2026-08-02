@@ -1,8 +1,13 @@
-import { existsSync, readFileSync, statSync } from 'fs'
-import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
+import { readFileSync, statSync } from 'fs'
+import { basename, dirname, extname, isAbsolute, resolve } from 'path'
 import { err, ok, ErrorCode } from '../shared/errors'
 import type { Result } from '../shared/types'
-import { PROJECT_LAUNCHER_EXTENSION } from './project-launcher'
+import {
+  findProjectDocument,
+  isLegacyProjectLauncher,
+  LEGACY_PROJECT_DOCUMENT_FILE,
+  PROJECT_DOCUMENT_EXTENSION,
+} from './project-launcher'
 
 export function resolveProjectOpenTarget(targetPath: string): Result<string> {
   try {
@@ -16,17 +21,22 @@ export function resolveProjectOpenTarget(targetPath: string): Result<string> {
       return err(ErrorCode.PROJECT_NOT_FOUND, `Cannot open ${targetPath}: not a project file or folder`)
     }
 
-    if (basename(targetPath) === 'manifest.json') {
+    if (basename(targetPath) === LEGACY_PROJECT_DOCUMENT_FILE) {
       return validateProjectDirectory(dirname(targetPath))
     }
 
-    if (extname(targetPath) === PROJECT_LAUNCHER_EXTENSION) {
-      return resolveProjectLauncher(targetPath)
+    if (extname(targetPath) === PROJECT_DOCUMENT_EXTENSION) {
+      // New-format documents live in their project folder. Legacy launchers
+      // outside that folder retain their old relative/absolute-target behavior.
+      if (findProjectDocument(dirname(targetPath))?.path === targetPath && !isLegacyProjectLauncher(targetPath)) {
+        return validateProjectDirectory(dirname(targetPath))
+      }
+      return resolveLegacyProjectLauncher(targetPath)
     }
 
     return err(
       ErrorCode.PROJECT_NOT_FOUND,
-      `Cannot open ${targetPath}: expected a Manifest project folder, manifest.json, or .manifestproject file`
+      `Cannot open ${targetPath}: expected a Manifest project folder or .manifestproject file`
     )
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -35,13 +45,13 @@ export function resolveProjectOpenTarget(targetPath: string): Result<string> {
 }
 
 function validateProjectDirectory(projectPath: string): Result<string> {
-  if (!existsSync(join(projectPath, 'manifest.json'))) {
-    return err(ErrorCode.PROJECT_NOT_FOUND, `Cannot open ${projectPath}: manifest.json was not found`)
+  if (!findProjectDocument(projectPath)) {
+    return err(ErrorCode.PROJECT_NOT_FOUND, `Cannot open ${projectPath}: no Manifest project document was found`)
   }
   return ok(projectPath)
 }
 
-function resolveProjectLauncher(launcherPath: string): Result<string> {
+function resolveLegacyProjectLauncher(launcherPath: string): Result<string> {
   let raw: unknown
   try {
     raw = JSON.parse(readFileSync(launcherPath, 'utf8'))

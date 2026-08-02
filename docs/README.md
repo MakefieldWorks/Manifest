@@ -38,7 +38,7 @@ data, then use those notes to scope the CSV/JSON import MVP.
 ## Key decisions (locked)
 
 - **Stack:** Electron + TypeScript + Svelte 5 + Tailwind + electron-vite
-- **Storage:** Single `manifest.json` per project, Git-backed snapshots
+- **Storage:** Single `Manifest.manifestproject` per project, Git-backed snapshots
 - **Snapshots:** System `git` CLI only, hidden behind product UX
 - **IPC:** Typed `contextBridge` whitelist (~31 channels), domain calls use the `Result<T>` envelope
 - **Search:** SQLite FTS5 via `better-sqlite3`, rebuildable, non-authoritative

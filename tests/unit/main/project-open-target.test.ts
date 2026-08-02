@@ -19,12 +19,19 @@ afterEach(async () => {
 function writeProject(name = 'Lab'): string {
   const projectDir = join(tmpDir, name)
   mkdirSync(projectDir, { recursive: true })
+  writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+  return projectDir
+}
+
+function writeLegacyProject(name = 'Legacy Lab'): string {
+  const projectDir = join(tmpDir, name)
+  mkdirSync(projectDir, { recursive: true })
   writeFileSync(join(projectDir, 'manifest.json'), '{}', 'utf8')
   return projectDir
 }
 
 describe('resolveProjectOpenTarget', () => {
-  it('accepts a project directory containing manifest.json', () => {
+  it('accepts a project directory containing Manifest.manifestproject', () => {
     const projectDir = writeProject()
 
     const result = resolveProjectOpenTarget(projectDir)
@@ -32,8 +39,16 @@ describe('resolveProjectOpenTarget', () => {
     expect(result).toEqual({ ok: true, data: projectDir })
   })
 
-  it('accepts a manifest.json file and resolves to its project directory', () => {
+  it('accepts a Manifest.manifestproject file and resolves to its project directory', () => {
     const projectDir = writeProject()
+
+    const result = resolveProjectOpenTarget(join(projectDir, 'Manifest.manifestproject'))
+
+    expect(result).toEqual({ ok: true, data: projectDir })
+  })
+
+  it('continues to accept a legacy manifest.json file for migration', () => {
+    const projectDir = writeLegacyProject()
 
     const result = resolveProjectOpenTarget(join(projectDir, 'manifest.json'))
 
@@ -41,7 +56,7 @@ describe('resolveProjectOpenTarget', () => {
   })
 
   it('accepts a .manifestproject launcher with a relative projectPath', () => {
-    const projectDir = writeProject('Relative Lab')
+    const projectDir = writeLegacyProject('Relative Lab')
     const launcher = join(projectDir, 'Manifest.manifestproject')
     writeFileSync(launcher, JSON.stringify({ version: 1, projectPath: '.' }), 'utf8')
 
@@ -51,7 +66,7 @@ describe('resolveProjectOpenTarget', () => {
   })
 
   it('accepts a .manifestproject launcher with an absolute projectPath', () => {
-    const projectDir = writeProject('Absolute Lab')
+    const projectDir = writeLegacyProject('Absolute Lab')
     const launcher = join(tmpDir, 'Absolute.manifestproject')
     writeFileSync(launcher, JSON.stringify({ version: 1, projectPath: projectDir }), 'utf8')
 
@@ -76,7 +91,7 @@ describe('resolveProjectOpenTarget', () => {
     const result = resolveProjectOpenTarget(folder)
 
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error.message).toContain('manifest.json was not found')
+    if (!result.ok) expect(result.error.message).toContain('no Manifest project document was found')
   })
 
   it('rejects malformed launchers', () => {
