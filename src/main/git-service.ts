@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile)
 // output scales with project and snapshot count — so reading a snapshot manifest
 // for a large project would otherwise fail with ENOBUFS. Allow comfortably more.
 const MAX_GIT_BUFFER = 64 * 1024 * 1024
+const MAX_GIT_PATH_LOOKUP_BUFFER = 64 * 1024
 
 const MIN_GIT_VERSION: [number, number, number] = [2, 25, 0]
 const MIN_GIT_VERSION_STRING = MIN_GIT_VERSION.join('.')
@@ -182,20 +183,14 @@ export class GitService {
   }
 
   private async readProjectDocumentAt(projectDir: string, ref: string): Promise<string> {
-    try {
-      const { stdout } = await execFileAsync('git', ['show', `${ref}:${PROJECT_DOCUMENT_FILE}`], {
-        cwd: projectDir,
-        maxBuffer: MAX_GIT_BUFFER,
-      })
-      return stdout
-    } catch (error) {
-      if (!isMissingGitPath(error)) throw error
-      const { stdout } = await execFileAsync('git', ['show', `${ref}:${LEGACY_PROJECT_DOCUMENT_FILE}`], {
-        cwd: projectDir,
-        maxBuffer: MAX_GIT_BUFFER,
-      })
-      return stdout
-    }
+    const documentPath = await gitPathExists(projectDir, ref, PROJECT_DOCUMENT_FILE)
+      ? PROJECT_DOCUMENT_FILE
+      : LEGACY_PROJECT_DOCUMENT_FILE
+    const { stdout } = await execFileAsync('git', ['show', `${ref}:${documentPath}`], {
+      cwd: projectDir,
+      maxBuffer: MAX_GIT_BUFFER,
+    })
+    return stdout
   }
 
   private async readSnapshotUnchecked(projectDir: string, name: string): Promise<Snapshot> {
@@ -229,9 +224,13 @@ export class GitService {
   }
 }
 
-function isMissingGitPath(error: unknown): boolean {
-  const stderr = error && typeof error === 'object' && 'stderr' in error
-    ? String((error as { stderr?: unknown }).stderr ?? '')
-    : ''
-  return /exists on disk, but not in|does not exist in|path .* does not exist/i.test(stderr)
+async function gitPathExists(projectDir: string, ref: string, path: string): Promise<boolean> {
+  // ls-tree exits successfully with no output for a missing path. Unlike
+  // `git show` or `git cat-file -e`, this avoids locale- and version-specific
+  // error wording while still surfacing invalid refs and repository failures.
+  const { stdout } = await execFileAsync('git', ['ls-tree', '-z', ref, '--', path], {
+    cwd: projectDir,
+    maxBuffer: MAX_GIT_PATH_LOOKUP_BUFFER,
+  })
+  return stdout.length > 0
 }

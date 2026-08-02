@@ -6,6 +6,7 @@ import {
   findProjectDocument,
   isLegacyProjectLauncher,
   LEGACY_PROJECT_DOCUMENT_FILE,
+  MAX_LEGACY_LAUNCHER_BYTES,
   PROJECT_DOCUMENT_EXTENSION,
 } from './project-launcher'
 
@@ -36,7 +37,7 @@ export function resolveProjectOpenTarget(targetPath: string): Result<string> {
 
     return err(
       ErrorCode.PROJECT_NOT_FOUND,
-      `Cannot open ${targetPath}: expected a Manifest project folder or .manifestproject file`
+      `Cannot open ${targetPath}: expected a Manifest project folder, .manifestproject file, or legacy manifest.json file`
     )
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -52,6 +53,10 @@ function validateProjectDirectory(projectPath: string): Result<string> {
 }
 
 function resolveLegacyProjectLauncher(launcherPath: string): Result<string> {
+  if (statSync(launcherPath).size > MAX_LEGACY_LAUNCHER_BYTES) {
+    return err(ErrorCode.VALIDATION_FAILED, 'Manifest project launcher is too large')
+  }
+
   let raw: unknown
   try {
     raw = JSON.parse(readFileSync(launcherPath, 'utf8'))

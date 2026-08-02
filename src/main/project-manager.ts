@@ -2094,6 +2094,8 @@ export class ProjectManager {
 
     const id = `recovery-${uuidv7()}`
     const recoveryDir = join(project.path, '.manifest', 'recovery')
+    // Recovery payloads are internal sidecars, not user-openable documents.
+    // Keep their JSON suffix so they cannot be mistaken for Manifest projects.
     const manifestPath = join('.manifest', 'recovery', `${id}.manifest.json`)
     mkdirSync(recoveryDir, { recursive: true })
     writeFileSync(join(project.path, manifestPath), current, 'utf8')
