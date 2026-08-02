@@ -78,4 +78,4 @@ Start CSV/JSON import only after the dogfood notes answer:
 - What columns/properties are common enough to seed the MVP?
 - Is parent-child structure best represented by path columns, parent IDs, indentation, or repeated category columns?
 - Should the first import be command/menu-driven, or is a visible onboarding action needed?
-- What validation errors must be shown before writing `manifest.json`?
+- What validation errors must be shown before writing `Manifest.manifestproject`?

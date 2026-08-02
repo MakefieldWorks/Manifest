@@ -232,7 +232,7 @@ describe('snapshot workflow', () => {
     const current = manager.getCurrent()!
     expect(current.nodes.some((node) => node.name === 'Rack Alpha')).toBe(true)
 
-    const manifest = JSON.parse(readFileSync(join(projectDir, 'manifest.json'), 'utf8'))
+    const manifest = JSON.parse(readFileSync(join(projectDir, 'Manifest.manifestproject'), 'utf8'))
     expect(manifest.nodes.some((node: { name: string }) => node.name === 'Rack Alpha')).toBe(true)
   })
 

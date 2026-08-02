@@ -6,7 +6,7 @@
 // each version-tracked). Power supplies and waveform generators are calibrated
 // test equipment; custom electronics boards fail and get repaired/replaced.
 //
-// Output is a v3 Manifest project (manifest.json with a `templates` map and
+// Output is a v3 Manifest project (Manifest.manifestproject with a `templates` map and
 // typed property values) under a git repo, plus a timeline of daily snapshots
 // (git commit + `snapshot/<name>` tag) applying realistic configuration churn:
 // CSCI version bumps on test days, status changes, recalibrations, grouped
@@ -550,7 +550,7 @@ function node(ctx, parentId, name, templateId, properties) {
 }
 
 // Deterministic UUID-shaped id derived purely from the seeded RNG, so the same
-// --seed reproduces the same manifest.json byte-for-byte (uuidv7 would mix in
+// --seed reproduces the same Manifest.manifestproject byte-for-byte (uuidv7 would mix in
 // wall-clock/random state and break reproducibility).
 function gid(ctx) {
   let h = ''
@@ -699,17 +699,17 @@ function writeSampleCsv(projectDir, project) {
 // ─── IO / git ────────────────────────────────────────────────────────────────────
 
 function writeManifest(projectDir, project) {
-  writeFileSync(join(projectDir, 'manifest.json'), JSON.stringify(project, null, 2), 'utf8')
+  writeFileSync(join(projectDir, 'Manifest.manifestproject'), JSON.stringify(project, null, 2), 'utf8')
 }
 
 function initGit(projectDir, dateIso) {
   git(projectDir, ['init'])
-  git(projectDir, ['add', 'manifest.json'])
+  git(projectDir, ['add', 'Manifest.manifestproject'])
   commit(projectDir, 'Initial lab project', dateIso)
 }
 
 function snapshot(projectDir, name, dateIso) {
-  git(projectDir, ['add', 'manifest.json'])
+  git(projectDir, ['add', 'Manifest.manifestproject'])
   commit(projectDir, name, dateIso)
   // Lightweight tag — its creatordate is the commit's committer date, which we
   // pin to the simulated day below.

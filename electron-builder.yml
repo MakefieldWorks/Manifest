@@ -12,7 +12,7 @@ files:
 fileAssociations:
   - ext: manifestproject
     name: Manifest Project
-    description: Manifest project launcher
+    description: Manifest project document
     role: Editor
     icon: resources/icon
 

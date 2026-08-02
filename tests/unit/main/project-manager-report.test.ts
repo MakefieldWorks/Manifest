@@ -46,7 +46,7 @@ let tmpDir: string
 let manager: ProjectManager
 
 async function open(git = makeGit()): Promise<void> {
-  writeFileSync(join(tmpDir, 'manifest.json'), JSON.stringify(after, null, 2), 'utf8')
+  writeFileSync(join(tmpDir, 'Manifest.manifestproject'), JSON.stringify(after, null, 2), 'utf8')
   manager = new ProjectManager(git as any, noopLogger as any)
   const r = await manager.openProject(tmpDir)
   expect(r.ok).toBe(true)

@@ -4,7 +4,7 @@ import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { RecentProjectsStore, getRecentDocumentPath } from '../../../src/main/recent-projects'
-import { PROJECT_LAUNCHER_FILE } from '../../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-launcher'
 import type { Project } from '../../../src/shared/types'
 
 let tmpDir: string
@@ -36,7 +36,7 @@ function project(path: string, name = 'Lab'): Project {
 function writeProjectDir(name: string): string {
   const projectDir = join(tmpDir, name)
   mkdirSync(projectDir, { recursive: true })
-  writeFileSync(join(projectDir, 'manifest.json'), '{}', 'utf8')
+  writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
   return projectDir
 }
 
@@ -103,18 +103,10 @@ describe('RecentProjectsStore', () => {
 })
 
 describe('getRecentDocumentPath', () => {
-  it('prefers the launcher file for OS recent documents', () => {
-    const projectDir = writeProjectDir('Launcher')
-    const launcher = join(projectDir, PROJECT_LAUNCHER_FILE)
-    writeFileSync(launcher, JSON.stringify({ version: 1, projectPath: '.' }), 'utf8')
-
-    expect(getRecentDocumentPath(projectDir)).toBe(launcher)
-  })
-
-  it('falls back to manifest.json when no launcher exists', () => {
+  it('returns the dedicated project document for OS recent documents', () => {
     const projectDir = writeProjectDir('ManifestOnly')
 
-    expect(getRecentDocumentPath(projectDir)).toBe(join(projectDir, 'manifest.json'))
+    expect(getRecentDocumentPath(projectDir)).toBe(join(projectDir, PROJECT_DOCUMENT_FILE))
   })
 
   it('returns null when no stable project document exists', () => {

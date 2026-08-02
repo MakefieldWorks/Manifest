@@ -2,7 +2,7 @@
 // Uses real filesystem via tmp directories, never mocks.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -36,7 +36,7 @@ let project: Project
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function writeFixture(dir: string, data: object) {
-  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(data, null, 2), 'utf8')
+  writeFileSync(join(dir, 'Manifest.manifestproject'), JSON.stringify(data, null, 2), 'utf8')
 }
 
 // Build a minimal v2 manifest with a single root node.
@@ -131,6 +131,26 @@ describe('nodeCreate', () => {
     if (!result.ok) return
     // Root + new node
     expect(result.data.nodes.length).toBe(2)
+  })
+})
+
+describe('project document migration', () => {
+  it('replaces a legacy manifest and its launcher after a successful open', async () => {
+    const canonicalPath = join(tmpDir, 'Manifest.manifestproject')
+    const legacyPath = join(tmpDir, 'manifest.json')
+    rmSync(canonicalPath)
+    writeFileSync(legacyPath, JSON.stringify(makeManifest(), null, 2), 'utf8')
+    // This is the old launcher shape that previously occupied the canonical name.
+    writeFileSync(canonicalPath, JSON.stringify({ version: 1, projectPath: '.' }), 'utf8')
+
+    const legacyManager = makeManager()
+    const opened = await legacyManager.openProject(tmpDir)
+
+    expect(opened.ok).toBe(true)
+    expect(existsSync(canonicalPath)).toBe(true)
+    expect(existsSync(legacyPath)).toBe(false)
+    expect(JSON.parse(readFileSync(canonicalPath, 'utf8'))).toMatchObject({ name: 'Test Project' })
+    await legacyManager.flushAndClose()
   })
 })
 

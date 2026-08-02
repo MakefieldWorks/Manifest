@@ -109,7 +109,7 @@ describe('AppSettingsStore', () => {
   it('tracks last project and marks missing projects', () => {
     const projectDir = join(tmpDir, 'Workspace Lab')
     mkdirSync(projectDir)
-    writeFileSync(join(projectDir, 'manifest.json'), '{}', 'utf8')
+    writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
 
     const store = new AppSettingsStore(storePath())
     store.recordLastProject(project(projectDir))
@@ -119,7 +119,7 @@ describe('AppSettingsStore', () => {
       exists: true,
     })
 
-    rmSync(join(projectDir, 'manifest.json'))
+    rmSync(join(projectDir, 'Manifest.manifestproject'))
     expect(store.getWorkspaceSettings().lastProject).toMatchObject({
       path: projectDir,
       exists: false,

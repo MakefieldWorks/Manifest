@@ -33,7 +33,7 @@ Framework: **Vitest** (unit + integration) + **Playwright** (E2E)
 
 - Unit tests live in `tests/unit/`
 - E2E tests live in `tests/e2e/`
-- Test fixtures (sample manifest.json files) in `tests/fixtures/`
+- Test fixtures (sample project-document JSON files) in `tests/fixtures/`
 - Git service tests use real git repos in temp directories, never mocks
 - Diff engine gets the heaviest unit test coverage (it is the core differentiator)
 

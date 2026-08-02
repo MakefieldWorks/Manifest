@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { basename, dirname, join } from 'path'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { basename, dirname } from 'path'
 import type { Project } from '../shared/types'
-import { PROJECT_LAUNCHER_FILE } from './project-launcher'
+import { findProjectDocument } from './project-launcher'
 
 const MAX_RECENT_PROJECTS = 10
 
@@ -78,15 +78,11 @@ export class RecentProjectsStore {
 }
 
 export function getRecentDocumentPath(projectPath: string): string | null {
-  const launcherPath = join(projectPath, PROJECT_LAUNCHER_FILE)
-  if (existsSync(launcherPath)) return launcherPath
-
-  const manifestPath = join(projectPath, 'manifest.json')
-  return existsSync(manifestPath) ? manifestPath : null
+  return findProjectDocument(projectPath)?.path ?? null
 }
 
 function projectPathLooksOpenable(projectPath: string): boolean {
-  return existsSync(join(projectPath, 'manifest.json'))
+  return findProjectDocument(projectPath) !== null
 }
 
 function isStoredRecentProject(value: unknown): value is StoredRecentProject {
