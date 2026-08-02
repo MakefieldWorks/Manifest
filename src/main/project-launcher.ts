@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 
 /**
@@ -10,6 +10,7 @@ export const PROJECT_DOCUMENT_EXTENSION = '.manifestproject'
 
 /** Projects created before the dedicated document extension was introduced. */
 export const LEGACY_PROJECT_DOCUMENT_FILE = 'manifest.json'
+const MAX_LEGACY_LAUNCHER_BYTES = 4 * 1024
 
 export interface ProjectDocumentLocation {
   path: string
@@ -39,6 +40,9 @@ export function findProjectDocument(projectPath: string): ProjectDocumentLocatio
 /** A legacy launcher pointed to a project folder instead of containing project data. */
 export function isLegacyProjectLauncher(filePath: string): boolean {
   try {
+    // Legacy launchers contain only a version and projectPath. Never parse a
+    // full project document merely to distinguish that obsolete format.
+    if (statSync(filePath).size > MAX_LEGACY_LAUNCHER_BYTES) return false
     const raw: unknown = JSON.parse(readFileSync(filePath, 'utf8'))
     if (!raw || typeof raw !== 'object') return false
     const candidate = raw as { projectPath?: unknown; nodes?: unknown }

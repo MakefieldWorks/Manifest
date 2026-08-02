@@ -36,7 +36,7 @@ export function resolveProjectOpenTarget(targetPath: string): Result<string> {
 
     return err(
       ErrorCode.PROJECT_NOT_FOUND,
-      `Cannot open ${targetPath}: expected a Manifest project folder or .manifestproject file`
+      `Cannot open ${targetPath}: expected a Manifest project folder, .manifestproject file, or legacy manifest.json file`
     )
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)

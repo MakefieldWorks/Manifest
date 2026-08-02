@@ -95,9 +95,9 @@ docs             product, architecture, and roadmap documentation
 
 ## Data Model
 
-Each Manifest project is stored in a folder containing a `Manifest.manifestproject` file.
+Each Manifest project is stored in a folder containing a `Manifest.manifestproject` file. The capitalization is part of the canonical filename on case-sensitive filesystems.
 
-That file is the source of truth. Search indexes are rebuildable. Snapshot history is Git-backed. The app is designed so the durable project state remains inspectable and portable.
+That file is the source of truth. Search indexes are rebuildable. Snapshot history is Git-backed. The app is designed so the durable project state remains inspectable and portable. Internal recovery payloads under `.manifest/recovery/` intentionally remain JSON sidecar files; they are not Manifest project documents.
 
 ## Branding
 

@@ -4,6 +4,7 @@ import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { resolveProjectOpenTarget } from '../../../src/main/project-open-target'
+import { isLegacyProjectLauncher } from '../../../src/main/project-launcher'
 
 let tmpDir: string
 
@@ -75,6 +76,13 @@ describe('resolveProjectOpenTarget', () => {
     expect(result).toEqual({ ok: true, data: projectDir })
   })
 
+  it('does not parse oversized project documents as legacy launchers', () => {
+    const documentPath = join(tmpDir, 'Large.manifestproject')
+    writeFileSync(documentPath, JSON.stringify({ projectPath: '.', filler: 'x'.repeat(5_000) }), 'utf8')
+
+    expect(isLegacyProjectLauncher(documentPath)).toBe(false)
+  })
+
   it('rejects unsupported files', () => {
     const path = join(tmpDir, 'notes.txt')
     writeFileSync(path, 'not a project', 'utf8')
@@ -82,6 +90,7 @@ describe('resolveProjectOpenTarget', () => {
     const result = resolveProjectOpenTarget(path)
 
     expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.message).toContain('legacy manifest.json file')
   })
 
   it('rejects an existing folder that is not a Manifest project', () => {
