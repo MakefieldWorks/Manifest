@@ -146,6 +146,7 @@ function createSettingsWindow(): BrowserWindow {
     minWidth: 640,
     minHeight: 480,
     movable: true,
+    minimizable: false,
     maximizable: false,
     fullscreenable: false,
     show: false,
@@ -154,6 +155,7 @@ function createSettingsWindow(): BrowserWindow {
     backgroundColor: WINDOW_BACKGROUND_COLOR,
     titleBarStyle: desktopChrome.titleBarStyle,
     parent: owner ?? undefined,
+    modal: owner !== null,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
