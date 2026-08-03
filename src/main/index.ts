@@ -136,10 +136,10 @@ function createSettingsWindow(): BrowserWindow {
 
   const desktopChrome = desktopChromeForPlatform(process.platform)
   const win = new BrowserWindow({
-    width: 600,
-    height: 500,
-    minWidth: 500,
-    minHeight: 420,
+    width: 760,
+    height: 560,
+    minWidth: 640,
+    minHeight: 480,
     show: false,
     title: 'Manifest Settings',
     icon: getBrandIconPath(),

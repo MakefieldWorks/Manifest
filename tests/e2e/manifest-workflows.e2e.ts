@@ -156,8 +156,8 @@ test('opens a dedicated settings window and saves launch behavior', async ({ ele
   const settingsPage = await openSettingsWindow(electronApp)
   await settingsPage.waitForLoadState('domcontentloaded')
 
-  await expect(settingsPage.getByRole('heading', { name: 'Settings' })).toBeVisible()
-  await settingsPage.getByTestId('launch-reopen-last-project').check()
+  await expect(settingsPage.getByRole('heading', { name: 'General' })).toBeVisible()
+  await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
   await expect(settingsPage.getByRole('status')).toContainText('Saved')
 
   const preferences = await settingsPage.evaluate(() => window.api.settings.getPreferences())
