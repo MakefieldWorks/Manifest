@@ -152,7 +152,8 @@ test('renders platform-aware desktop chrome', async ({ appPage, electronApp, wor
   expect(projectTitlebarClass.includes('[-webkit-app-region:drag]')).toBe(chrome.supportsWindowDragRegion)
 })
 
-test('opens a dedicated settings window and saves launch behavior', async ({ electronApp }) => {
+test('opens a dedicated settings window and saves launch behavior', async ({ appPage, electronApp }) => {
+  await expect(appPage.getByTestId('create-project-btn')).toBeVisible()
   const settingsPage = await openSettingsWindow(electronApp)
   await settingsPage.waitForLoadState('domcontentloaded')
 
@@ -383,9 +384,10 @@ test('routes a second-instance project argument to the running window', async ({
   await openProjectThroughUi(appPage, electronApp, firstProjectDir)
   await expect(treeRow(appPage, 'Empty Project')).toBeVisible()
 
+  const electronExecutable = await electronApp.evaluate(() => process.execPath)
   await electronApp.evaluate(({ app }, argv) => {
     app.emit('second-instance', {} as never, argv, process.cwd())
-  }, [MAIN_ENTRY, secondProjectDir])
+  }, [electronExecutable, MAIN_ENTRY, secondProjectDir])
 
   await expect(treeRow(appPage, 'Rack A')).toBeVisible()
   const project = await currentProject(appPage)
