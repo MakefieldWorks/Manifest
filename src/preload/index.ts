@@ -129,6 +129,11 @@ const api: ManifestAPI = {
       ipcRenderer.send(IPC.MENU_STATE_UPDATE, state),
   },
 
+  recentProjects: {
+    list: () =>
+      ipcRenderer.invoke(IPC.RECENT_PROJECTS_LIST, {}),
+  },
+
   settings: {
     get: () =>
       ipcRenderer.invoke(IPC.SETTINGS_GET, {}),

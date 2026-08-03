@@ -163,10 +163,11 @@ test('adds opened projects to native Open Recent and OS recent documents', async
   expect(addedDocuments).toContain(join(projectDir, PROJECT_LAUNCHER_FILE))
 })
 
-test('offers the last project as a one-click welcome action', async ({ appPage, electronApp, workspaceDir }) => {
+test('opens the most recent project from the project hub', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Welcome Back')
 
   await appPage.getByTestId('close-project-btn').click()
+  await expect(appPage.getByTestId('recent-project-list')).toBeVisible()
   await expect(appPage.getByTestId('reopen-last-project-btn')).toContainText('Welcome Back')
 
   await appPage.getByTestId('reopen-last-project-btn').click()
@@ -174,6 +175,18 @@ test('offers the last project as a one-click welcome action', async ({ appPage, 
   await expect(treeRow(appPage, 'Welcome Back')).toBeVisible()
   const reopened = await currentProject(appPage)
   expect((reopened as typeof reopened & { path?: string }).path).toBe(projectDir)
+})
+
+test('lists recent projects in most-recent-first order on the project hub', async ({ appPage, electronApp, workspaceDir }) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub First')
+  await appPage.getByTestId('close-project-btn').click()
+
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub Second')
+  await appPage.getByTestId('close-project-btn').click()
+
+  const projects = appPage.getByTestId('recent-project-list').getByRole('button')
+  await expect(projects.first()).toContainText('Hub Second')
+  await expect(projects.filter({ hasText: 'Hub First' })).toHaveCount(1)
 })
 
 test('opens an existing project and renders its hierarchy', async ({ appPage, electronApp, workspaceDir }) => {

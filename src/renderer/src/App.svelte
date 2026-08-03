@@ -12,7 +12,7 @@
   } from '../../shared/menu-commands'
   import type { MergedTree } from '../../shared/merged-tree'
   import { computeSubtreeSummaries, templatesForNode } from '../../shared/merged-tree'
-  import type { WorkspaceSettings } from '../../shared/ipc'
+  import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
   import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
   import { flattenTree } from './lib/tree-rows'
   import { cycleIndex } from './lib/tree-typeahead'
@@ -120,6 +120,7 @@
   let workspaceSettingsLoaded: boolean = $state(false)
   let lastCreateDirectory: string | null = $state(null)
   let lastWorkspaceProject: WorkspaceSettings['lastProject'] = $state(null)
+  let recentProjects: RecentProject[] = $state([])
 
   // foldIds the user has manually expanded inside the Space-Folding Lens.
   // Resets on project close / mode flip — handled in those flows below.
@@ -247,6 +248,8 @@
       lastSentWorkspaceSettings = serializeWorkspacePaneSettings(treeWidth, panelWidth)
     }
     workspaceSettingsLoaded = true
+
+    await refreshRecentProjects()
 
     // Rehydrate if main already has a project open (e.g. macOS activate).
     const result = await window.api.project.getCurrent()
@@ -557,6 +560,11 @@
 
   // ─── Welcome actions ──────────────────────────────────────────────────────
 
+  async function refreshRecentProjects() {
+    const result = await window.api.recentProjects.list()
+    if (result.ok) recentProjects = result.data
+  }
+
   async function openProject() {
     error = null
     const folderPath = await window.api.dialog.openFolder('Open Project', 'open-project')
@@ -583,18 +591,20 @@
     }
   }
 
-  async function openLastProject() {
-    if (!lastWorkspaceProject?.exists) return
+  async function openRecentProject(recentProject: RecentProject) {
+    if (!recentProject.exists) return
     error = null
     appState = 'loading'
-    const result = await window.api.project.open(lastWorkspaceProject.path)
+    const result = await window.api.project.open(recentProject.path)
     if (result.ok) {
       resetOpenProjectUi()
       applyOpenedProject(result.data)
     } else {
       error = result.error.message
       appState = 'welcome'
-      lastWorkspaceProject = { ...lastWorkspaceProject, exists: false }
+      recentProjects = recentProjects.map(entry =>
+        entry.path === recentProject.path ? { ...entry, exists: false } : entry
+      )
     }
   }
 
@@ -661,6 +671,7 @@
         exists: true,
       }
     }
+    void refreshRecentProjects()
   }
 
   function applyWorkspaceSettings(settings: WorkspaceSettings) {
@@ -1399,54 +1410,72 @@
 
 <!-- ─── Welcome ────────────────────────────────────────────────────────────── -->
 {#if appState === 'welcome'}
-  <div class="flex flex-col h-full items-center justify-center bg-stone-50">
-    <div class="flex flex-col items-center gap-8 w-full max-w-sm px-6">
-
-      <div class="text-center">
-        <div class="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-[2rem]
-                    bg-white shadow-[0_20px_45px_-28px_rgba(36,59,72,0.55)] ring-1 ring-stone-200/80">
-          <img src={brandMark} alt="Manifest logo" class="h-14 w-14 drop-shadow-sm" />
+  <div class="flex h-full bg-stone-50">
+    <div class="flex w-full max-w-4xl flex-col px-10 py-10 mx-auto">
+      <header class="flex items-center justify-between border-b border-stone-200 pb-6">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-white ring-1 ring-stone-200">
+            <img src={brandMark} alt="Manifest logo" class="h-6 w-6" />
+          </div>
+          <div>
+            <h1 class="text-lg font-semibold tracking-tight text-stone-800">Manifest</h1>
+            <p class="mt-0.5 text-sm text-stone-500">Projects</p>
+          </div>
         </div>
-        <h1 class="text-2xl font-semibold tracking-tight text-stone-800">Manifest</h1>
-        <p class="text-sm text-stone-400 mt-1">Structured projects. Named history. Clear changes.</p>
-      </div>
+        <div class="flex items-center gap-2">
+          <button
+            onclick={beginCreateProject}
+            class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100 cursor-default"
+            data-testid="create-project-btn"
+          >
+            New Project…
+          </button>
+          <button
+            onclick={openProject}
+            class="rounded-lg bg-stone-800 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-700 cursor-default"
+            data-testid="open-project-btn"
+          >
+            Open Project…
+          </button>
+        </div>
+      </header>
 
       {#if error}
-        <div class="w-full bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        <div class="mt-6 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 rounded-lg">
           {error}
         </div>
       {/if}
 
-      <div class="flex flex-col gap-3 w-full">
-        {#if lastWorkspaceProject?.exists}
-          <button
-            onclick={openLastProject}
-            class="w-full bg-white hover:bg-stone-50 text-stone-700 text-sm font-medium
-                   px-4 py-2.5 rounded-lg border border-stone-200 transition-colors duration-150
-                   cursor-default"
-            data-testid="reopen-last-project-btn"
-          >
-            Reopen {lastWorkspaceProject.name}
-          </button>
+      <main class="pt-8">
+        <h2 class="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Recent projects</h2>
+        {#if recentProjects.length > 0}
+          <div class="mt-3 overflow-hidden rounded-lg border border-stone-200 bg-white" data-testid="recent-project-list">
+            {#each recentProjects as recentProject, index (recentProject.path)}
+              <button
+                onclick={() => openRecentProject(recentProject)}
+                disabled={!recentProject.exists}
+                class="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:opacity-50 {index > 0 ? 'border-t border-stone-100' : ''}"
+                data-testid={index === 0 ? 'reopen-last-project-btn' : 'recent-project-btn'}
+              >
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-stone-100 text-xs font-semibold text-stone-500">
+                  {recentProject.name.slice(0, 1).toUpperCase()}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium text-stone-800">{recentProject.name}</div>
+                  <div class="mt-0.5 truncate text-xs text-stone-500">{recentProject.path}</div>
+                </div>
+                {#if !recentProject.exists}
+                  <span class="text-xs font-medium text-stone-400">Unavailable</span>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <div class="mt-3 rounded-lg border border-dashed border-stone-300 bg-white px-5 py-8 text-sm text-stone-500" data-testid="empty-recent-projects">
+            No recent projects. Open an existing project or create a new one to get started.
+          </div>
         {/if}
-        <button
-          onclick={openProject}
-          class="w-full bg-stone-800 hover:bg-stone-700 text-white text-sm font-medium
-                 px-4 py-2.5 rounded-lg transition-colors duration-150 cursor-default"
-          data-testid="open-project-btn"
-        >
-          Open Project
-        </button>
-        <button
-          onclick={beginCreateProject}
-          class="w-full bg-white hover:bg-stone-50 text-stone-700 text-sm font-medium
-                 px-4 py-2.5 rounded-lg border border-stone-200 transition-colors duration-150 cursor-default"
-          data-testid="create-project-btn"
-        >
-          Create Project
-        </button>
-      </div>
-
+      </main>
     </div>
   </div>
 

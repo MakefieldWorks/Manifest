@@ -77,6 +77,7 @@ export const IPC = {
   // Native menu notifications. These are one-way UI events, not domain calls.
   MENU_COMMAND:        'menu:command',
   MENU_STATE_UPDATE:   'menu:stateUpdate',
+  RECENT_PROJECTS_LIST: 'recentProjects:list',
   SETTINGS_GET:        'settings:get',
   SETTINGS_UPDATE_WORKSPACE: 'settings:updateWorkspace',
 } as const
@@ -100,6 +101,14 @@ export interface WorkspaceSettingsPatch {
   panelWidth?: number
   lastOpenDirectory?: string | null
   lastCreateDirectory?: string | null
+}
+
+/** A project shown in Manifest's desktop project hub and native File > Open Recent menu. */
+export interface RecentProject {
+  path: string
+  name: string
+  openedAt: string
+  exists: boolean
 }
 
 export type FolderDialogPurpose = 'open-project' | 'create-project'
@@ -204,6 +213,9 @@ export interface ManifestAPI {
   menu: {
     onCommand(handler: (command: MenuCommandId) => void): () => void
     updateState(state: MenuCommandState): void
+  }
+  recentProjects: {
+    list(): Promise<Result<RecentProject[]>>
   }
   settings: {
     get(): Promise<Result<WorkspaceSettings>>

@@ -309,6 +309,10 @@ function registerIpcHandlers(): void {
     updateApplicationMenuState(state)
   })
 
+  ipcMain.handle(IPC.RECENT_PROJECTS_LIST, () =>
+    ok(recentProjects.all())
+  )
+
   ipcMain.handle(IPC.SETTINGS_GET, () =>
     ok(appSettings.getWorkspaceSettings())
   )
