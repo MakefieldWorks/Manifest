@@ -169,6 +169,38 @@ test('opens a dedicated settings window and saves launch behavior', async ({ app
   await closed
 })
 
+test('reopens the last project when that launch behavior is selected', async ({ workspaceDir }) => {
+  const userDataDir = join(workspaceDir, 'reopen-last-project-user-data')
+  const firstApp = await launchAppWithArgs([], userDataDir)
+  const projectDir = join(workspaceDir, 'Reopen Lab')
+
+  try {
+    const firstPage = await firstApp.firstWindow()
+    await expect(firstPage.getByTestId('create-project-btn')).toBeVisible()
+    await createProjectThroughUi(firstPage, firstApp, workspaceDir, 'Reopen Lab')
+
+    const settingsPage = await openSettingsWindow(firstApp)
+    await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
+    await expect(settingsPage.getByRole('status')).toContainText('Saved')
+    const settingsClosed = settingsPage.waitForEvent('close')
+    await settingsPage.getByTestId('settings-done').click()
+    await settingsClosed
+  } finally {
+    await firstApp.close()
+  }
+
+  const reopenedApp = await launchAppWithArgs([], userDataDir)
+  try {
+    const reopenedPage = await reopenedApp.firstWindow()
+    await expect(reopenedPage.getByTestId('project-view')).toBeVisible()
+    await expect(treeRow(reopenedPage, 'Reopen Lab')).toBeVisible()
+    const reopenedProject = await currentProject(reopenedPage)
+    expect((reopenedProject as typeof reopenedProject & { path?: string }).path).toBe(projectDir)
+  } finally {
+    await reopenedApp.close()
+  }
+})
+
 test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {
   await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
 

@@ -32,4 +32,15 @@ describe('collectProjectOpenTargets', () => {
       appPath,
     })).toEqual(['/Users/robert/Documents/Network Lab'])
   })
+
+  it('does not discard later open targets that happen to look like scripts', () => {
+    expect(collectProjectOpenTargets([
+      '/Applications/Manifest.app/Contents/MacOS/Manifest',
+      '/Applications/Manifest.app/Contents/Resources/app.asar/out/main/index.js',
+      '/Applications/Manifest.app/Contents/Resources/example.js',
+    ], {
+      defaultApp: false,
+      appPath,
+    })).toEqual(['/Applications/Manifest.app/Contents/Resources/example.js'])
+  })
 })

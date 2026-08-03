@@ -14,6 +14,7 @@ import {
 } from './app-menu'
 import { resolveProjectOpenTarget } from './project-open-target'
 import { collectProjectOpenTargets } from './launch-arguments'
+import { isTrustedRendererNavigationUrl } from './renderer-navigation'
 import { RecentProjectsStore, getRecentDocumentPath } from './recent-projects'
 import {
   AppSettingsStore,
@@ -832,14 +833,10 @@ function notifyWindowFocusChanged(win: BrowserWindow, isFocused: boolean): void 
 }
 
 function isTrustedRendererUrl(url: string): boolean {
-  if (url.startsWith('file://')) return true
-  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
-  if (!rendererUrl) return false
-  try {
-    return new URL(url).origin === new URL(rendererUrl).origin
-  } catch {
-    return false
-  }
+  return isTrustedRendererNavigationUrl(url, {
+    devServerUrl: process.env['ELECTRON_RENDERER_URL'],
+    rendererDirectory: join(__dirname, '../renderer'),
+  })
 }
 
 function isSafeExternalUrl(url: string): boolean {

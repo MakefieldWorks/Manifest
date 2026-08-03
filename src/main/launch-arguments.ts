@@ -15,9 +15,11 @@ export function collectProjectOpenTargets(
   environment: LaunchArgumentEnvironment,
 ): string[] {
   const firstTargetIndex = environment.defaultApp ? 2 : 1
-  return argv.slice(firstTargetIndex).filter((arg) => {
+  return argv.slice(firstTargetIndex).filter((arg, index) => {
     if (!arg || arg.startsWith('-')) return false
-    return !isRuntimeEntrypointArg(arg, environment.appPath)
+    // Only the first candidate can be Electron's unpackaged entrypoint. Later
+    // arguments are intentional open targets, even if they happen to end in .js.
+    return index !== 0 || !isRuntimeEntrypointArg(arg, environment.appPath)
   })
 }
 
