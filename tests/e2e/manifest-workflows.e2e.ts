@@ -91,6 +91,24 @@ async function nativeOpenRecentMenuItems(electronApp: ElectronApplication): Prom
   })
 }
 
+async function openSettingsWindow(electronApp: ElectronApplication): Promise<Page> {
+  const settingsWindow = electronApp.waitForEvent('window')
+  await electronApp.evaluate(({ Menu }) => {
+    const findSettingsItem = (items: Electron.MenuItem[]): Electron.MenuItem | undefined => {
+      for (const item of items) {
+        if (item.label === 'Settings...') return item
+        const child = item.submenu && findSettingsItem(item.submenu.items)
+        if (child) return child
+      }
+      return undefined
+    }
+    const settingsItem = findSettingsItem(Menu.getApplicationMenu()?.items ?? [])
+    if (!settingsItem) throw new Error('Settings menu item was not found')
+    settingsItem.click?.()
+  })
+  return settingsWindow
+}
+
 async function writeFixtureProject(targetDir: string, fixtureName: string): Promise<void> {
   mkdirSync(targetDir, { recursive: true })
   const fixturePath = join(process.cwd(), 'tests', 'fixtures', fixtureName)
@@ -132,6 +150,20 @@ test('renders platform-aware desktop chrome', async ({ appPage, electronApp, wor
   await expect(appPage.getByTestId('window-drag-region')).toHaveCount(chrome.supportsWindowDragRegion ? 1 : 0)
   expect(projectTitlebarClass).toContain(chrome.reservesTrafficLightSpace ? 'pl-20' : 'pl-4')
   expect(projectTitlebarClass.includes('[-webkit-app-region:drag]')).toBe(chrome.supportsWindowDragRegion)
+})
+
+test('opens a dedicated settings window and saves launch behavior', async ({ electronApp }) => {
+  const settingsPage = await openSettingsWindow(electronApp)
+  await settingsPage.waitForLoadState('domcontentloaded')
+
+  await expect(settingsPage.getByRole('heading', { name: 'Settings' })).toBeVisible()
+  await settingsPage.getByTestId('launch-reopen-last-project').check()
+  await expect(settingsPage.getByRole('status')).toContainText('Saved')
+
+  const preferences = await settingsPage.evaluate(() => window.api.settings.getPreferences())
+  expect(preferences).toEqual({ ok: true, data: { launchBehavior: 'reopen-last-project' } })
+  await settingsPage.evaluate(() => window.api.settings.updatePreferences({ launchBehavior: 'project-hub' }))
+  await settingsPage.close()
 })
 
 test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {

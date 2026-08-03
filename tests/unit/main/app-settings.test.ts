@@ -106,6 +106,40 @@ describe('AppSettingsStore', () => {
     expect(cleared.lastCreateDirectory).toBeNull()
   })
 
+  it('persists launch behavior and defaults to the project hub', () => {
+    const store = new AppSettingsStore(storePath())
+
+    expect(store.getPreferences()).toEqual({ launchBehavior: 'project-hub' })
+    store.updatePreferences({ launchBehavior: 'reopen-last-project' })
+
+    expect(new AppSettingsStore(storePath()).getPreferences()).toEqual({
+      launchBehavior: 'reopen-last-project',
+    })
+  })
+
+  it('resets window and pane layout without clearing project history', () => {
+    const projectDir = join(tmpDir, 'Workspace Lab')
+    mkdirSync(projectDir)
+    writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+    const store = new AppSettingsStore(storePath())
+    store.updateWindowState({
+      bounds: { x: 40, y: 50, width: 1200, height: 900 },
+      isMaximized: true,
+      isFullScreen: false,
+    })
+    store.updateWorkspaceSettings({ treeWidth: 400, panelWidth: 500 })
+    store.recordLastProject(project(projectDir))
+
+    const reset = store.resetLayout()
+
+    expect(store.getWindowState()).toBeNull()
+    expect(reset).toMatchObject({
+      treeWidth: 288,
+      panelWidth: 320,
+      lastProject: { path: projectDir, exists: true },
+    })
+  })
+
   it('tracks last project and marks missing projects', () => {
     const projectDir = join(tmpDir, 'Workspace Lab')
     mkdirSync(projectDir)

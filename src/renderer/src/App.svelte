@@ -119,6 +119,7 @@
   let panelWidth: number = $state(320)  // 20rem default
   let workspaceSettingsLoaded: boolean = $state(false)
   let unsubscribeWindowFocus: (() => void) | null = null
+  let unsubscribeLayoutReset: (() => void) | null = null
   let lastCreateDirectory: string | null = $state(null)
   let lastWorkspaceProject: WorkspaceSettings['lastProject'] = $state(null)
   let recentProjects: RecentProject[] = $state([])
@@ -246,6 +247,9 @@
       handleProjectOpenedFromOs(result)
     })
     unsubscribeWindowFocus = window.api.windowState.onFocusChanged(applyWindowFocus)
+    unsubscribeLayoutReset = window.api.settings.onLayoutReset((settings) => {
+      applyWorkspaceSettings(settings)
+    })
     const focusState = await window.api.windowState.isFocused()
     if (focusState.ok) applyWindowFocus(focusState.data)
 
@@ -279,6 +283,8 @@
     unsubscribeProjectOpenFromOs = null
     unsubscribeWindowFocus?.()
     unsubscribeWindowFocus = null
+    unsubscribeLayoutReset?.()
+    unsubscribeLayoutReset = null
     clearWorkspaceSettingsSaveTimer()
     delete document.documentElement.dataset.windowFocused
     window.removeEventListener('mousemove', onDragMove)

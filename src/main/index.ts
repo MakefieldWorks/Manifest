@@ -14,7 +14,13 @@ import {
 } from './app-menu'
 import { resolveProjectOpenTarget } from './project-open-target'
 import { RecentProjectsStore, getRecentDocumentPath } from './recent-projects'
-import { AppSettingsStore, resolveRestorableWindowBounds, type WorkspaceSettingsPatch } from './app-settings'
+import {
+  AppSettingsStore,
+  resolveRestorableWindowBounds,
+  type AppPreferencesPatch,
+  type WorkspaceSettings,
+  type WorkspaceSettingsPatch,
+} from './app-settings'
 import { desktopChromeForPlatform } from '../shared/desktop-chrome'
 import { buildDiagnostics } from './diagnostics'
 import {
@@ -49,6 +55,7 @@ const WINDOW_BACKGROUND_COLOR = '#f8f8f7'
 // ─── Window ──────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null
+let settingsWindow: BrowserWindow | null = null
 const pendingOpenTargets: string[] = []
 let ownsSingleInstanceLock = false
 let quitAfterFinalSave = false
@@ -116,6 +123,55 @@ function createWindow(): BrowserWindow {
   }
 
   mainWindow = win
+  return win
+}
+
+function createSettingsWindow(): BrowserWindow {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    if (settingsWindow.isMinimized()) settingsWindow.restore()
+    settingsWindow.show()
+    settingsWindow.focus()
+    return settingsWindow
+  }
+
+  const desktopChrome = desktopChromeForPlatform(process.platform)
+  const win = new BrowserWindow({
+    width: 600,
+    height: 500,
+    minWidth: 500,
+    minHeight: 420,
+    show: false,
+    title: 'Manifest Settings',
+    icon: getBrandIconPath(),
+    backgroundColor: WINDOW_BACKGROUND_COLOR,
+    titleBarStyle: desktopChrome.titleBarStyle,
+    parent: mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+
+  win.once('ready-to-show', () => win.show())
+  configureRendererNavigation(win)
+  win.on('focus', () => notifyWindowFocusChanged(win, true))
+  win.on('blur', () => notifyWindowFocusChanged(win, false))
+  win.webContents.on('did-finish-load', () => notifyWindowFocusChanged(win, win.isFocused()))
+  win.on('closed', () => {
+    if (settingsWindow === win) settingsWindow = null
+  })
+
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    const settingsUrl = new URL(process.env['ELECTRON_RENDERER_URL'])
+    settingsUrl.searchParams.set('settings', '1')
+    void win.loadURL(settingsUrl.toString())
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { query: { settings: '1' } })
+  }
+
+  settingsWindow = win
   return win
 }
 
@@ -315,8 +371,8 @@ function registerIpcHandlers(): void {
     updateApplicationMenuState(state)
   })
 
-  ipcMain.handle(IPC.WINDOW_FOCUS_GET, () =>
-    ok(mainWindow?.isFocused() ?? true)
+  ipcMain.handle(IPC.WINDOW_FOCUS_GET, (event) =>
+    ok(BrowserWindow.fromWebContents(event.sender)?.isFocused() ?? true)
   )
 
   ipcMain.handle(IPC.RECENT_PROJECTS_LIST, () =>
@@ -330,6 +386,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SETTINGS_UPDATE_WORKSPACE, (_, patch: unknown) =>
     ok(appSettings.updateWorkspaceSettings(normalizeWorkspaceSettingsPatch(patch)))
   )
+
+  ipcMain.handle(IPC.SETTINGS_GET_PREFERENCES, () =>
+    ok(appSettings.getPreferences())
+  )
+
+  ipcMain.handle(IPC.SETTINGS_UPDATE_PREFERENCES, (_, patch: unknown) =>
+    ok(appSettings.updatePreferences(normalizePreferencesPatch(patch)))
+  )
+
+  ipcMain.handle(IPC.SETTINGS_RESET_LAYOUT, () => {
+    const settings = appSettings.resetLayout()
+    resetMainWindowLayout(settings)
+    return ok(settings)
+  })
 
   // ── Snapshots ────────────────────────────────────────────────────────────
 
@@ -415,6 +485,7 @@ app.whenReady().then(async () => {
     app.dock.setIcon(iconPath)
   }
   await drainPendingOpenTargets()
+  await reopenLastProjectIfRequested()
   createWindow()
 
   app.on('activate', () => {
@@ -592,6 +663,17 @@ async function drainPendingOpenTargets(): Promise<void> {
   }
 }
 
+async function reopenLastProjectIfRequested(): Promise<void> {
+  if (projectManager.getCurrent() || appSettings.getPreferences().launchBehavior !== 'reopen-last-project') return
+  const lastProject = appSettings.getWorkspaceSettings().lastProject
+  if (!lastProject?.exists) return
+
+  const result = await openProjectFromOsTarget(lastProject.path, { notifyRenderer: false })
+  if (!result.ok) {
+    appLogger.warn('could not reopen last project', { path: lastProject.path, error: result.error.message })
+  }
+}
+
 async function openProjectFromOsTarget(
   targetPath: string,
   options: { notifyRenderer: boolean }
@@ -628,15 +710,7 @@ function clearRecentProjects(): void {
 }
 
 function openPreferences(): void {
-  const owner = mainWindow ?? BrowserWindow.getFocusedWindow()
-  const options = {
-    type: 'info' as const,
-    title: 'Settings',
-    message: 'Manifest Settings',
-    detail: 'Manifest currently saves workspace layout, window placement, recent projects, and dialog locations automatically. App-level preferences will appear here as they are added.',
-    buttons: ['OK'],
-  }
-  showMessageBoxSafely('settings dialog', owner, options)
+  createSettingsWindow()
 }
 
 function openDocumentation(): void {
@@ -779,6 +853,24 @@ function normalizeWorkspaceSettingsPatch(input: unknown): WorkspaceSettingsPatch
     patch.lastCreateDirectory = source.lastCreateDirectory
   }
   return patch
+}
+
+function normalizePreferencesPatch(input: unknown): AppPreferencesPatch {
+  if (!input || typeof input !== 'object') return {}
+  const source = input as Record<string, unknown>
+  return source.launchBehavior === 'project-hub' || source.launchBehavior === 'reopen-last-project'
+    ? { launchBehavior: source.launchBehavior }
+    : {}
+}
+
+function resetMainWindowLayout(settings: WorkspaceSettings): void {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  if (win.isFullScreen()) win.setFullScreen(false)
+  if (win.isMaximized()) win.unmaximize()
+  win.setSize(1280, 800)
+  win.center()
+  win.webContents.send(IPC.SETTINGS_LAYOUT_RESET, settings)
 }
 
 function notifyProjectOpenFromOs(

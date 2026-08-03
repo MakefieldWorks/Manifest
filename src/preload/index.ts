@@ -4,7 +4,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc'
-import type { ManifestAPI } from '../shared/ipc'
+import type { ManifestAPI, WorkspaceSettings } from '../shared/ipc'
 import { isMenuCommandId } from '../shared/menu-commands'
 import { desktopChromeForPlatform } from '../shared/desktop-chrome'
 
@@ -153,6 +153,21 @@ const api: ManifestAPI = {
       ipcRenderer.invoke(IPC.SETTINGS_GET, {}),
     updateWorkspace: (patch) =>
       ipcRenderer.invoke(IPC.SETTINGS_UPDATE_WORKSPACE, patch),
+    getPreferences: () =>
+      ipcRenderer.invoke(IPC.SETTINGS_GET_PREFERENCES, {}),
+    updatePreferences: (patch) =>
+      ipcRenderer.invoke(IPC.SETTINGS_UPDATE_PREFERENCES, patch),
+    resetLayout: () =>
+      ipcRenderer.invoke(IPC.SETTINGS_RESET_LAYOUT, {}),
+    onLayoutReset: (handler) => {
+      const listener = (_event: Electron.IpcRendererEvent, settings: unknown) => {
+        handler(settings as WorkspaceSettings)
+      }
+      ipcRenderer.on(IPC.SETTINGS_LAYOUT_RESET, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.SETTINGS_LAYOUT_RESET, listener)
+      }
+    },
   },
 }
 

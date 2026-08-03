@@ -41,6 +41,7 @@ interface StoredLastProject {
 
 interface StoredSettings {
   window: DesktopWindowState | null
+  preferences: AppPreferences
   workspace: {
     treeWidth: number
     panelWidth: number
@@ -57,12 +58,25 @@ export interface WorkspaceSettingsPatch {
   lastCreateDirectory?: string | null
 }
 
+export type LaunchBehavior = 'project-hub' | 'reopen-last-project'
+
+export interface AppPreferences {
+  launchBehavior: LaunchBehavior
+}
+
+export interface AppPreferencesPatch {
+  launchBehavior?: LaunchBehavior
+}
+
 const DEFAULT_TREE_WIDTH = 288
 const DEFAULT_PANEL_WIDTH = 320
 
 function defaultSettings(): StoredSettings {
   return {
     window: null,
+    preferences: {
+      launchBehavior: 'project-hub',
+    },
     workspace: {
       treeWidth: DEFAULT_TREE_WIDTH,
       panelWidth: DEFAULT_PANEL_WIDTH,
@@ -87,6 +101,18 @@ export class AppSettingsStore {
   updateWindowState(state: DesktopWindowState): void {
     this.settings.window = normalizeWindowState(state)
     this.save()
+  }
+
+  getPreferences(): AppPreferences {
+    return { ...this.settings.preferences }
+  }
+
+  updatePreferences(patch: AppPreferencesPatch): AppPreferences {
+    if (patch.launchBehavior && this.settings.preferences.launchBehavior !== patch.launchBehavior) {
+      this.settings.preferences.launchBehavior = patch.launchBehavior
+      this.save()
+    }
+    return this.getPreferences()
   }
 
   getWorkspaceSettings(): WorkspaceSettings {
@@ -136,6 +162,14 @@ export class AppSettingsStore {
       }
     }
     if (changed) this.save()
+    return this.getWorkspaceSettings()
+  }
+
+  resetLayout(): WorkspaceSettings {
+    this.settings.window = null
+    this.settings.workspace.treeWidth = DEFAULT_TREE_WIDTH
+    this.settings.workspace.panelWidth = DEFAULT_PANEL_WIDTH
+    this.save()
     return this.getWorkspaceSettings()
   }
 
@@ -197,6 +231,11 @@ function normalizeSettings(raw: unknown): StoredSettings {
 
   const windowState = normalizeWindowState(source.window)
   if (windowState) settings.window = windowState
+
+  const preferences = source.preferences
+  if (preferences && typeof preferences === 'object' && preferences.launchBehavior === 'reopen-last-project') {
+    settings.preferences.launchBehavior = 'reopen-last-project'
+  }
 
   const workspace = source.workspace
   if (workspace && typeof workspace === 'object') {

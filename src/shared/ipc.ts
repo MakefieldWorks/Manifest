@@ -82,6 +82,10 @@ export const IPC = {
   RECENT_PROJECTS_LIST: 'recentProjects:list',
   SETTINGS_GET:        'settings:get',
   SETTINGS_UPDATE_WORKSPACE: 'settings:updateWorkspace',
+  SETTINGS_GET_PREFERENCES: 'settings:getPreferences',
+  SETTINGS_UPDATE_PREFERENCES: 'settings:updatePreferences',
+  SETTINGS_RESET_LAYOUT: 'settings:resetLayout',
+  SETTINGS_LAYOUT_RESET: 'settings:layoutReset',
 } as const
 
 export interface LastWorkspaceProject {
@@ -103,6 +107,16 @@ export interface WorkspaceSettingsPatch {
   panelWidth?: number
   lastOpenDirectory?: string | null
   lastCreateDirectory?: string | null
+}
+
+export type LaunchBehavior = 'project-hub' | 'reopen-last-project'
+
+export interface AppPreferences {
+  launchBehavior: LaunchBehavior
+}
+
+export interface AppPreferencesPatch {
+  launchBehavior?: LaunchBehavior
 }
 
 /** A project shown in Manifest's desktop project hub and native File > Open Recent menu. */
@@ -226,5 +240,9 @@ export interface ManifestAPI {
   settings: {
     get(): Promise<Result<WorkspaceSettings>>
     updateWorkspace(patch: WorkspaceSettingsPatch): Promise<Result<WorkspaceSettings>>
+    getPreferences(): Promise<Result<AppPreferences>>
+    updatePreferences(patch: AppPreferencesPatch): Promise<Result<AppPreferences>>
+    resetLayout(): Promise<Result<WorkspaceSettings>>
+    onLayoutReset(handler: (settings: WorkspaceSettings) => void): () => void
   }
 }
