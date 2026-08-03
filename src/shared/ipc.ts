@@ -77,6 +77,8 @@ export const IPC = {
   // Native menu notifications. These are one-way UI events, not domain calls.
   MENU_COMMAND:        'menu:command',
   MENU_STATE_UPDATE:   'menu:stateUpdate',
+  WINDOW_FOCUS_GET:    'window:focusGet',
+  WINDOW_FOCUS_CHANGED: 'window:focusChanged',
   RECENT_PROJECTS_LIST: 'recentProjects:list',
   SETTINGS_GET:        'settings:get',
   SETTINGS_UPDATE_WORKSPACE: 'settings:updateWorkspace',
@@ -213,6 +215,10 @@ export interface ManifestAPI {
   menu: {
     onCommand(handler: (command: MenuCommandId) => void): () => void
     updateState(state: MenuCommandState): void
+  }
+  windowState: {
+    isFocused(): Promise<Result<boolean>>
+    onFocusChanged(handler: (isFocused: boolean) => void): () => void
   }
   recentProjects: {
     list(): Promise<Result<RecentProject[]>>

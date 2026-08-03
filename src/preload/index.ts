@@ -129,6 +129,20 @@ const api: ManifestAPI = {
       ipcRenderer.send(IPC.MENU_STATE_UPDATE, state),
   },
 
+  windowState: {
+    isFocused: () =>
+      ipcRenderer.invoke(IPC.WINDOW_FOCUS_GET),
+    onFocusChanged: (handler) => {
+      const listener = (_event: Electron.IpcRendererEvent, isFocused: unknown) => {
+        if (typeof isFocused === 'boolean') handler(isFocused)
+      }
+      ipcRenderer.on(IPC.WINDOW_FOCUS_CHANGED, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.WINDOW_FOCUS_CHANGED, listener)
+      }
+    },
+  },
+
   recentProjects: {
     list: () =>
       ipcRenderer.invoke(IPC.RECENT_PROJECTS_LIST, {}),

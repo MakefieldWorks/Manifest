@@ -134,6 +134,20 @@ test('renders platform-aware desktop chrome', async ({ appPage, electronApp, wor
   expect(projectTitlebarClass.includes('[-webkit-app-region:drag]')).toBe(chrome.supportsWindowDragRegion)
 })
 
+test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.blur()
+  })
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('false')
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.focus()
+  })
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
+})
+
 test('adds opened projects to native Open Recent and OS recent documents', async ({ appPage, electronApp, workspaceDir }) => {
   await electronApp.evaluate(({ app }) => {
     const state = globalThis as typeof globalThis & { __manifestRecentDocuments?: string[] }

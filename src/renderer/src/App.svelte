@@ -118,6 +118,7 @@
   let treeWidth:  number = $state(288)  // 18rem default
   let panelWidth: number = $state(320)  // 20rem default
   let workspaceSettingsLoaded: boolean = $state(false)
+  let unsubscribeWindowFocus: (() => void) | null = null
   let lastCreateDirectory: string | null = $state(null)
   let lastWorkspaceProject: WorkspaceSettings['lastProject'] = $state(null)
   let recentProjects: RecentProject[] = $state([])
@@ -233,6 +234,10 @@
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
+  function applyWindowFocus(isFocused: boolean) {
+    document.documentElement.dataset.windowFocused = String(isFocused)
+  }
+
   onMount(async () => {
     unsubscribeMenuCommands = window.api.menu.onCommand((command) => {
       void runMenuCommand(command)
@@ -240,6 +245,9 @@
     unsubscribeProjectOpenFromOs = window.api.project.onOpenedFromOs((result) => {
       handleProjectOpenedFromOs(result)
     })
+    unsubscribeWindowFocus = window.api.windowState.onFocusChanged(applyWindowFocus)
+    const focusState = await window.api.windowState.isFocused()
+    if (focusState.ok) applyWindowFocus(focusState.data)
 
     const settings = await window.api.settings.get()
     if (settings.ok) {
@@ -269,7 +277,10 @@
     unsubscribeMenuCommands = null
     unsubscribeProjectOpenFromOs?.()
     unsubscribeProjectOpenFromOs = null
+    unsubscribeWindowFocus?.()
+    unsubscribeWindowFocus = null
     clearWorkspaceSettingsSaveTimer()
+    delete document.documentElement.dataset.windowFocused
     window.removeEventListener('mousemove', onDragMove)
     window.removeEventListener('mouseup', onDragEnd)
   })

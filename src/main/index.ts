@@ -44,6 +44,7 @@ const recentProjects = new RecentProjectsStore(join(userData, 'recent-projects.j
 const appSettings = new AppSettingsStore(join(userData, 'app-settings.json'))
 const DOCUMENTATION_URL = 'https://github.com/rgehrsitz/Manifest#readme'
 const REPORT_ISSUE_URL = 'https://github.com/rgehrsitz/Manifest/issues/new'
+const WINDOW_BACKGROUND_COLOR = '#f8f8f7'
 
 // ─── Window ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ function createWindow(): BrowserWindow {
     show: false,
     title: 'Manifest',
     icon: iconPath,
+    backgroundColor: WINDOW_BACKGROUND_COLOR,
     titleBarStyle: desktopChrome.titleBarStyle,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -87,6 +89,10 @@ function createWindow(): BrowserWindow {
   }
 
   win.once('ready-to-show', () => win.show())
+  configureRendererNavigation(win)
+  win.on('focus', () => notifyWindowFocusChanged(win, true))
+  win.on('blur', () => notifyWindowFocusChanged(win, false))
+  win.webContents.on('did-finish-load', () => notifyWindowFocusChanged(win, win.isFocused()))
   win.on('move', () => scheduleWindowStateSave(win))
   win.on('resize', () => scheduleWindowStateSave(win))
   win.on('maximize', () => saveWindowState(win))
@@ -308,6 +314,10 @@ function registerIpcHandlers(): void {
   ipcMain.on(IPC.MENU_STATE_UPDATE, (_, state: unknown) => {
     updateApplicationMenuState(state)
   })
+
+  ipcMain.handle(IPC.WINDOW_FOCUS_GET, () =>
+    ok(mainWindow?.isFocused() ?? true)
+  )
 
   ipcMain.handle(IPC.RECENT_PROJECTS_LIST, () =>
     ok(recentProjects.all())
@@ -674,6 +684,50 @@ function openExternalSafely(url: string, label: string): void {
   shell.openExternal(url).catch((error: unknown) => {
     appLogger.error(`failed to open ${label}`, { error: errorMessage(error), url })
   })
+}
+
+function configureRendererNavigation(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      openExternalSafely(url, 'external renderer link')
+    } else {
+      appLogger.warn('blocked unsafe renderer window request', { url })
+    }
+    return { action: 'deny' }
+  })
+
+  const blockUntrustedNavigation = (event: Electron.Event, url: string) => {
+    if (isTrustedRendererUrl(url)) return
+    event.preventDefault()
+    appLogger.warn('blocked renderer navigation', { url })
+  }
+  win.webContents.on('will-navigate', blockUntrustedNavigation)
+  win.webContents.on('will-redirect', blockUntrustedNavigation)
+}
+
+function notifyWindowFocusChanged(win: BrowserWindow, isFocused: boolean): void {
+  if (win.isDestroyed()) return
+  win.webContents.send(IPC.WINDOW_FOCUS_CHANGED, isFocused)
+}
+
+function isTrustedRendererUrl(url: string): boolean {
+  if (url.startsWith('file://')) return true
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  if (!rendererUrl) return false
+  try {
+    return new URL(url).origin === new URL(rendererUrl).origin
+  } catch {
+    return false
+  }
+}
+
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol
+    return protocol === 'https:' || protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 async function showMessageBoxSafely(
