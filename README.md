@@ -14,12 +14,12 @@
 
 Manifest is a desktop app for managing structured, hierarchical projects without hiding your data behind a service.
 
-The core idea is simple. Your project lives as a readable `manifest.json` file on disk. Manifest gives you a native UI for editing that structure, saving named snapshots, searching nodes and properties, and comparing project states with semantic diffs instead of raw text churn.
+The core idea is simple. Your project lives as a readable `Manifest.manifestproject` file on disk. Manifest gives you a native UI for editing that structure, saving named snapshots, searching nodes and properties, and comparing project states with semantic diffs instead of raw text churn.
 
 ## Why Manifest
 
 - Local-first. Your project data stays in your folder, under your control.
-- Human-readable storage. State is persisted to `manifest.json`, not locked in an opaque database.
+- Human-readable storage. State is persisted to `Manifest.manifestproject`, not locked in an opaque database.
 - Named history. Snapshots are backed by Git, but surfaced as product features.
 - Semantic diffs. Compare changes like added, removed, moved, renamed, reordered, and property-changed nodes.
 - Fast search. SQLite FTS5 indexes names and properties for renderer-side search.
@@ -95,9 +95,9 @@ docs             product, architecture, and roadmap documentation
 
 ## Data Model
 
-Each Manifest project is stored in a folder containing a `manifest.json` file.
+Each Manifest project is stored in a folder containing a `Manifest.manifestproject` file. The capitalization is part of the canonical filename on case-sensitive filesystems.
 
-That file is the source of truth. Search indexes are rebuildable. Snapshot history is Git-backed. The app is designed so the durable project state remains inspectable and portable.
+That file is the source of truth. Search indexes are rebuildable. Snapshot history is Git-backed. The app is designed so the durable project state remains inspectable and portable. Internal recovery payloads under `.manifest/recovery/` intentionally remain JSON sidecar files; they are not Manifest project documents.
 
 ## Branding
 

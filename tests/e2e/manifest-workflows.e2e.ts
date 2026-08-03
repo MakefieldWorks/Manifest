@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { expect, test } from './fixtures'
-import { PROJECT_LAUNCHER_FILE } from '../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
 
 type PersistedProject = {
   name: string
@@ -94,7 +94,7 @@ async function nativeOpenRecentMenuItems(electronApp: ElectronApplication): Prom
 async function writeFixtureProject(targetDir: string, fixtureName: string): Promise<void> {
   mkdirSync(targetDir, { recursive: true })
   const fixturePath = join(process.cwd(), 'tests', 'fixtures', fixtureName)
-  writeFileSync(join(targetDir, 'manifest.json'), readFileSync(fixturePath, 'utf8'), 'utf8')
+  writeFileSync(join(targetDir, 'Manifest.manifestproject'), readFileSync(fixturePath, 'utf8'), 'utf8')
 }
 
 async function launchAppWithArgs(args: string[]): Promise<ElectronApplication> {
@@ -110,20 +110,15 @@ async function launchAppWithArgs(args: string[]): Promise<ElectronApplication> {
 
 test('creates a new project from the welcome flow', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Bench Alpha')
-  const manifestPath = join(projectDir, 'manifest.json')
-  const launcherPath = join(projectDir, 'Manifest.manifestproject')
+  const documentPath = join(projectDir, PROJECT_DOCUMENT_FILE)
 
-  expect(existsSync(manifestPath)).toBe(true)
-  expect(existsSync(launcherPath)).toBe(true)
+  expect(existsSync(documentPath)).toBe(true)
   expect(existsSync(join(projectDir, '.git'))).toBe(true)
 
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as PersistedProject
-  expect(manifest.name).toBe('Bench Alpha')
-  expect(manifest.nodes).toHaveLength(1)
-  expect(manifest.nodes[0]?.parentId).toBeNull()
-
-  const launcher = JSON.parse(readFileSync(launcherPath, 'utf8')) as { projectPath: string }
-  expect(launcher.projectPath).toBe('.')
+  const document = JSON.parse(readFileSync(documentPath, 'utf8')) as PersistedProject
+  expect(document.name).toBe('Bench Alpha')
+  expect(document.nodes).toHaveLength(1)
+  expect(document.nodes[0]?.parentId).toBeNull()
 })
 
 test('renders platform-aware desktop chrome', async ({ appPage, electronApp, workspaceDir }) => {
@@ -160,7 +155,7 @@ test('adds opened projects to native Open Recent and OS recent documents', async
     enabled: true,
     sublabel: projectDir,
   })
-  expect(addedDocuments).toContain(join(projectDir, PROJECT_LAUNCHER_FILE))
+  expect(addedDocuments).toContain(join(projectDir, PROJECT_DOCUMENT_FILE))
 })
 
 test('opens the most recent project from the project hub', async ({ appPage, electronApp, workspaceDir }) => {
@@ -226,7 +221,7 @@ test('reorders siblings and reparents nodes', async ({ appPage, electronApp, wor
   const projectDir = join(workspaceDir, 'Reorder Lab')
   mkdirSync(projectDir, { recursive: true })
   writeFileSync(
-    join(projectDir, 'manifest.json'),
+    join(projectDir, 'Manifest.manifestproject'),
     JSON.stringify({
       version: 2,
       id: '01900000-0000-7000-8000-000000000100',
@@ -362,7 +357,7 @@ test('shows an empty state when search finds no matches', async ({ appPage, elec
 
 test('autosaves edits to disk and reopens them cleanly', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Autosave Lab')
-  const manifestPath = join(projectDir, 'manifest.json')
+  const manifestPath = join(projectDir, 'Manifest.manifestproject')
 
   await openContextMenuAction(appPage, 'Autosave Lab', 'Add Child')
   await appPage.getByTestId('add-child-input').fill('Rack A')

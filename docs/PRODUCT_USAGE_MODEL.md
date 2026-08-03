@@ -38,7 +38,7 @@ mental model.
 The current project is the only editable thing in Manifest. It is what the user
 sees in the tree and detail pane during normal use.
 
-The current project is autosaved to `manifest.json`. It can be changed freely.
+The current project is autosaved to `Manifest.manifestproject`. It can be changed freely.
 When the user creates a snapshot, Manifest records the current project state as
 an immutable checkpoint.
 
@@ -162,7 +162,7 @@ B because the current project was reverted to B before D was created.
 
 ```mermaid
 flowchart TD
-  A["User edits current project"] --> B["Autosave writes manifest.json"]
+  A["User edits current project"] --> B["Autosave writes Manifest.manifestproject"]
   B --> C{"Meaningful checkpoint?"}
   C -- "No" --> A
   C -- "Yes" --> D["Create immutable snapshot"]

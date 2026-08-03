@@ -92,7 +92,7 @@ import type { GitService } from './git-service'
 import type { Logger } from './logger'
 import { SearchIndexService } from './search-index'
 import { HistoryIndexService } from './history-index'
-import { PROJECT_LAUNCHER_FILE } from './project-launcher'
+import { findProjectDocument, PROJECT_DOCUMENT_FILE } from './project-launcher'
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  // 50 MB
 const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / 1024 / 1024
@@ -159,7 +159,6 @@ export class ProjectManager {
       }
 
       await this.writeManifest(project)
-      this.writeProjectLauncher(projectPath)
       await this.git.initRepo(projectPath)
       await this.git.initialCommit(projectPath)
       const searchResult = this.rebuildSearchIndex(project, 'initialize')
@@ -179,17 +178,22 @@ export class ProjectManager {
   }
 
   // Open an existing project from a directory path.
-  // Reads manifest.json, validates, migrates if needed, rebuilds search index.
+  // Reads the dedicated project document (or a legacy manifest.json), validates,
+  // migrates, and rebuilds search index.
   async openProject(projectPath: string): Promise<Result<Project>> {
-    const manifestPath = join(projectPath, 'manifest.json')
+    const document = findProjectDocument(projectPath)
+    if (!document) {
+      return err(ErrorCode.PROJECT_NOT_FOUND, 'No Manifest project document was found')
+    }
+    const documentPath = document.path
     try {
-      const stat = statSync(manifestPath)
+      const stat = statSync(documentPath)
       if (stat.size > MAX_FILE_SIZE_BYTES) {
         const mb = Math.round(stat.size / 1024 / 1024)
         return err(ErrorCode.FILE_TOO_LARGE, `Project file is ${mb}MB (limit: 50MB)`)
       }
 
-      const raw = readFileSync(manifestPath, 'utf8')
+      const raw = readFileSync(documentPath, 'utf8')
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: any
@@ -228,10 +232,19 @@ export class ProjectManager {
         })
       }
 
-      // If migration bumped the version, write the migrated file back immediately.
-      if (data.version !== originalVersion) {
-        await this.writeManifest(project)
-        this.logger.info('project migrated', { from: originalVersion, to: data.version })
+      // Migrate legacy manifest.json projects to the dedicated document name on
+      // first successful open. Writing the new file atomically comes before
+      // removing the old one, so a failed write never risks project data.
+      if (data.version !== originalVersion || document.isLegacy) {
+        const persisted = await this.writeManifest(project, { touchModified: false })
+        if (!persisted.ok) return persisted as Result<Project>
+        if (document.isLegacy) unlinkSync(documentPath)
+        this.logger.info('project document migrated', {
+          path: projectPath,
+          schemaFrom: originalVersion,
+          schemaTo: data.version,
+          legacyDocument: document.isLegacy,
+        })
       }
 
       const searchResult = this.rebuildSearchIndex(project, 'rebuild')
@@ -2081,6 +2094,8 @@ export class ProjectManager {
 
     const id = `recovery-${uuidv7()}`
     const recoveryDir = join(project.path, '.manifest', 'recovery')
+    // Recovery payloads are internal sidecars, not user-openable documents.
+    // Keep their JSON suffix so they cannot be mistaken for Manifest projects.
     const manifestPath = join('.manifest', 'recovery', `${id}.manifest.json`)
     mkdirSync(recoveryDir, { recursive: true })
     writeFileSync(join(project.path, manifestPath), current, 'utf8')
@@ -2305,8 +2320,8 @@ export class ProjectManager {
     if (!project.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'Project has no path — cannot save')
     }
-    const manifestPath = join(project.path, 'manifest.json')
-    const tmpPath = `${manifestPath}.tmp`
+    const documentPath = join(project.path, PROJECT_DOCUMENT_FILE)
+    const tmpPath = `${documentPath}.tmp`
     const touchModified = options.touchModified ?? true
     try {
       const persistedProject = {
@@ -2315,7 +2330,7 @@ export class ProjectManager {
       }
       const { path: _path, loadWarnings: _warnings, projectWarnings: _projectWarnings, ...persistable } = persistedProject
       writeFileSync(tmpPath, JSON.stringify(persistable, null, 2), 'utf8')
-      renameSync(tmpPath, manifestPath)
+      renameSync(tmpPath, documentPath)
       if (this.currentProject?.path === project.path && this.currentProject.id === project.id) {
         this.currentProject = persistedProject
       }
@@ -2518,14 +2533,6 @@ export class ProjectManager {
     return false
   }
 
-  private writeProjectLauncher(projectPath: string): void {
-    const launcherPath = join(projectPath, PROJECT_LAUNCHER_FILE)
-    const launcher = {
-      version: 1,
-      projectPath: '.',
-    }
-    writeFileSync(launcherPath, `${JSON.stringify(launcher, null, 2)}\n`, 'utf8')
-  }
 }
 
 // ─── nodeHistory helpers (private, file-scope) ─────────────────────────────
