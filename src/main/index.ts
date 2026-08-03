@@ -51,6 +51,8 @@ const appSettings = new AppSettingsStore(join(userData, 'app-settings.json'))
 const DOCUMENTATION_URL = 'https://github.com/rgehrsitz/Manifest#readme'
 const REPORT_ISSUE_URL = 'https://github.com/rgehrsitz/Manifest/issues/new'
 const WINDOW_BACKGROUND_COLOR = '#f8f8f7'
+const SETTINGS_WINDOW_WIDTH = 760
+const SETTINGS_WINDOW_HEIGHT = 560
 
 // ─── Window ──────────────────────────────────────────────────────────────────
 
@@ -135,17 +137,23 @@ function createSettingsWindow(): BrowserWindow {
   }
 
   const desktopChrome = desktopChromeForPlatform(process.platform)
+  const owner = mainWindow ?? BrowserWindow.getFocusedWindow()
+  const position = settingsWindowPosition(owner, SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
   const win = new BrowserWindow({
-    width: 760,
-    height: 560,
+    ...position,
+    width: SETTINGS_WINDOW_WIDTH,
+    height: SETTINGS_WINDOW_HEIGHT,
     minWidth: 640,
     minHeight: 480,
+    movable: true,
+    maximizable: false,
+    fullscreenable: false,
     show: false,
     title: 'Manifest Settings',
     icon: getBrandIconPath(),
     backgroundColor: WINDOW_BACKGROUND_COLOR,
     titleBarStyle: desktopChrome.titleBarStyle,
-    parent: mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined,
+    parent: owner ?? undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -173,6 +181,36 @@ function createSettingsWindow(): BrowserWindow {
 
   settingsWindow = win
   return win
+}
+
+function settingsWindowPosition(
+  owner: BrowserWindow | null,
+  width: number,
+  height: number,
+): { x: number; y: number } | undefined {
+  if (!owner || owner.isDestroyed()) return undefined
+  const ownerBounds = owner.getBounds()
+  const workArea = screen.getDisplayMatching(ownerBounds).workArea
+  const gap = 24
+  const rightEdge = workArea.x + workArea.width
+  const bottomEdge = workArea.y + workArea.height
+  const fitsRight = ownerBounds.x + ownerBounds.width + gap + width <= rightEdge
+  const fitsLeft = ownerBounds.x - gap - width >= workArea.x
+  const preferredX = fitsRight
+    ? ownerBounds.x + ownerBounds.width + gap
+    : fitsLeft
+      ? ownerBounds.x - gap - width
+      : ownerBounds.x + Math.round((ownerBounds.width - width) / 2)
+  const preferredY = ownerBounds.y + Math.round((ownerBounds.height - height) / 2)
+
+  return {
+    x: clampWindowCoordinate(preferredX, workArea.x, rightEdge - width),
+    y: clampWindowCoordinate(preferredY, workArea.y, bottomEdge - height),
+  }
+}
+
+function clampWindowCoordinate(value: number, min: number, max: number): number {
+  return Math.round(Math.max(min, Math.min(value, Math.max(min, max))))
 }
 
 // ─── IPC handlers ────────────────────────────────────────────────────────────

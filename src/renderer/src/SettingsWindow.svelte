@@ -6,6 +6,7 @@
 
   type SettingsSection = 'general' | 'workspace'
 
+  const desktopChrome = window.api.platform
   let activeSection: SettingsSection = $state('general')
   let launchBehavior: LaunchBehavior = $state('project-hub')
   let loading = $state(true)
@@ -70,16 +71,23 @@
   <title>Manifest Settings</title>
 </svelte:head>
 
+{#if desktopChrome.supportsWindowDragRegion}
+  <div
+    class="fixed inset-x-0 top-0 z-50 h-8 [-webkit-app-region:drag]"
+    data-testid="settings-window-drag-region"
+  ></div>
+{/if}
+
 <main class="flex h-full min-h-0 bg-stone-50 text-stone-800">
-  <aside class="flex w-52 shrink-0 flex-col border-r border-stone-200 bg-stone-100/70 px-3 py-5">
-    <div class="flex items-center gap-2.5 px-2 pb-6">
+  <aside class="flex w-52 shrink-0 flex-col border-r border-stone-200 bg-stone-100/70 px-3 py-5 {desktopChrome.reservesTrafficLightSpace ? 'pt-12' : ''}">
+    <div class="flex items-center gap-2.5 px-2 pb-6 [-webkit-app-region:no-drag]">
       <div class="flex h-7 w-7 items-center justify-center rounded-md bg-white ring-1 ring-stone-200">
         <img src="./manifest-mark.svg" alt="" class="h-4 w-4" />
       </div>
       <span class="text-sm font-semibold tracking-tight text-stone-800">Manifest</span>
     </div>
 
-    <nav aria-label="Settings categories" class="space-y-1">
+    <nav aria-label="Settings categories" class="space-y-1 [-webkit-app-region:no-drag]">
       <button
         type="button"
         onclick={() => { activeSection = 'general' }}
