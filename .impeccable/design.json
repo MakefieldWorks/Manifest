@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-02T00:00:00.000Z",
+  "title": "Design System: Manifest",
+  "extensions": {
+    "colorMeta": {
+      "panel-paper": {
+        "role": "neutral",
+        "displayName": "Panel Paper",
+        "canonical": "#f8f8f7",
+        "note": "Hand-chosen, deliberately not stone-50. The one bespoke color in the system.",
+        "tonalRamp": ["#1c1917", "#292524", "#44403c", "#57534e", "#78716c", "#a8a29e", "#e7e5e4", "#f8f8f7"]
+      },
+      "surface-raised": {
+        "role": "neutral",
+        "displayName": "Surface Raised",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#1c1917", "#292524", "#44403c", "#57534e", "#78716c", "#d6d3d1", "#f5f5f4", "#ffffff"]
+      },
+      "rail-recessed": {
+        "role": "neutral",
+        "displayName": "Rail Recessed",
+        "canonical": "#fafaf9",
+        "tonalRamp": ["#1c1917", "#292524", "#44403c", "#57534e", "#78716c", "#a8a29e", "#e7e5e4", "#fafaf9"]
+      },
+      "ink-primary": {
+        "role": "primary",
+        "displayName": "Graphite",
+        "canonical": "#292524",
+        "note": "Highest-emphasis fill. The system has no decorative primary; its darkest neutral does that job.",
+        "tonalRamp": ["#1c1917", "#292524", "#44403c", "#57534e", "#78716c", "#a8a29e", "#d6d3d1", "#fafaf9"]
+      },
+      "added-ink": {
+        "role": "secondary",
+        "displayName": "Verified Green",
+        "canonical": "#047857",
+        "note": "Bound to change type 'added'. Never decorative.",
+        "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#6ee7b7", "#a7f3d0", "#ecfdf5"]
+      },
+      "removed-ink": {
+        "role": "secondary",
+        "displayName": "Withdrawn Red",
+        "canonical": "#b91c1c",
+        "note": "Bound to change type 'removed', plus genuine error states.",
+        "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#f87171", "#fecaca", "#fef2f2"]
+      },
+      "moved-ink": {
+        "role": "secondary",
+        "displayName": "Relocated Sky",
+        "canonical": "#0369a1",
+        "note": "Bound to change type 'moved-to' and Medium severity.",
+        "tonalRamp": ["#082f49", "#0c4a6e", "#075985", "#0369a1", "#0ea5e9", "#38bdf8", "#bae6fd", "#f0f9ff"]
+      },
+      "attention-ink": {
+        "role": "secondary",
+        "displayName": "Amended Amber",
+        "canonical": "#b45309",
+        "note": "At capacity: renamed, property-changed, template-changed, High severity, search matches, fold markers, advisories. Do not add a seventh meaning.",
+        "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#f59e0b", "#fbbf24", "#fde68a", "#fffbeb"]
+      },
+      "schema-ink": {
+        "role": "tertiary",
+        "displayName": "Schema Violet",
+        "canonical": "#6d28d9",
+        "note": "Template/schema classification only.",
+        "tonalRamp": ["#2e1065", "#4c1d95", "#5b21b6", "#6d28d9", "#8b5cf6", "#c4b5fd", "#ede9fe", "#f5f3ff"]
+      },
+      "mixed-ink": {
+        "role": "tertiary",
+        "displayName": "Mixed Purple",
+        "canonical": "#581c87",
+        "note": "A subtree containing more than one kind of change.",
+        "tonalRamp": ["#3b0764", "#581c87", "#6b21a8", "#7e22ce", "#a855f7", "#d8b4fe", "#f3e8ff", "#faf5ff"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Launch screen and empty-state headings only. Never inside a working project window." },
+      "title": { "displayName": "Title", "purpose": "Project name, dialog titles, section headings." },
+      "body": { "displayName": "Body", "purpose": "Tree rows, input values, dialog prose. The reading tier." },
+      "label": { "displayName": "Label", "purpose": "Dominant tier by volume — buttons, banners, metadata, hints. The default for any new control." },
+      "micro": { "displayName": "Micro", "purpose": "Uppercase change badges, fold chips, row status markers. The 10px floor, permitted only because caps height carries it." },
+      "eyebrow": { "displayName": "Eyebrow", "purpose": "The wordmark above the project name. Widest tracking in the system, used exactly once." },
+      "mono": { "displayName": "Mono", "purpose": "Raw property values, IDs, paths — anything the user might copy." }
+    },
+    "shadows": [
+      { "name": "overlay", "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)", "purpose": "Modal dialogs, paired with a rgb(0 0 0 / 0.3) scrim. The only routine shadow in the system." },
+      { "name": "floating", "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "purpose": "Transient toasts." },
+      { "name": "seated", "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "purpose": "Rare: lifts an element a hair off the panel without making it an overlay." }
+    ],
+    "motion": [
+      { "name": "ease-lens", "value": "cubic-bezier(0.65, 0, 0.35, 1)", "purpose": "easeInOutCubic, implemented in JS in lens-animation.ts. Drives fold open/close height interpolation." },
+      { "name": "duration-item", "value": "160ms", "purpose": "Per-item ramp for a single row or fold marker entering or exiting the lens." },
+      { "name": "duration-total", "value": "280ms", "purpose": "Total lens transition window. Items stagger across (total - item) so the last one finishes exactly at 280ms." },
+      { "name": "duration-state", "value": "150ms", "purpose": "Color-only state transitions on buttons and rows. Tailwind's transition-colors default; two elements opt down to 100ms." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single high-emphasis action in a dialog or bar. Graphite fill, never an accent color.",
+      "html": "<button class=\"ds-btn-primary\">Save Snapshot</button>",
+      "css": ".ds-btn-primary { background: #292524; color: #fff; font: 500 0.75rem/1.4 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; padding: 8px 16px; border: none; border-radius: 0.5rem; cursor: default; transition: background-color 150ms; } .ds-btn-primary:hover { background: #44403c; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 1px #a8a29e; } .ds-btn-primary:disabled { background: #d6d3d1; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Every non-primary action. White fill on a standing hairline border.",
+      "html": "<button class=\"ds-btn-secondary\">Compare</button>",
+      "css": ".ds-btn-secondary { background: #fff; color: #57534e; font: 500 0.75rem/1.4 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; padding: 6px 12px; border: 1px solid #e7e5e4; border-radius: 0.5rem; cursor: default; transition: background-color 150ms; } .ds-btn-secondary:hover { background: #fafaf9; } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 1px #a8a29e; } .ds-btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "The left rail's search input. Inline SVG magnifier at the leading edge; focus is a ring, never a border shift.",
+      "html": "<div class=\"ds-search\"><svg class=\"ds-search-icon\" fill=\"none\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><circle cx=\"6.5\" cy=\"6.5\" r=\"4.5\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M10.5 10.5l3 3\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg><input class=\"ds-search-input\" type=\"text\" placeholder=\"Search nodes…\" /></div>",
+      "css": ".ds-search { position: relative; } .ds-search-icon { position: absolute; left: 10px; top: 8px; width: 14px; height: 14px; color: #a8a29e; } .ds-search-input { width: 100%; background: #fff; border: 1px solid #e7e5e4; border-radius: 0.5rem; padding: 6px 32px 6px 32px; font: 400 0.875rem/1.5 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; color: #44403c; user-select: text; } .ds-search-input::placeholder { color: #d6d3d1; } .ds-search-input:focus { outline: none; box-shadow: 0 0 0 1px #a8a29e; }"
+    },
+    {
+      "name": "Tree Row",
+      "kind": "nav",
+      "refersTo": "tree-row",
+      "description": "The navigation primitive. Fixed 32px height — virtualization and the lens animation both depend on it. Selection is a tone step, not an accent.",
+      "html": "<div class=\"ds-tree\"><div class=\"ds-row\"><span class=\"ds-chevron\">▸</span><span class=\"ds-row-name\">Rack B-14</span><span class=\"ds-row-count\">12</span></div><div class=\"ds-row ds-row-selected\"><span class=\"ds-chevron\">▸</span><span class=\"ds-row-name\">Shelf 3</span><span class=\"ds-row-count\">7</span></div></div>",
+      "css": ".ds-tree { background: #fafaf9; padding: 4px; } .ds-row { display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px; border-radius: 0.25rem; font: 400 0.875rem/1.5 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; color: #44403c; cursor: default; user-select: none; transition: background-color 150ms; } .ds-row:hover { background: #f5f5f4; } .ds-row:focus-visible { outline: none; box-shadow: 0 0 0 1px #a8a29e; } .ds-row-selected { background: #e7e5e4; color: #1c1917; } .ds-chevron { width: 16px; font-size: 10px; color: #a8a29e; flex-shrink: 0; } .ds-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row-count { font-size: 0.75rem; color: #a8a29e; font-variant-numeric: tabular-nums; flex-shrink: 0; }"
+    },
+    {
+      "name": "Decorated Row",
+      "kind": "nav",
+      "refersTo": "tree-row",
+      "description": "A tree row in compare mode. The semantic wash names the change type, and a labeled badge repeats it in text — the tint is never the sole carrier.",
+      "html": "<div class=\"ds-tree\"><div class=\"ds-row ds-row-added\"><span class=\"ds-chevron\">▸</span><span class=\"ds-row-name\">Switch SW-9</span><span class=\"ds-badge ds-badge-low\">added</span></div><div class=\"ds-row ds-row-renamed\"><span class=\"ds-chevron\">▸</span><span class=\"ds-row-name\">Controller A2</span><span class=\"ds-badge ds-badge-high\">renamed</span></div><div class=\"ds-row ds-row-moved\"><span class=\"ds-chevron\">▸</span><span class=\"ds-row-name\">Sensor 44</span><span class=\"ds-badge ds-badge-medium\">moved</span></div></div>",
+      "css": ".ds-tree { background: #fafaf9; padding: 4px; } .ds-row { display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px; border-radius: 0.25rem; font: 400 0.875rem/1.5 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; cursor: default; user-select: none; } .ds-chevron { width: 16px; font-size: 10px; color: #a8a29e; flex-shrink: 0; } .ds-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row-added { background: #ecfdf5; color: #064e3b; } .ds-row-renamed { background: #fffbeb; color: #78350f; } .ds-row-moved { background: #f0f9ff; color: #0c4a6e; } .ds-badge { border-radius: 9999px; padding: 2px 6px; font: 600 0.625rem/1.2 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; text-transform: uppercase; letter-spacing: 0.025em; flex-shrink: 0; } .ds-badge-high { background: #fef3c7; color: #b45309; } .ds-badge-medium { background: #e0f2fe; color: #0369a1; } .ds-badge-low { background: #f5f5f4; color: #78716c; }"
+    },
+    {
+      "name": "Ghost Row",
+      "kind": "nav",
+      "refersTo": "tree-row",
+      "description": "A removed or moved-from node, rendered in place as a tombstone. Communicates absence through five non-color signals — opacity, italic, strikethrough, a text label, and lost interactivity — before adding any red.",
+      "html": "<div class=\"ds-tree\"><div class=\"ds-ghost\"><span class=\"ds-ghost-gutter\"></span><span class=\"ds-ghost-name\">Legacy PSU</span><span class=\"ds-ghost-label\">removed</span></div><div class=\"ds-ghost ds-ghost-selected\"><span class=\"ds-ghost-gutter\"></span><span class=\"ds-ghost-name\">Sensor 44</span><span class=\"ds-ghost-label\">was here</span></div></div>",
+      "css": ".ds-tree { background: #fafaf9; padding: 4px; } .ds-ghost { display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px; border-radius: 0.25rem; font: 400 0.875rem/1.5 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; font-style: italic; color: #a8a29e; opacity: 0.4; cursor: default; user-select: none; transition: opacity 150ms; } .ds-ghost:hover { opacity: 0.6; } .ds-ghost-selected { opacity: 0.7; color: #78716c; box-shadow: 0 0 0 1px #fca5a5; } .ds-ghost-gutter { width: 16px; flex-shrink: 0; } .ds-ghost-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: line-through; text-decoration-color: #a8a29e; } .ds-ghost-label { font: 600 0.625rem/1.2 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; text-transform: uppercase; letter-spacing: 0.025em; color: #a8a29e; flex-shrink: 0; margin-right: 8px; }"
+    },
+    {
+      "name": "Fold Marker",
+      "kind": "custom",
+      "refersTo": "fold-marker",
+      "description": "The lens signature. A run of two or more unchanged rows collapsed into one summarized band, with per-change count chips rolled up from the folded subtrees. Escalates to ring-2 when it contains the selection — the one control that must stay findable mid-animation.",
+      "html": "<div class=\"ds-tree\"><button class=\"ds-fold\" type=\"button\" aria-expanded=\"false\" aria-label=\"47 unchanged items folded; press Enter to expand\"><span class=\"ds-fold-glyph\" aria-hidden=\"true\">▸</span><span class=\"ds-fold-label\">47 items folded</span><span class=\"ds-chip ds-chip-added\">3 added</span><span class=\"ds-chip ds-chip-moved\">2 moved</span><span class=\"ds-fold-total\">47</span></button></div>",
+      "css": ".ds-tree { background: #fafaf9; padding: 4px; } .ds-fold { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; text-align: left; border: 1px solid #fde68a; border-radius: 0.25rem; background: rgba(255,251,235,0.8); color: #78350f; font: 500 0.75rem/1.4 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; overflow: hidden; cursor: default; transition: background-color 150ms; } .ds-fold:hover { background: #fef3c7; } .ds-fold:focus-visible { outline: none; box-shadow: 0 0 0 2px #fbbf24; } .ds-fold-glyph { font-size: 0.625rem; color: #b45309; } .ds-fold-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-chip { padding: 2px 6px; border-radius: 0.25rem; font: 600 0.625rem/1.2 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; flex-shrink: 0; } .ds-chip-added { background: #d1fae5; color: #065f46; } .ds-chip-moved { background: #e0f2fe; color: #075985; } .ds-fold-total { padding: 2px 8px; border-radius: 9999px; background: #fbbf24; color: #fff; font: 600 0.625rem/1.2 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; font-variant-numeric: tabular-nums; flex-shrink: 0; }"
+    },
+    {
+      "name": "Classification Badge",
+      "kind": "chip",
+      "description": "Names why a diff entry matters. Distinct from severity badges: 4px radius rather than a pill, and classification rather than urgency. Always labeled in text; the tint is reinforcement.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-cls ds-cls-structural\">Structural</span><span class=\"ds-cls ds-cls-dependency\">Dependency</span><span class=\"ds-cls ds-cls-data\">Data</span><span class=\"ds-cls ds-cls-schema\">Schema</span><span class=\"ds-cls ds-cls-ordering\">Ordering</span></div>",
+      "css": ".ds-chips { display: flex; gap: 6px; flex-wrap: wrap; } .ds-cls { padding: 2px 6px; border-radius: 0.25rem; font: 500 0.75rem/1.4 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; } .ds-cls-structural { background: #ede9fe; color: #6d28d9; } .ds-cls-dependency { background: #fee2e2; color: #b91c1c; } .ds-cls-data { background: #d1fae5; color: #047857; } .ds-cls-schema { background: #e0e7ff; color: #4338ca; } .ds-cls-ordering { background: #e7e5e4; color: #57534e; }"
+    },
+    {
+      "name": "Advisory Banner",
+      "kind": "custom",
+      "description": "Full-bleed tinted band below the titlebar. Pushes content rather than overlaying it — the system has no floating notification layer except transient toasts.",
+      "html": "<div class=\"ds-banner\"><div class=\"ds-banner-body\"><strong class=\"ds-banner-title\">Unsnapshotted changes</strong><span class=\"ds-banner-text\">The current project has changed since your last snapshot.</span></div><button class=\"ds-banner-action\" type=\"button\">Save Snapshot</button></div>",
+      "css": ".ds-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: #fffbeb; border-bottom: 1px solid #fde68a; color: #78350f; font: 400 0.75rem/1.4 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; } .ds-banner-body { display: flex; gap: 8px; align-items: baseline; min-width: 0; } .ds-banner-title { font-weight: 600; flex-shrink: 0; } .ds-banner-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-banner-action { flex-shrink: 0; background: #fff; border: 1px solid #fcd34d; border-radius: 0.25rem; padding: 4px 8px; font: 500 0.6875rem/1.3 -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; color: #92400e; cursor: default; transition: background-color 150ms; } .ds-banner-action:hover { background: #fef3c7; } .ds-banner-action:focus-visible { outline: none; box-shadow: 0 0 0 1px #fbbf24; }"
+    },
+    {
+      "name": "Dialog",
+      "kind": "card",
+      "refersTo": "dialog",
+      "description": "The only surface in the system that carries a shadow. 12px radius, hairline-divided header and footer, 20px horizontal inset.",
+      "html": "<div class=\"ds-dialog\"><div class=\"ds-dialog-head\"><h2 class=\"ds-dialog-title\">Revert Current Project</h2></div><div class=\"ds-dialog-body\"><p class=\"ds-dialog-text\">The snapshot will not be changed, and later snapshots remain in the timeline.</p><div class=\"ds-dialog-inset\">Reverting to <strong>new-equipment-installed</strong></div></div><div class=\"ds-dialog-foot\"><button class=\"ds-btn-secondary\">Cancel</button><button class=\"ds-btn-primary\">Revert</button></div></div>",
+      "css": ".ds-dialog { background: #fff; border-radius: 0.75rem; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); max-width: 28rem; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif; } .ds-dialog-head { padding: 16px 20px; border-bottom: 1px solid #f5f5f4; } .ds-dialog-title { margin: 0; font: 600 0.875rem/1.4 inherit; color: #292524; } .ds-dialog-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; } .ds-dialog-text { margin: 0; font: 400 0.875rem/1.5 inherit; color: #57534e; } .ds-dialog-inset { background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 0.5rem; padding: 8px 12px; font: 400 0.75rem/1.4 inherit; color: #57534e; } .ds-dialog-foot { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid #f5f5f4; justify-content: flex-end; } .ds-btn-primary { background: #292524; color: #fff; font: 500 0.75rem/1.4 inherit; padding: 8px 16px; border: none; border-radius: 0.5rem; cursor: default; } .ds-btn-primary:hover { background: #44403c; } .ds-btn-secondary { background: #fff; color: #57534e; font: 500 0.75rem/1.4 inherit; padding: 6px 12px; border: 1px solid #e7e5e4; border-radius: 0.5rem; cursor: default; } .ds-btn-secondary:hover { background: #fafaf9; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Instrument Panel",
+    "overview": "Manifest reads like a calibrated readout, not a document. The chrome is warm, quiet, and almost entirely colorless — a neutral gauge face — and every bit of color on screen is a signal about state. Density is deliberate and high: 32px rows, 12px labels, tabular numerals for counts. The panel does not decorate itself, because a decorated instrument is a harder instrument to read.\n\nThe consequence is a discipline that runs through the whole system: color is not available for aesthetics. Emerald, red, sky, amber, and violet each carry a fixed meaning about how a node changed. Spending any of them on a button, a header, or a brand moment would degrade the diff view, which is the product's reason to exist. What remains for expression is typography, spacing, hairlines, and motion — and the system leans on those hard.\n\nThe most distinctive behavior is the lens: in compare mode, contiguous runs of unchanged rows collapse into a single summarized fold marker, and the collapse is animated rather than snapped. Regions of the tree literally change magnification based on relevance. That, not any color or shape choice, is what makes the interface feel like an instrument being focused.",
+    "keyCharacteristics": [
+      "Warm stone neutrals on a paper ground (panel-paper), never cool gray",
+      "Color exclusively semantic; zero decorative accents in the chrome",
+      "High information density — 32px rows, 12px as the dominant type size",
+      "Near-flat surfaces; depth from tonal layering and hairlines",
+      "Uppercase micro-labels with wide tracking as the system's texture",
+      "Focus expressed as a 1px ring, never a color shift",
+      "Motion reserved for structural change (folds), not for state feedback"
+    ],
+    "rules": [
+      { "name": "The Reserved Spectrum Rule", "body": "Color in Manifest means something changed. No hue may be spent on branding, emphasis, category, or delight. If a new element needs to stand out, it earns it through weight, size, spacing, or a hairline — never a color the diff view is already using.", "section": "colors" },
+      { "name": "The Warm Neutral Rule", "body": "Every gray is stone. Never gray, zinc, neutral, or slate. A single cool gray next to stone reads as a rendering bug.", "section": "colors" },
+      { "name": "The Amber Overload Rule", "body": "Amber already carries renamed, property-changed, template-changed, High severity, search matches, folds, and advisories. It is at capacity. New advisory states must reuse an existing amber pattern exactly or find a non-color signal — do not add a seventh meaning.", "section": "colors" },
+      { "name": "The Twelve-Pixel Floor Rule", "body": "12px is the smallest readable tier. 10px is permitted only for uppercase micro-labels, where the caps height keeps it legible. Never set sentence-case prose at 10px.", "section": "typography" },
+      { "name": "The Tabular Numeral Rule", "body": "Any number that appears in a column or updates in place — child counts, node totals, chip counts — is tabular-nums. Digits that shift width make a panel twitch.", "section": "typography" },
+      { "name": "The Overlay-Only Shadow Guideline", "body": "Today a shadow means this floats above the app — panels, cards, rows, inputs, and banners are flat and get their separation from tone and hairlines. Treat that as the working default until it is ratified as an invariant. If something seems to need a shadow to be findable, check its tonal placement first.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do reserve all color for change semantics. A new element earns emphasis through weight, size, spacing, or a hairline.",
+      "Do use stone for every neutral. Never gray, zinc, neutral, or slate.",
+      "Do pair every change hue with a non-color signal — a text label, a glyph, an opacity shift, a strikethrough. Colorblind-safe change states are a binding product requirement. The incumbent meets it for every decorated status carrying a BADGE_LABELS entry, and for removals via the ghost row. A decorated row with status 'removed' has no label entry and would be hue-only.",
+      "Do express focus as ring-1 in ink-faint, outside the box, so nothing shifts.",
+      "Do keep tree rows at exactly 32px. Virtualization and the lens animation both depend on it.",
+      "Do set counts and columnar numbers in tabular-nums.",
+      "Do mark cursor-default on buttons. This is a desktop app, not a web page.",
+      "Do honor prefersReducedMotion() on anything that animates.",
+      "Do keep new colors token-addressable rather than hard-coded, so a dark theme stays reachable.",
+      "Do truncate with truncate + min-w-0 when a pane narrows. Panes shrink; they don't reflow."
+    ],
+    "donts": [
+      "Don't introduce a brand accent into the chrome. The teal-and-gold mark is not currently binding — the logo is unsettled, and the UI deliberately shares none of its palette.",
+      "Don't add a seventh meaning to amber.",
+      "Don't reach for a shadow on a panel, card, row, input, or banner without deciding to change the system. Shadows currently mean floating above the app, and that pattern is unbroken across the renderer — but it is a working default, not a ratified invariant.",
+      "Don't use a 2px border. Emphasis steps through border color, never weight.",
+      "Don't set sentence-case prose below 12px. 10px is for uppercase micro-labels only.",
+      "Don't animate hover or focus states. Motion is reserved for structural change — folds opening and closing — so that movement on screen always means the tree's shape changed.",
+      "Don't half-build dark mode. Light-only is an acknowledged gap; when it is addressed it must be addressed as a complete theme pass, not as scattered dark: variants.",
+      "Don't make anything pill-shaped clickable. The pill silhouette is reserved for state readouts."
+    ]
+  }
+}
