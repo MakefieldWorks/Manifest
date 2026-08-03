@@ -115,9 +115,9 @@ async function writeFixtureProject(targetDir: string, fixtureName: string): Prom
   writeFileSync(join(targetDir, 'Manifest.manifestproject'), readFileSync(fixturePath, 'utf8'), 'utf8')
 }
 
-async function launchAppWithArgs(args: string[]): Promise<ElectronApplication> {
+async function launchAppWithArgs(args: string[], userDataDir: string): Promise<ElectronApplication> {
   return electron.launch({
-    args: [MAIN_ENTRY, ...args],
+    args: [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, ...args],
     cwd: ROOT_DIR,
     env: {
       ...process.env,
@@ -362,7 +362,7 @@ test('opens a project passed as a launch argument', async ({ workspaceDir }) => 
   const projectDir = join(workspaceDir, 'Launch Arg Lab')
   await writeFixtureProject(projectDir, 'project-with-nodes.json')
 
-  const launchedApp = await launchAppWithArgs([projectDir])
+  const launchedApp = await launchAppWithArgs([projectDir], join(workspaceDir, 'launch-argument-user-data'))
   try {
     const page = await launchedApp.firstWindow()
     await expect(page.getByTestId('project-view')).toBeVisible()
