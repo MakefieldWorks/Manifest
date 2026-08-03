@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, screen, clipboard } from 'electron'
 import { existsSync } from 'fs'
 import { writeFile } from 'fs/promises'
-import { extname, join, resolve } from 'path'
+import { join } from 'path'
 import { createLogger } from './logger'
 import { ProjectManager } from './project-manager'
 import { GitService } from './git-service'
@@ -13,6 +13,7 @@ import {
   updateApplicationMenuState,
 } from './app-menu'
 import { resolveProjectOpenTarget } from './project-open-target'
+import { collectProjectOpenTargets } from './launch-arguments'
 import { RecentProjectsStore, getRecentDocumentPath } from './recent-projects'
 import {
   AppSettingsStore,
@@ -957,15 +958,8 @@ function focusMainWindow(): void {
 }
 
 function collectOpenTargetsFromArgv(argv: string[]): string[] {
-  return argv.slice(1).filter((arg, index) => {
-    if (!arg || arg.startsWith('-')) return false
-    return !isRuntimeEntrypointArg(arg, index)
+  return collectProjectOpenTargets(argv, {
+    defaultApp: process.defaultApp === true,
+    appPath: app.getAppPath(),
   })
-}
-
-function isRuntimeEntrypointArg(arg: string, index: number): boolean {
-  if (app.isPackaged || index !== 0) return false
-  const extension = extname(arg)
-  if (extension !== '.js' && extension !== '.mjs' && extension !== '.cjs') return false
-  return resolve(arg).startsWith(resolve(app.getAppPath()))
 }
