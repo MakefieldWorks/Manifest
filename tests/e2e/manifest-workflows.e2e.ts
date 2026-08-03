@@ -96,7 +96,7 @@ async function openSettingsWindow(electronApp: ElectronApplication): Promise<Pag
   await electronApp.evaluate(({ Menu }) => {
     const findSettingsItem = (items: Electron.MenuItem[]): Electron.MenuItem | undefined => {
       for (const item of items) {
-        if (item.label === 'Settings...') return item
+        if (item.label.startsWith('Settings')) return item
         const child = item.submenu && findSettingsItem(item.submenu.items)
         if (child) return child
       }
