@@ -77,8 +77,16 @@ export const IPC = {
   // Native menu notifications. These are one-way UI events, not domain calls.
   MENU_COMMAND:        'menu:command',
   MENU_STATE_UPDATE:   'menu:stateUpdate',
+  WINDOW_FOCUS_GET:    'window:focusGet',
+  WINDOW_FOCUS_CHANGED: 'window:focusChanged',
+  RECENT_PROJECTS_LIST: 'recentProjects:list',
   SETTINGS_GET:        'settings:get',
   SETTINGS_UPDATE_WORKSPACE: 'settings:updateWorkspace',
+  SETTINGS_GET_PREFERENCES: 'settings:getPreferences',
+  SETTINGS_UPDATE_PREFERENCES: 'settings:updatePreferences',
+  SETTINGS_RESET_LAYOUT: 'settings:resetLayout',
+  SETTINGS_LAYOUT_RESET: 'settings:layoutReset',
+  SETTINGS_CLOSE_WINDOW: 'settings:closeWindow',
 } as const
 
 export interface LastWorkspaceProject {
@@ -100,6 +108,24 @@ export interface WorkspaceSettingsPatch {
   panelWidth?: number
   lastOpenDirectory?: string | null
   lastCreateDirectory?: string | null
+}
+
+export type LaunchBehavior = 'project-hub' | 'reopen-last-project'
+
+export interface AppPreferences {
+  launchBehavior: LaunchBehavior
+}
+
+export interface AppPreferencesPatch {
+  launchBehavior?: LaunchBehavior
+}
+
+/** A project shown in Manifest's desktop project hub and native File > Open Recent menu. */
+export interface RecentProject {
+  path: string
+  name: string
+  openedAt: string
+  exists: boolean
 }
 
 export type FolderDialogPurpose = 'open-project' | 'create-project'
@@ -205,8 +231,20 @@ export interface ManifestAPI {
     onCommand(handler: (command: MenuCommandId) => void): () => void
     updateState(state: MenuCommandState): void
   }
+  windowState: {
+    isFocused(): Promise<Result<boolean>>
+    onFocusChanged(handler: (isFocused: boolean) => void): () => void
+  }
+  recentProjects: {
+    list(): Promise<Result<RecentProject[]>>
+  }
   settings: {
     get(): Promise<Result<WorkspaceSettings>>
     updateWorkspace(patch: WorkspaceSettingsPatch): Promise<Result<WorkspaceSettings>>
+    getPreferences(): Promise<Result<AppPreferences>>
+    updatePreferences(patch: AppPreferencesPatch): Promise<Result<AppPreferences>>
+    resetLayout(): Promise<Result<WorkspaceSettings>>
+    closeWindow(): Promise<Result<void>>
+    onLayoutReset(handler: (settings: WorkspaceSettings) => void): () => void
   }
 }

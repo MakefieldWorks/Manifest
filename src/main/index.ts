@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, screen, clipboard } from 'electron'
 import { existsSync } from 'fs'
 import { writeFile } from 'fs/promises'
-import { extname, join, resolve } from 'path'
+import { join } from 'path'
 import { createLogger } from './logger'
 import { ProjectManager } from './project-manager'
 import { GitService } from './git-service'
@@ -13,8 +13,16 @@ import {
   updateApplicationMenuState,
 } from './app-menu'
 import { resolveProjectOpenTarget } from './project-open-target'
+import { collectProjectOpenTargets } from './launch-arguments'
+import { isTrustedRendererNavigationUrl } from './renderer-navigation'
 import { RecentProjectsStore, getRecentDocumentPath } from './recent-projects'
-import { AppSettingsStore, resolveRestorableWindowBounds, type WorkspaceSettingsPatch } from './app-settings'
+import {
+  AppSettingsStore,
+  resolveRestorableWindowBounds,
+  type AppPreferencesPatch,
+  type WorkspaceSettings,
+  type WorkspaceSettingsPatch,
+} from './app-settings'
 import { desktopChromeForPlatform } from '../shared/desktop-chrome'
 import { buildDiagnostics } from './diagnostics'
 import {
@@ -44,10 +52,14 @@ const recentProjects = new RecentProjectsStore(join(userData, 'recent-projects.j
 const appSettings = new AppSettingsStore(join(userData, 'app-settings.json'))
 const DOCUMENTATION_URL = 'https://github.com/rgehrsitz/Manifest#readme'
 const REPORT_ISSUE_URL = 'https://github.com/rgehrsitz/Manifest/issues/new'
+const WINDOW_BACKGROUND_COLOR = '#f8f8f7'
+const SETTINGS_WINDOW_WIDTH = 760
+const SETTINGS_WINDOW_HEIGHT = 560
 
 // ─── Window ──────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null
+let settingsWindow: BrowserWindow | null = null
 const pendingOpenTargets: string[] = []
 let ownsSingleInstanceLock = false
 let quitAfterFinalSave = false
@@ -70,6 +82,7 @@ function createWindow(): BrowserWindow {
     show: false,
     title: 'Manifest',
     icon: iconPath,
+    backgroundColor: WINDOW_BACKGROUND_COLOR,
     titleBarStyle: desktopChrome.titleBarStyle,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -87,6 +100,10 @@ function createWindow(): BrowserWindow {
   }
 
   win.once('ready-to-show', () => win.show())
+  configureRendererNavigation(win)
+  win.on('focus', () => notifyWindowFocusChanged(win, true))
+  win.on('blur', () => notifyWindowFocusChanged(win, false))
+  win.webContents.on('did-finish-load', () => notifyWindowFocusChanged(win, win.isFocused()))
   win.on('move', () => scheduleWindowStateSave(win))
   win.on('resize', () => scheduleWindowStateSave(win))
   win.on('maximize', () => saveWindowState(win))
@@ -111,6 +128,93 @@ function createWindow(): BrowserWindow {
 
   mainWindow = win
   return win
+}
+
+function createSettingsWindow(): BrowserWindow {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    if (settingsWindow.isMinimized()) settingsWindow.restore()
+    settingsWindow.show()
+    settingsWindow.focus()
+    return settingsWindow
+  }
+
+  const desktopChrome = desktopChromeForPlatform(process.platform)
+  const owner = mainWindow ?? BrowserWindow.getFocusedWindow()
+  const position = settingsWindowPosition(owner, SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+  const win = new BrowserWindow({
+    ...position,
+    width: SETTINGS_WINDOW_WIDTH,
+    height: SETTINGS_WINDOW_HEIGHT,
+    minWidth: 640,
+    minHeight: 480,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    title: 'Manifest Settings',
+    icon: getBrandIconPath(),
+    backgroundColor: WINDOW_BACKGROUND_COLOR,
+    titleBarStyle: desktopChrome.titleBarStyle,
+    parent: owner ?? undefined,
+    modal: owner !== null,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+
+  win.once('ready-to-show', () => win.show())
+  configureRendererNavigation(win)
+  win.on('focus', () => notifyWindowFocusChanged(win, true))
+  win.on('blur', () => notifyWindowFocusChanged(win, false))
+  win.webContents.on('did-finish-load', () => notifyWindowFocusChanged(win, win.isFocused()))
+  win.on('closed', () => {
+    if (settingsWindow === win) settingsWindow = null
+  })
+
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    const settingsUrl = new URL(process.env['ELECTRON_RENDERER_URL'])
+    settingsUrl.searchParams.set('settings', '1')
+    void win.loadURL(settingsUrl.toString())
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { query: { settings: '1' } })
+  }
+
+  settingsWindow = win
+  return win
+}
+
+function settingsWindowPosition(
+  owner: BrowserWindow | null,
+  width: number,
+  height: number,
+): { x: number; y: number } | undefined {
+  if (!owner || owner.isDestroyed()) return undefined
+  const ownerBounds = owner.getBounds()
+  const workArea = screen.getDisplayMatching(ownerBounds).workArea
+  const gap = 24
+  const rightEdge = workArea.x + workArea.width
+  const bottomEdge = workArea.y + workArea.height
+  const fitsRight = ownerBounds.x + ownerBounds.width + gap + width <= rightEdge
+  const fitsLeft = ownerBounds.x - gap - width >= workArea.x
+  const preferredX = fitsRight
+    ? ownerBounds.x + ownerBounds.width + gap
+    : fitsLeft
+      ? ownerBounds.x - gap - width
+      : ownerBounds.x + Math.round((ownerBounds.width - width) / 2)
+  const preferredY = ownerBounds.y + Math.round((ownerBounds.height - height) / 2)
+
+  return {
+    x: clampWindowCoordinate(preferredX, workArea.x, rightEdge - width),
+    y: clampWindowCoordinate(preferredY, workArea.y, bottomEdge - height),
+  }
+}
+
+function clampWindowCoordinate(value: number, min: number, max: number): number {
+  return Math.round(Math.max(min, Math.min(value, Math.max(min, max))))
 }
 
 // ─── IPC handlers ────────────────────────────────────────────────────────────
@@ -309,6 +413,14 @@ function registerIpcHandlers(): void {
     updateApplicationMenuState(state)
   })
 
+  ipcMain.handle(IPC.WINDOW_FOCUS_GET, (event) =>
+    ok(BrowserWindow.fromWebContents(event.sender)?.isFocused() ?? true)
+  )
+
+  ipcMain.handle(IPC.RECENT_PROJECTS_LIST, () =>
+    ok(recentProjects.all())
+  )
+
   ipcMain.handle(IPC.SETTINGS_GET, () =>
     ok(appSettings.getWorkspaceSettings())
   )
@@ -316,6 +428,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SETTINGS_UPDATE_WORKSPACE, (_, patch: unknown) =>
     ok(appSettings.updateWorkspaceSettings(normalizeWorkspaceSettingsPatch(patch)))
   )
+
+  ipcMain.handle(IPC.SETTINGS_GET_PREFERENCES, () =>
+    ok(appSettings.getPreferences())
+  )
+
+  ipcMain.handle(IPC.SETTINGS_UPDATE_PREFERENCES, (_, patch: unknown) =>
+    ok(appSettings.updatePreferences(normalizePreferencesPatch(patch)))
+  )
+
+  ipcMain.handle(IPC.SETTINGS_RESET_LAYOUT, () => {
+    const settings = appSettings.resetLayout()
+    resetMainWindowLayout(settings)
+    return ok(settings)
+  })
+
+  ipcMain.handle(IPC.SETTINGS_CLOSE_WINDOW, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && win === settingsWindow && !win.isDestroyed()) win.close()
+    return ok(undefined)
+  })
 
   // ── Snapshots ────────────────────────────────────────────────────────────
 
@@ -401,6 +533,7 @@ app.whenReady().then(async () => {
     app.dock.setIcon(iconPath)
   }
   await drainPendingOpenTargets()
+  await reopenLastProjectIfRequested()
   createWindow()
 
   app.on('activate', () => {
@@ -578,6 +711,17 @@ async function drainPendingOpenTargets(): Promise<void> {
   }
 }
 
+async function reopenLastProjectIfRequested(): Promise<void> {
+  if (projectManager.getCurrent() || appSettings.getPreferences().launchBehavior !== 'reopen-last-project') return
+  const lastProject = appSettings.getWorkspaceSettings().lastProject
+  if (!lastProject?.exists) return
+
+  const result = await openProjectFromOsTarget(lastProject.path, { notifyRenderer: false })
+  if (!result.ok) {
+    appLogger.warn('could not reopen last project', { path: lastProject.path, error: result.error.message })
+  }
+}
+
 async function openProjectFromOsTarget(
   targetPath: string,
   options: { notifyRenderer: boolean }
@@ -614,15 +758,7 @@ function clearRecentProjects(): void {
 }
 
 function openPreferences(): void {
-  const owner = mainWindow ?? BrowserWindow.getFocusedWindow()
-  const options = {
-    type: 'info' as const,
-    title: 'Settings',
-    message: 'Manifest Settings',
-    detail: 'Manifest currently saves workspace layout, window placement, recent projects, and dialog locations automatically. App-level preferences will appear here as they are added.',
-    buttons: ['OK'],
-  }
-  showMessageBoxSafely('settings dialog', owner, options)
+  createSettingsWindow()
 }
 
 function openDocumentation(): void {
@@ -670,6 +806,46 @@ function openExternalSafely(url: string, label: string): void {
   shell.openExternal(url).catch((error: unknown) => {
     appLogger.error(`failed to open ${label}`, { error: errorMessage(error), url })
   })
+}
+
+function configureRendererNavigation(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      openExternalSafely(url, 'external renderer link')
+    } else {
+      appLogger.warn('blocked unsafe renderer window request', { url })
+    }
+    return { action: 'deny' }
+  })
+
+  const blockUntrustedNavigation = (event: Electron.Event, url: string) => {
+    if (isTrustedRendererUrl(url)) return
+    event.preventDefault()
+    appLogger.warn('blocked renderer navigation', { url })
+  }
+  win.webContents.on('will-navigate', blockUntrustedNavigation)
+  win.webContents.on('will-redirect', blockUntrustedNavigation)
+}
+
+function notifyWindowFocusChanged(win: BrowserWindow, isFocused: boolean): void {
+  if (win.isDestroyed()) return
+  win.webContents.send(IPC.WINDOW_FOCUS_CHANGED, isFocused)
+}
+
+function isTrustedRendererUrl(url: string): boolean {
+  return isTrustedRendererNavigationUrl(url, {
+    devServerUrl: process.env['ELECTRON_RENDERER_URL'],
+    rendererDirectory: join(__dirname, '../renderer'),
+  })
+}
+
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol
+    return protocol === 'https:' || protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 async function showMessageBoxSafely(
@@ -723,6 +899,24 @@ function normalizeWorkspaceSettingsPatch(input: unknown): WorkspaceSettingsPatch
   return patch
 }
 
+function normalizePreferencesPatch(input: unknown): AppPreferencesPatch {
+  if (!input || typeof input !== 'object') return {}
+  const source = input as Record<string, unknown>
+  return source.launchBehavior === 'project-hub' || source.launchBehavior === 'reopen-last-project'
+    ? { launchBehavior: source.launchBehavior }
+    : {}
+}
+
+function resetMainWindowLayout(settings: WorkspaceSettings): void {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  if (win.isFullScreen()) win.setFullScreen(false)
+  if (win.isMaximized()) win.unmaximize()
+  win.setSize(1280, 800)
+  win.center()
+  win.webContents.send(IPC.SETTINGS_LAYOUT_RESET, settings)
+}
+
 function notifyProjectOpenFromOs(
   result: Result<Project>,
   options: { notifyRenderer: boolean }
@@ -761,15 +955,8 @@ function focusMainWindow(): void {
 }
 
 function collectOpenTargetsFromArgv(argv: string[]): string[] {
-  return argv.slice(1).filter((arg, index) => {
-    if (!arg || arg.startsWith('-')) return false
-    return !isRuntimeEntrypointArg(arg, index)
+  return collectProjectOpenTargets(argv, {
+    defaultApp: process.defaultApp === true,
+    appPath: app.getAppPath(),
   })
-}
-
-function isRuntimeEntrypointArg(arg: string, index: number): boolean {
-  if (app.isPackaged || index !== 0) return false
-  const extension = extname(arg)
-  if (extension !== '.js' && extension !== '.mjs' && extension !== '.cjs') return false
-  return resolve(arg).startsWith(resolve(app.getAppPath()))
 }

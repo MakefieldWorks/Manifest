@@ -29,7 +29,9 @@ export const test = base.extend<ManifestFixtures>({
     }
 
     const electronApp = await electron.launch({
-      args: [MAIN_ENTRY],
+      // Keep each test independent from a running copy of Manifest and from
+      // any persisted user preferences on the development machine.
+      args: [MAIN_ENTRY, `--user-data-dir=${join(workspaceDir, 'electron-user-data')}`],
       cwd: ROOT_DIR,
       env: {
         ...process.env,

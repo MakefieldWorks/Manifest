@@ -27,3 +27,9 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* Native windows mute accent colors while they are not active. Keep this
+   deliberately still: motion is reserved for structural changes in the tree. */
+html[data-window-focused='false'] #app {
+  filter: saturate(0.68) brightness(0.985);
+}

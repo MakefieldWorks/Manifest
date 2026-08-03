@@ -16,3 +16,6 @@ tmp/
 .gstack/
 
 .claude/*
+
+# Impeccable records local tool consent separately from the shared design system.
+.impeccable/config.local.json

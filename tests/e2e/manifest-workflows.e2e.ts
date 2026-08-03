@@ -91,15 +91,33 @@ async function nativeOpenRecentMenuItems(electronApp: ElectronApplication): Prom
   })
 }
 
+async function openSettingsWindow(electronApp: ElectronApplication): Promise<Page> {
+  const settingsWindow = electronApp.waitForEvent('window')
+  await electronApp.evaluate(({ Menu }) => {
+    const findSettingsItem = (items: Electron.MenuItem[]): Electron.MenuItem | undefined => {
+      for (const item of items) {
+        if (item.label.startsWith('Settings')) return item
+        const child = item.submenu && findSettingsItem(item.submenu.items)
+        if (child) return child
+      }
+      return undefined
+    }
+    const settingsItem = findSettingsItem(Menu.getApplicationMenu()?.items ?? [])
+    if (!settingsItem) throw new Error('Settings menu item was not found')
+    settingsItem.click?.()
+  })
+  return settingsWindow
+}
+
 async function writeFixtureProject(targetDir: string, fixtureName: string): Promise<void> {
   mkdirSync(targetDir, { recursive: true })
   const fixturePath = join(process.cwd(), 'tests', 'fixtures', fixtureName)
   writeFileSync(join(targetDir, 'Manifest.manifestproject'), readFileSync(fixturePath, 'utf8'), 'utf8')
 }
 
-async function launchAppWithArgs(args: string[]): Promise<ElectronApplication> {
+async function launchAppWithArgs(args: string[], userDataDir: string): Promise<ElectronApplication> {
   return electron.launch({
-    args: [MAIN_ENTRY, ...args],
+    args: [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, ...args],
     cwd: ROOT_DIR,
     env: {
       ...process.env,
@@ -134,6 +152,69 @@ test('renders platform-aware desktop chrome', async ({ appPage, electronApp, wor
   expect(projectTitlebarClass.includes('[-webkit-app-region:drag]')).toBe(chrome.supportsWindowDragRegion)
 })
 
+test('opens a dedicated settings window and saves launch behavior', async ({ appPage, electronApp }) => {
+  await expect(appPage.getByTestId('create-project-btn')).toBeVisible()
+  const settingsPage = await openSettingsWindow(electronApp)
+  await settingsPage.waitForLoadState('domcontentloaded')
+
+  await expect(settingsPage.getByRole('heading', { name: 'General' })).toBeVisible()
+  await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
+  await expect(settingsPage.getByRole('status')).toContainText('Saved')
+
+  const preferences = await settingsPage.evaluate(() => window.api.settings.getPreferences())
+  expect(preferences).toEqual({ ok: true, data: { launchBehavior: 'reopen-last-project' } })
+  await settingsPage.evaluate(() => window.api.settings.updatePreferences({ launchBehavior: 'project-hub' }))
+  const closed = settingsPage.waitForEvent('close')
+  await settingsPage.getByTestId('settings-done').click()
+  await closed
+})
+
+test('reopens the last project when that launch behavior is selected', async ({ workspaceDir }) => {
+  const userDataDir = join(workspaceDir, 'reopen-last-project-user-data')
+  const firstApp = await launchAppWithArgs([], userDataDir)
+  const projectDir = join(workspaceDir, 'Reopen Lab')
+
+  try {
+    const firstPage = await firstApp.firstWindow()
+    await expect(firstPage.getByTestId('create-project-btn')).toBeVisible()
+    await createProjectThroughUi(firstPage, firstApp, workspaceDir, 'Reopen Lab')
+
+    const settingsPage = await openSettingsWindow(firstApp)
+    await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
+    await expect(settingsPage.getByRole('status')).toContainText('Saved')
+    const settingsClosed = settingsPage.waitForEvent('close')
+    await settingsPage.getByTestId('settings-done').click()
+    await settingsClosed
+  } finally {
+    await firstApp.close()
+  }
+
+  const reopenedApp = await launchAppWithArgs([], userDataDir)
+  try {
+    const reopenedPage = await reopenedApp.firstWindow()
+    await expect(reopenedPage.getByTestId('project-view')).toBeVisible()
+    await expect(treeRow(reopenedPage, 'Reopen Lab')).toBeVisible()
+    const reopenedProject = await currentProject(reopenedPage)
+    expect((reopenedProject as typeof reopenedProject & { path?: string }).path).toBe(projectDir)
+  } finally {
+    await reopenedApp.close()
+  }
+})
+
+test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.blur()
+  })
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('false')
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.focus()
+  })
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
+})
+
 test('adds opened projects to native Open Recent and OS recent documents', async ({ appPage, electronApp, workspaceDir }) => {
   await electronApp.evaluate(({ app }) => {
     const state = globalThis as typeof globalThis & { __manifestRecentDocuments?: string[] }
@@ -158,10 +239,11 @@ test('adds opened projects to native Open Recent and OS recent documents', async
   expect(addedDocuments).toContain(join(projectDir, PROJECT_DOCUMENT_FILE))
 })
 
-test('offers the last project as a one-click welcome action', async ({ appPage, electronApp, workspaceDir }) => {
+test('opens the most recent project from the project hub', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Welcome Back')
 
   await appPage.getByTestId('close-project-btn').click()
+  await expect(appPage.getByTestId('recent-project-list')).toBeVisible()
   await expect(appPage.getByTestId('reopen-last-project-btn')).toContainText('Welcome Back')
 
   await appPage.getByTestId('reopen-last-project-btn').click()
@@ -169,6 +251,18 @@ test('offers the last project as a one-click welcome action', async ({ appPage, 
   await expect(treeRow(appPage, 'Welcome Back')).toBeVisible()
   const reopened = await currentProject(appPage)
   expect((reopened as typeof reopened & { path?: string }).path).toBe(projectDir)
+})
+
+test('lists recent projects in most-recent-first order on the project hub', async ({ appPage, electronApp, workspaceDir }) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub First')
+  await appPage.getByTestId('close-project-btn').click()
+
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub Second')
+  await appPage.getByTestId('close-project-btn').click()
+
+  const projects = appPage.getByTestId('recent-project-list').getByRole('button')
+  await expect(projects.first()).toContainText('Hub Second')
+  await expect(projects.filter({ hasText: 'Hub First' })).toHaveCount(1)
 })
 
 test('opens an existing project and renders its hierarchy', async ({ appPage, electronApp, workspaceDir }) => {
@@ -303,7 +397,7 @@ test('opens a project passed as a launch argument', async ({ workspaceDir }) => 
   const projectDir = join(workspaceDir, 'Launch Arg Lab')
   await writeFixtureProject(projectDir, 'project-with-nodes.json')
 
-  const launchedApp = await launchAppWithArgs([projectDir])
+  const launchedApp = await launchAppWithArgs([projectDir], join(workspaceDir, 'launch-argument-user-data'))
   try {
     const page = await launchedApp.firstWindow()
     await expect(page.getByTestId('project-view')).toBeVisible()
@@ -322,9 +416,10 @@ test('routes a second-instance project argument to the running window', async ({
   await openProjectThroughUi(appPage, electronApp, firstProjectDir)
   await expect(treeRow(appPage, 'Empty Project')).toBeVisible()
 
+  const electronExecutable = await electronApp.evaluate(() => process.execPath)
   await electronApp.evaluate(({ app }, argv) => {
     app.emit('second-instance', {} as never, argv, process.cwd())
-  }, [MAIN_ENTRY, secondProjectDir])
+  }, [electronExecutable, MAIN_ENTRY, secondProjectDir])
 
   await expect(treeRow(appPage, 'Rack A')).toBeVisible()
   const project = await currentProject(appPage)

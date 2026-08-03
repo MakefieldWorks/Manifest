@@ -4,7 +4,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc'
-import type { ManifestAPI } from '../shared/ipc'
+import type { ManifestAPI, WorkspaceSettings } from '../shared/ipc'
 import { isMenuCommandId } from '../shared/menu-commands'
 import { desktopChromeForPlatform } from '../shared/desktop-chrome'
 
@@ -129,11 +129,47 @@ const api: ManifestAPI = {
       ipcRenderer.send(IPC.MENU_STATE_UPDATE, state),
   },
 
+  windowState: {
+    isFocused: () =>
+      ipcRenderer.invoke(IPC.WINDOW_FOCUS_GET),
+    onFocusChanged: (handler) => {
+      const listener = (_event: Electron.IpcRendererEvent, isFocused: unknown) => {
+        if (typeof isFocused === 'boolean') handler(isFocused)
+      }
+      ipcRenderer.on(IPC.WINDOW_FOCUS_CHANGED, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.WINDOW_FOCUS_CHANGED, listener)
+      }
+    },
+  },
+
+  recentProjects: {
+    list: () =>
+      ipcRenderer.invoke(IPC.RECENT_PROJECTS_LIST, {}),
+  },
+
   settings: {
     get: () =>
       ipcRenderer.invoke(IPC.SETTINGS_GET, {}),
     updateWorkspace: (patch) =>
       ipcRenderer.invoke(IPC.SETTINGS_UPDATE_WORKSPACE, patch),
+    getPreferences: () =>
+      ipcRenderer.invoke(IPC.SETTINGS_GET_PREFERENCES, {}),
+    updatePreferences: (patch) =>
+      ipcRenderer.invoke(IPC.SETTINGS_UPDATE_PREFERENCES, patch),
+    resetLayout: () =>
+      ipcRenderer.invoke(IPC.SETTINGS_RESET_LAYOUT, {}),
+    closeWindow: () =>
+      ipcRenderer.invoke(IPC.SETTINGS_CLOSE_WINDOW, {}),
+    onLayoutReset: (handler) => {
+      const listener = (_event: Electron.IpcRendererEvent, settings: unknown) => {
+        handler(settings as WorkspaceSettings)
+      }
+      ipcRenderer.on(IPC.SETTINGS_LAYOUT_RESET, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.SETTINGS_LAYOUT_RESET, listener)
+      }
+    },
   },
 }
 
