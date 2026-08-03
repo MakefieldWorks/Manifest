@@ -86,6 +86,7 @@ export const IPC = {
   SETTINGS_UPDATE_PREFERENCES: 'settings:updatePreferences',
   SETTINGS_RESET_LAYOUT: 'settings:resetLayout',
   SETTINGS_LAYOUT_RESET: 'settings:layoutReset',
+  SETTINGS_CLOSE_WINDOW: 'settings:closeWindow',
 } as const
 
 export interface LastWorkspaceProject {
@@ -243,6 +244,7 @@ export interface ManifestAPI {
     getPreferences(): Promise<Result<AppPreferences>>
     updatePreferences(patch: AppPreferencesPatch): Promise<Result<AppPreferences>>
     resetLayout(): Promise<Result<WorkspaceSettings>>
+    closeWindow(): Promise<Result<void>>
     onLayoutReset(handler: (settings: WorkspaceSettings) => void): () => void
   }
 }

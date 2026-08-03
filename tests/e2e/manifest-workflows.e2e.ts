@@ -163,7 +163,9 @@ test('opens a dedicated settings window and saves launch behavior', async ({ ele
   const preferences = await settingsPage.evaluate(() => window.api.settings.getPreferences())
   expect(preferences).toEqual({ ok: true, data: { launchBehavior: 'reopen-last-project' } })
   await settingsPage.evaluate(() => window.api.settings.updatePreferences({ launchBehavior: 'project-hub' }))
-  await settingsPage.close()
+  const closed = settingsPage.waitForEvent('close')
+  await settingsPage.getByTestId('settings-done').click()
+  await closed
 })
 
 test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {

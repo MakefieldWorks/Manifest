@@ -159,6 +159,8 @@ const api: ManifestAPI = {
       ipcRenderer.invoke(IPC.SETTINGS_UPDATE_PREFERENCES, patch),
     resetLayout: () =>
       ipcRenderer.invoke(IPC.SETTINGS_RESET_LAYOUT, {}),
+    closeWindow: () =>
+      ipcRenderer.invoke(IPC.SETTINGS_CLOSE_WINDOW, {}),
     onLayoutReset: (handler) => {
       const listener = (_event: Electron.IpcRendererEvent, settings: unknown) => {
         handler(settings as WorkspaceSettings)

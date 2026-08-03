@@ -20,6 +20,16 @@
     document.documentElement.dataset.windowFocused = String(isFocused)
   }
 
+  function closeSettings() {
+    void window.api.settings.closeWindow()
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    closeSettings()
+  }
+
   onMount(async () => {
     unsubscribeWindowFocus = window.api.windowState.onFocusChanged(applyWindowFocus)
     const focusState = await window.api.windowState.isFocused()
@@ -32,10 +42,12 @@
       error = `Could not load settings: ${preferences.error.message}`
     }
     loading = false
+    window.addEventListener('keydown', handleKeydown)
   })
 
   onDestroy(() => {
     unsubscribeWindowFocus?.()
+    window.removeEventListener('keydown', handleKeydown)
     delete document.documentElement.dataset.windowFocused
   })
 
@@ -107,6 +119,15 @@
         Workspace
       </button>
     </nav>
+
+    <button
+      type="button"
+      onclick={closeSettings}
+      class="mt-auto rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-200 [-webkit-app-region:no-drag]"
+      data-testid="settings-done"
+    >
+      Done
+    </button>
   </aside>
 
   <div class="min-w-0 flex-1 overflow-y-auto overscroll-contain" data-testid="settings-scroll-region">

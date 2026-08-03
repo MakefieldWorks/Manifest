@@ -441,6 +441,12 @@ function registerIpcHandlers(): void {
     return ok(settings)
   })
 
+  ipcMain.handle(IPC.SETTINGS_CLOSE_WINDOW, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && win === settingsWindow && !win.isDestroyed()) win.close()
+    return ok(undefined)
+  })
+
   // ── Snapshots ────────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.SNAPSHOT_CREATE, (_, { name }: { name: string }) =>
