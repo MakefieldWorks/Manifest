@@ -6,6 +6,7 @@ import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
 
 type PersistedProject = {
   name: string
+  path?: string
   nodes: Array<{
     id: string
     parentId: string | null
@@ -148,7 +149,7 @@ test('creates and opens an example project from the empty project hub', async ({
 
   const project = await currentProject(appPage)
   expect(project.name).toBe('Manifest Sample Lab')
-  expect((project as typeof project & { path?: string }).path).toBe(
+  expect(project.path).toBe(
     join(workspaceDir, 'example-projects', 'Manifest Sample Lab'),
   )
 

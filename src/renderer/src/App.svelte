@@ -610,6 +610,7 @@
 
   async function openExampleProject() {
     error = null
+    const fallbackState = project ? 'open' : 'welcome'
     appState = 'loading'
     const result = await window.api.project.openExample()
     if (result.ok) {
@@ -617,7 +618,7 @@
       applyOpenedProject(result.data)
     } else {
       error = result.error.message
-      appState = 'welcome'
+      appState = fallbackState
     }
   }
 

@@ -238,6 +238,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.PROJECT_OPEN_EXAMPLE, async () => {
     const configuredDirectory = process.env['MANIFEST_EXAMPLE_PROJECTS_DIR']?.trim()
+    // The example is a user-owned project, so keep it visible alongside their documents.
     const examplesDirectory = configuredDirectory || join(app.getPath('documents'), 'Manifest Examples')
     const result = await openExampleProject(projectManager, examplesDirectory)
     trackRecentProject(result)

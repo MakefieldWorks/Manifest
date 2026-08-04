@@ -64,8 +64,9 @@ export async function clickNativeMenuCommand(
 ): Promise<void> {
   await electronApp.evaluate(({ BrowserWindow, Menu }, id) => {
     const item = Menu.getApplicationMenu()?.getMenuItemById(id)
-    const window = BrowserWindow.getAllWindows()[0]
-    if (!item || !window) throw new Error(`Native menu command not found: ${id}`)
+    const window = BrowserWindow.getFocusedWindow()
+    if (!item) throw new Error(`Native menu command not found: ${id}`)
+    if (!window) throw new Error(`No focused native window for menu command: ${id}`)
     item.click(item, window, undefined as never)
   }, command)
 }
