@@ -139,6 +139,26 @@ test('creates a new project from the welcome flow', async ({ appPage, electronAp
   expect(document.nodes[0]?.parentId).toBeNull()
 })
 
+test('creates and opens an example project from the empty project hub', async ({ appPage, workspaceDir }) => {
+  await appPage.getByTestId('open-example-project-btn').click()
+  await expect(appPage.getByTestId('project-view')).toBeVisible()
+  await treeRow(appPage, 'Systems Room').getByRole('button', { name: 'Expand' }).click()
+  await treeRow(appPage, 'Rack A').getByRole('button', { name: 'Expand' }).click()
+  await expect(treeRow(appPage, 'Telemetry Gateway')).toBeVisible()
+
+  const project = await currentProject(appPage)
+  expect(project.name).toBe('Manifest Sample Lab')
+  expect((project as typeof project & { path?: string }).path).toBe(
+    join(workspaceDir, 'example-projects', 'Manifest Sample Lab'),
+  )
+
+  const snapshots = await appPage.evaluate(() => window.api.snapshot.list())
+  expect(snapshots.ok && snapshots.data.map(snapshot => snapshot.name).sort()).toEqual([
+    'baseline-lab',
+    'firmware-update',
+  ])
+})
+
 test('renders platform-aware desktop chrome', async ({ appPage, electronApp, workspaceDir }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Chrome Bench')
 

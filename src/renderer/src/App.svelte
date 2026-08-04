@@ -608,6 +608,19 @@
     }
   }
 
+  async function openExampleProject() {
+    error = null
+    appState = 'loading'
+    const result = await window.api.project.openExample()
+    if (result.ok) {
+      resetOpenProjectUi()
+      applyOpenedProject(result.data)
+    } else {
+      error = result.error.message
+      appState = 'welcome'
+    }
+  }
+
   async function openRecentProject(recentProject: RecentProject) {
     if (!recentProject.exists) return
     error = null
@@ -1489,7 +1502,15 @@
           </div>
         {:else}
           <div class="mt-3 rounded-lg border border-dashed border-stone-300 bg-white px-5 py-8 text-sm text-stone-500" data-testid="empty-recent-projects">
-            No recent projects. Open an existing project or create a new one to get started.
+            <p>No recent projects. Open an existing project or create a new one to get started.</p>
+            <button
+              onclick={openExampleProject}
+              class="mt-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100"
+              data-testid="open-example-project-btn"
+            >
+              Open Example Project
+            </button>
+            <p class="mt-2 text-xs text-stone-400">Explore templates and snapshot history in a reusable sample saved to your Documents folder.</p>
           </div>
         {/if}
       </main>

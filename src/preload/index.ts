@@ -16,6 +16,8 @@ const api: ManifestAPI = {
       ipcRenderer.invoke(IPC.PROJECT_CREATE, { name, parentPath }),
     open: (path) =>
       ipcRenderer.invoke(IPC.PROJECT_OPEN, { path }),
+    openExample: () =>
+      ipcRenderer.invoke(IPC.PROJECT_OPEN_EXAMPLE),
     save: () =>
       ipcRenderer.invoke(IPC.PROJECT_SAVE),
     getCurrent: () =>

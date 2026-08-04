@@ -40,6 +40,7 @@ import type { DesktopChromeInfo } from './desktop-chrome'
 export const IPC = {
   PROJECT_CREATE:      'project:create',
   PROJECT_OPEN:        'project:open',
+  PROJECT_OPEN_EXAMPLE: 'project:openExample',
   PROJECT_SAVE:        'project:save',
   PROJECT_GET_CURRENT: 'project:getCurrent',
   PROJECT_CLOSE:       'project:close',
@@ -141,6 +142,8 @@ export interface ManifestAPI {
   project: {
     create(name: string, parentPath: string): Promise<Result<Project>>
     open(path: string): Promise<Result<Project>>
+    /** Creates (once) and opens Manifest's user-owned sample project. */
+    openExample(): Promise<Result<Project>>
     save(): Promise<Result<void>>
     getCurrent(): Promise<Result<Project | null>>
     close(): Promise<Result<void>>

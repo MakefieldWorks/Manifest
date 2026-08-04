@@ -36,6 +36,7 @@ export const test = base.extend<ManifestFixtures>({
       env: {
         ...process.env,
         NODE_ENV: 'test',
+        MANIFEST_EXAMPLE_PROJECTS_DIR: join(workspaceDir, 'example-projects'),
       },
     })
 
