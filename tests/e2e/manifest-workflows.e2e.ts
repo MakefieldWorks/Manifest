@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { expect, test } from './fixtures'
+import { clickNativeMenuCommand, expect, test } from './fixtures'
 import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
 
 type PersistedProject = {
   name: string
+  path?: string
   nodes: Array<{
     id: string
     parentId: string | null
@@ -139,6 +140,26 @@ test('creates a new project from the welcome flow', async ({ appPage, electronAp
   expect(document.nodes[0]?.parentId).toBeNull()
 })
 
+test('creates and opens an example project from the empty project hub', async ({ appPage, workspaceDir }) => {
+  await appPage.getByTestId('open-example-project-btn').click()
+  await expect(appPage.getByTestId('project-view')).toBeVisible()
+  await treeRow(appPage, 'Systems Room').getByRole('button', { name: 'Expand' }).click()
+  await treeRow(appPage, 'Rack A').getByRole('button', { name: 'Expand' }).click()
+  await expect(treeRow(appPage, 'Telemetry Gateway')).toBeVisible()
+
+  const project = await currentProject(appPage)
+  expect(project.name).toBe('Manifest Sample Lab')
+  expect(project.path).toBe(
+    join(workspaceDir, 'example-projects', 'Manifest Sample Lab'),
+  )
+
+  const snapshots = await appPage.evaluate(() => window.api.snapshot.list())
+  expect(snapshots.ok && snapshots.data.map(snapshot => snapshot.name).sort()).toEqual([
+    'baseline-lab',
+    'firmware-update',
+  ])
+})
+
 test('renders platform-aware desktop chrome', async ({ appPage, electronApp, workspaceDir }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Chrome Bench')
 
@@ -148,6 +169,9 @@ test('renders platform-aware desktop chrome', async ({ appPage, electronApp, wor
   const projectTitlebarClass = titlebarClass ?? ''
 
   await expect(appPage.getByTestId('window-drag-region')).toHaveCount(chrome.supportsWindowDragRegion ? 1 : 0)
+  await expect(appPage.getByTestId('open-import-btn')).toHaveCount(0)
+  await expect(appPage.getByTestId('open-templates-btn')).toHaveCount(0)
+  await expect(appPage.getByTestId('close-project-btn')).toHaveCount(0)
   expect(projectTitlebarClass).toContain(chrome.reservesTrafficLightSpace ? 'pl-20' : 'pl-4')
   expect(projectTitlebarClass.includes('[-webkit-app-region:drag]')).toBe(chrome.supportsWindowDragRegion)
 })
@@ -242,7 +266,7 @@ test('adds opened projects to native Open Recent and OS recent documents', async
 test('opens the most recent project from the project hub', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Welcome Back')
 
-  await appPage.getByTestId('close-project-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:close')
   await expect(appPage.getByTestId('recent-project-list')).toBeVisible()
   await expect(appPage.getByTestId('reopen-last-project-btn')).toContainText('Welcome Back')
 
@@ -255,10 +279,10 @@ test('opens the most recent project from the project hub', async ({ appPage, ele
 
 test('lists recent projects in most-recent-first order on the project hub', async ({ appPage, electronApp, workspaceDir }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub First')
-  await appPage.getByTestId('close-project-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:close')
 
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub Second')
-  await appPage.getByTestId('close-project-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:close')
 
   const projects = appPage.getByTestId('recent-project-list').getByRole('button')
   await expect(projects.first()).toContainText('Hub Second')
@@ -456,7 +480,7 @@ test('autosaves edits to disk and reopens them cleanly', async ({ appPage, elect
     return manifest.nodes.find((node) => node.name === 'Rack A')?.properties.serial ?? null
   }).toBe('SN-42')
 
-  await appPage.getByTestId('close-project-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:close')
   await expect(appPage.getByTestId('create-project-btn')).toBeVisible()
 
   await openProjectThroughUi(appPage, electronApp, projectDir)

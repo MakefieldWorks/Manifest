@@ -3,8 +3,8 @@
 ## P1 — Must do in Phase 2
 
 ### Playwright/Electron E2E Harness
-**Status:** DONE — `playwright.config.ts`, `tests/e2e/fixtures.ts`, and Electron workflow specs are in place.
-**Verification:** `bun run test:e2e` passes with 18 Electron tests.
+**Status:** DONE — `playwright.config.ts`, isolated Electron fixtures, and workflow specs cover the desktop application.
+**Verification:** `bun run test:e2e` covers project hub, example-project, settings, import, snapshots, templates, reports, and tree workflows.
 **Was:** P1, blocked Phase 2 E2E coverage.
 
 Deferred work from CEO review (2026-04-07).
@@ -12,6 +12,7 @@ Deferred work from CEO review (2026-04-07).
 ## P1 — Pilot readiness
 
 ### First-User Dogfood Pass
+**Status:** IN PROGRESS — Manifest now provides a user-owned example project from the empty project hub. Automated package and generated-project checks are part of this branch; a final manual Mac/Windows pass remains.
 **What:** Package the app and run a realistic project through create/open/edit/search/snapshot/compare/restore using a generated or hand-authored pilot-style hierarchy.
 **Why:** The core v1 surface now exists and passes unit, E2E, typecheck, and packaging verification. The highest-value next signal is whether the workflows feel clear and durable for a real first user.
 **Pros:** Finds UX friction before adding features. Produces concrete evidence for the import/schema roadmap.
@@ -21,6 +22,7 @@ Deferred work from CEO review (2026-04-07).
 **Depends on:** Current build and packaging verification passing
 
 ### CSV/JSON Import MVP
+**Status:** DONE — CSV imports support preview, mapping, hierarchy paths, validation, typed coercion, update-on-key, and summary reporting. NetBox dumpdata JSON also has a dedicated import path.
 **What:** Add a small import path for existing structured data into Manifest hierarchies.
 **Why:** Manual entry is likely the biggest adoption barrier for pilot users with existing spreadsheets or exported datasets.
 **Pros:** Converts Manifest from an empty editor into a migration-friendly tool. Creates a practical reason to pilot the product.
@@ -65,17 +67,18 @@ These items were explicitly deferred during the 2026-04-10 eng review of the tre
 
 ## P2 — Post-v1 or late v1
 
-### CSV/JSON Import
-**What:** Let pilot users import existing lab data (spreadsheets, Access exports) into Manifest hierarchies.
-**Why:** Removes the biggest adoption barrier. Nobody wants to re-enter 200 rack items by hand.
-**Pros:** Dramatically lowers onboarding friction. Enables migration from existing tools.
-**Cons:** Column mapping UI needs design. Parent-child inference rules are non-trivial.
-**Context:** Design doc recommends this. Promoted into pilot-readiness work as a constrained MVP after dogfood produces at least one representative data shape.
-**Effort:** M (human) -> S (CC+gstack)
-**Priority:** P1.5
-**Depends on:** Stable Manifest.manifestproject schema, dogfood fixture/data shape
+### Saved Import Mappings
+**What:** Let a user save and reuse a validated CSV mapping for recurring imports from the same source.
+**Why:** The current import MVP handles one-off migration well; repeated operational imports should not require rebuilding column mappings.
+**Pros:** Turns import into a reliable recurring workflow without adding formats speculatively.
+**Cons:** Mapping identity, source drift, and where mappings live need pilot evidence.
+**Context:** Pursue only if dogfood or a pilot dataset establishes a recurring-import pattern.
+**Effort:** S
+**Priority:** P2
+**Depends on:** Representative recurring import data
 
 ### User-Defined Property Schema
+**Status:** DONE — project-level typed templates define expected fields per node type, validate values, and participate in diff/history. Future work is a small, evidence-led starter-template library, not a marketplace.
 **What:** Let users define expected properties per node type (e.g., "Instruments must have serial_number, firmware_version").
 **Why:** Makes the diff engine domain-aware and the briefing view smarter. Properties can be classified by domain importance.
 **Pros:** Stronger product differentiation. Enables domain-specific validation and richer diff output.

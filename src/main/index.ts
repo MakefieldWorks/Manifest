@@ -14,6 +14,7 @@ import {
 } from './app-menu'
 import { resolveProjectOpenTarget } from './project-open-target'
 import { collectProjectOpenTargets } from './launch-arguments'
+import { openExampleProject } from './example-project'
 import { isTrustedRendererNavigationUrl } from './renderer-navigation'
 import { RecentProjectsStore, getRecentDocumentPath } from './recent-projects'
 import {
@@ -231,6 +232,15 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.PROJECT_OPEN, async (_, { path }: { path: string }) => {
     const result = await projectManager.openProject(path)
+    trackRecentProject(result)
+    return result
+  })
+
+  ipcMain.handle(IPC.PROJECT_OPEN_EXAMPLE, async () => {
+    const configuredDirectory = process.env['MANIFEST_EXAMPLE_PROJECTS_DIR']?.trim()
+    // The example is a user-owned project, so keep it visible alongside their documents.
+    const examplesDirectory = configuredDirectory || join(app.getPath('documents'), 'Manifest Examples')
+    const result = await openExampleProject(projectManager, examplesDirectory)
     trackRecentProject(result)
     return result
   })

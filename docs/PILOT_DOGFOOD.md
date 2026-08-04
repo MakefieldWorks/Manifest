@@ -1,8 +1,9 @@
 # Pilot Dogfood Checklist
 
-Use this checklist before starting the CSV/JSON import MVP. The goal is to test
-Manifest as a first user would: with enough data, history, and change volume to
-reveal workflow friction.
+Use this checklist to test Manifest as a first user would: with enough data,
+history, and change volume to reveal workflow friction. CSV and NetBox JSON
+imports are already shipped; use the notes to decide whether a *refinement*,
+such as saved import mappings, is warranted.
 
 ## Setup
 
@@ -30,6 +31,10 @@ manual Finder/Explorer pass.
 
 ## Core Workflow
 
+- Launch with no recent projects and choose **Open Example Project**. Confirm
+  that it creates a reusable `Manifest Sample Lab` in the user's Documents
+  folder, then inspect its templates and compare `baseline-lab` with
+  `firmware-update`.
 - Open `./tmp/pilot-dogfood` from the packaged app.
 - Expand and collapse several deep branches.
 - Search for a known property value such as `active`, `maintenance`, or `serial`.
@@ -71,9 +76,10 @@ build.
 - Any search query a user would naturally try that does not work.
 - The shape of data a first import should support.
 
-## Import MVP Decision Gate
+## Import Refinement Decision Gate
 
-Start CSV/JSON import only after the dogfood notes answer:
+Consider saved mappings or other import refinements only after the dogfood
+notes answer:
 
 - What columns/properties are common enough to seed the MVP?
 - Is parent-child structure best represented by path columns, parent IDs, indentation, or repeated category columns?

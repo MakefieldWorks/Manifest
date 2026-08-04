@@ -608,6 +608,20 @@
     }
   }
 
+  async function openExampleProject() {
+    error = null
+    const fallbackState = project ? 'open' : 'welcome'
+    appState = 'loading'
+    const result = await window.api.project.openExample()
+    if (result.ok) {
+      resetOpenProjectUi()
+      applyOpenedProject(result.data)
+    } else {
+      error = result.error.message
+      appState = fallbackState
+    }
+  }
+
   async function openRecentProject(recentProject: RecentProject) {
     if (!recentProject.exists) return
     error = null
@@ -1489,7 +1503,15 @@
           </div>
         {:else}
           <div class="mt-3 rounded-lg border border-dashed border-stone-300 bg-white px-5 py-8 text-sm text-stone-500" data-testid="empty-recent-projects">
-            No recent projects. Open an existing project or create a new one to get started.
+            <p>No recent projects. Open an existing project or create a new one to get started.</p>
+            <button
+              onclick={openExampleProject}
+              class="mt-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100"
+              data-testid="open-example-project-btn"
+            >
+              Open Example Project
+            </button>
+            <p class="mt-2 text-xs text-stone-400">Explore templates and snapshot history in a reusable sample saved to your Documents folder.</p>
           </div>
         {/if}
       </main>
@@ -1611,22 +1633,6 @@
       </div>
       <div class="flex items-center gap-2 [-webkit-app-region:no-drag]">
         <button
-          onclick={() => openImportDialog()}
-          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600
-                 transition-colors hover:bg-stone-50 cursor-default"
-          data-testid="open-import-btn"
-        >
-          Import…
-        </button>
-        <button
-          onclick={openTemplateManager}
-          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600
-                 transition-colors hover:bg-stone-50 cursor-default"
-          data-testid="open-templates-btn"
-        >
-          Templates
-        </button>
-        <button
           onclick={toggleSnapshots}
           aria-pressed={snapshotPanelOpen ? 'true' : 'false'}
           class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600
@@ -1635,14 +1641,16 @@
         >
           Snapshots
         </button>
-        <button
-          onclick={closeProject}
-          class="text-xs text-stone-400 hover:text-stone-600 transition-colors cursor-default
-                 px-2 py-1"
-          data-testid="close-project-btn"
-        >
-          Close
-        </button>
+        {#if compareMode && mergedTree}
+          <button
+            onclick={exitCompareMode}
+            class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700
+                   transition-colors hover:bg-sky-100 cursor-default"
+            data-testid="exit-compare-btn"
+          >
+            Exit Compare
+          </button>
+        {/if}
       </div>
     </div>
 

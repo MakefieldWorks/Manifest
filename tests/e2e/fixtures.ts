@@ -2,6 +2,7 @@ import { _electron as electron, expect, test as base, type ElectronApplication, 
 import { existsSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import type { MenuCommandId } from '../../src/shared/menu-commands'
 
 const ROOT_DIR = process.cwd()
 const MAIN_ENTRY = join(ROOT_DIR, 'out', 'main', 'index.js')
@@ -36,6 +37,7 @@ export const test = base.extend<ManifestFixtures>({
       env: {
         ...process.env,
         NODE_ENV: 'test',
+        MANIFEST_EXAMPLE_PROJECTS_DIR: join(workspaceDir, 'example-projects'),
       },
     })
 
@@ -55,3 +57,16 @@ export const test = base.extend<ManifestFixtures>({
 })
 
 export { expect }
+
+export async function clickNativeMenuCommand(
+  electronApp: ElectronApplication,
+  command: MenuCommandId,
+): Promise<void> {
+  await electronApp.evaluate(({ BrowserWindow, Menu }, id) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById(id)
+    const window = BrowserWindow.getFocusedWindow()
+    if (!item) throw new Error(`Native menu command not found: ${id}`)
+    if (!window) throw new Error(`No focused native window for menu command: ${id}`)
+    item.click(item, window, undefined as never)
+  }, command)
+}

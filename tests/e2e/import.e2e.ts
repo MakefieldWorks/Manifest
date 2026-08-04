@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { expect, test } from './fixtures'
+import { clickNativeMenuCommand, expect, test } from './fixtures'
 
 import type { ElectronApplication, Page } from '@playwright/test'
 
@@ -34,8 +34,8 @@ async function createProjectThroughUi(appPage: Page, electronApp: ElectronApplic
   await expect(appPage.getByTestId('project-view')).toBeVisible()
 }
 
-async function createTemplateWithCount(appPage: Page): Promise<void> {
-  await appPage.getByTestId('open-templates-btn').click()
+async function createTemplateWithCount(appPage: Page, electronApp: ElectronApplication): Promise<void> {
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await appPage.getByTestId('template-label').fill('Software Item')
   await appPage.getByTestId('template-add-field').click()
   await appPage.getByTestId('field-key').nth(0).fill('count')
@@ -51,7 +51,7 @@ test('imports CSV: maps a spaced header, coerces typed cells, skips invalid + du
   workspaceDir,
 }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Import Lab')
-  await createTemplateWithCount(appPage)
+  await createTemplateWithCount(appPage, electronApp)
 
   // A spreadsheet-style CSV: a "Serial Number" header, an invalid count, and a
   // duplicate name.
@@ -64,7 +64,7 @@ test('imports CSV: maps a spaced header, coerces typed cells, skips invalid + du
   const csvPath = join(workspaceDir, 'boards.csv')
   writeFileSync(csvPath, csv, 'utf8')
 
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await expect(appPage.getByTestId('import-dialog')).toBeVisible()
 
   await setDialogPath(electronApp, csvPath)
@@ -104,7 +104,7 @@ test('imported nodes show as added in a snapshot compare', async ({
 
   const csvPath = join(workspaceDir, 'rows.csv')
   writeFileSync(csvPath, 'name\nWidget A\nWidget B\n', 'utf8')
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogPath(electronApp, csvPath)
   await appPage.getByTestId('import-choose-file').click()
   await appPage.getByTestId('import-validate').click()
@@ -206,7 +206,7 @@ test('canceled file picker leaves the dialog on the choose step', async ({
   workspaceDir,
 }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Cancel Lab')
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogCanceled(electronApp)
   await appPage.getByTestId('import-choose-file').click()
   // Still on the choose step (no mapping controls), no crash.
@@ -222,7 +222,7 @@ test('a malformed CSV shows an error and stays on the choose step', async ({
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Bad CSV Lab')
   const csvPath = join(workspaceDir, 'bad.csv')
   writeFileSync(csvPath, 'name\n"oops', 'utf8')   // unterminated quote
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogPath(electronApp, csvPath)
   await appPage.getByTestId('import-choose-file').click()
   // Inspect failed → error shown, no mapping controls, Choose still available.
@@ -239,7 +239,7 @@ test('duplicate keys block Validate, and editing after a plan re-disables Import
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Gating Lab')
   const csvPath = join(workspaceDir, 'g.csv')
   writeFileSync(csvPath, 'name,a,b\nN1,1,2\n', 'utf8')
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogPath(electronApp, csvPath)
   await appPage.getByTestId('import-choose-file').click()
 
@@ -268,7 +268,7 @@ test('update-on-key: re-import updates a matched node instead of duplicating it'
   // First import creates Widget with note=first (flat under root, freeform).
   const v1 = join(workspaceDir, 'v1.csv')
   writeFileSync(v1, 'name,note\nWidget,first\n', 'utf8')
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogPath(electronApp, v1)
   await appPage.getByTestId('import-choose-file').click()
   await appPage.getByTestId('import-validate').click()
@@ -280,7 +280,7 @@ test('update-on-key: re-import updates a matched node instead of duplicating it'
   // Re-import with a changed note, update mode keyed on name.
   const v2 = join(workspaceDir, 'v2.csv')
   writeFileSync(v2, 'name,note\nWidget,second\n', 'utf8')
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogPath(electronApp, v2)
   await appPage.getByTestId('import-choose-file').click()
   await appPage.getByTestId('import-update-existing').check()
@@ -301,7 +301,7 @@ test('update-on-key: a byte-identical re-import is a no-op (import disabled)', a
   const csv = join(workspaceDir, 'n.csv')
   writeFileSync(csv, 'name,note\nWidget,same\n', 'utf8')
 
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogPath(electronApp, csv)
   await appPage.getByTestId('import-choose-file').click()
   await appPage.getByTestId('import-validate').click()
@@ -309,7 +309,7 @@ test('update-on-key: a byte-identical re-import is a no-op (import disabled)', a
   await expect(appPage.getByTestId('import-dialog')).toHaveCount(0)
 
   // Re-import the identical file with update mode → nothing to do.
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await setDialogPath(electronApp, csv)
   await appPage.getByTestId('import-choose-file').click()
   await appPage.getByTestId('import-update-existing').check()
@@ -342,7 +342,7 @@ test('imports a NetBox dumpdata JSON into a typed Site → Location → Rack →
   const jsonPath = join(workspaceDir, 'netbox.json')
   writeFileSync(jsonPath, JSON.stringify(dump), 'utf8')
 
-  await appPage.getByTestId('open-import-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:import')
   await expect(appPage.getByTestId('import-dialog')).toBeVisible()
 
   // Choosing a .json routes to the NetBox flow (no column mapping).
