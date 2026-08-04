@@ -110,9 +110,11 @@ test('creates, compares, and reverts snapshots from the renderer surface', async
   await expect(appPage.getByTestId('snapshot-diff-row').filter({ hasText: 'Added' })).toBeVisible()
   await expect(appPage.getByTestId('snapshot-diff-row').filter({ hasText: 'Rack A' })).toBeVisible()
   await expect(treeRow(appPage, 'Rack A')).toBeVisible()
+  await expect(appPage.getByTestId('exit-compare-btn')).toBeVisible()
 
-  await appPage.getByRole('button', { name: 'Exit compare' }).click()
+  await appPage.getByTestId('exit-compare-btn').click()
   await expect(appPage.getByTestId('snapshot-diff-list')).toHaveCount(0)
+  await expect(appPage.getByTestId('exit-compare-btn')).toHaveCount(0)
   await expect(appPage.getByTestId('snapshot-timeline')).toBeVisible()
   await expect(appPage.getByTestId('compare-from-select')).toBeVisible()
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Current project matches with-rack')
@@ -497,6 +499,6 @@ test('compares the current project against a snapshot without a throwaway snapsh
   await expect(addedRow).toBeVisible()
   await expect(addedRow).toContainText('Rack B')
 
-  await appPage.getByRole('button', { name: 'Exit compare' }).click()
+  await appPage.getByTestId('exit-compare-btn').click()
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Unsnapshotted changes')
 })

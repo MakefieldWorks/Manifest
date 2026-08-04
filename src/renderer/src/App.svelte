@@ -1632,22 +1632,6 @@
       </div>
       <div class="flex items-center gap-2 [-webkit-app-region:no-drag]">
         <button
-          onclick={() => openImportDialog()}
-          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600
-                 transition-colors hover:bg-stone-50 cursor-default"
-          data-testid="open-import-btn"
-        >
-          Import…
-        </button>
-        <button
-          onclick={openTemplateManager}
-          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600
-                 transition-colors hover:bg-stone-50 cursor-default"
-          data-testid="open-templates-btn"
-        >
-          Templates
-        </button>
-        <button
           onclick={toggleSnapshots}
           aria-pressed={snapshotPanelOpen ? 'true' : 'false'}
           class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600
@@ -1656,14 +1640,16 @@
         >
           Snapshots
         </button>
-        <button
-          onclick={closeProject}
-          class="text-xs text-stone-400 hover:text-stone-600 transition-colors cursor-default
-                 px-2 py-1"
-          data-testid="close-project-btn"
-        >
-          Close
-        </button>
+        {#if compareMode && mergedTree}
+          <button
+            onclick={exitCompareMode}
+            class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700
+                   transition-colors hover:bg-sky-100 cursor-default"
+            data-testid="exit-compare-btn"
+          >
+            Exit Compare
+          </button>
+        {/if}
       </div>
     </div>
 

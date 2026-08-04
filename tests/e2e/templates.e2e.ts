@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { expect, test } from './fixtures'
+import { clickNativeMenuCommand, expect, test } from './fixtures'
 
 import type { ElectronApplication, Page } from '@playwright/test'
 
@@ -60,7 +60,7 @@ test('create template, type a node, promote, reject invalidating edit, delete un
   await createProjectThroughUi(appPage, electronApp, workspaceDir, projectName)
 
   // ── Create a "Software Item" template with version + enum + number fields ──
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await expect(appPage.getByTestId('template-manager')).toBeVisible()
 
   await appPage.getByTestId('template-label').fill('Software Item')
@@ -126,7 +126,7 @@ test('create template, type a node, promote, reject invalidating edit, delete un
   await expect(appPage.getByTestId('tpl-input-vendor')).toBeVisible()
 
   // ── Template edit that would invalidate a bound value is rejected ─────────
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await appPage.getByTestId('template-list-item').filter({ hasText: 'Software Item' }).click()
   // version is the first field row; change its type to number — "v2.3.1" is now invalid.
   await appPage.getByTestId('field-type').nth(0).selectOption('number')
@@ -155,7 +155,7 @@ test('auto-derives the template id from the label and validates field keys inlin
 }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Template UX Lab')
 
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await expect(appPage.getByTestId('template-manager')).toBeVisible()
 
   // Typing the label auto-fills a valid slug id (no manual id entry needed).
@@ -184,7 +184,7 @@ test('a schema-only change between snapshots is surfaced, not hidden as "No chan
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Schema Diff Lab')
 
   // Template with one field, and a node bound to it.
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await appPage.getByTestId('template-label').fill('Software Item')
   await appPage.getByTestId('template-add-field').click()
   await appPage.getByTestId('field-key').nth(0).fill('version')
@@ -203,7 +203,7 @@ test('a schema-only change between snapshots is surfaced, not hidden as "No chan
   await openSnapshotsPanel(appPage)
   await createSnapshot(appPage, 'before')
 
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await appPage.getByTestId('template-list-item').filter({ hasText: 'Software Item' }).click()
   await appPage.getByTestId('template-add-field').click()
   // The new (empty) field row is appended last.
@@ -307,7 +307,7 @@ test('preserves a field default through a template-manager save (no data loss)',
   await expect(appPage.getByTestId('project-view')).toBeVisible()
 
   // Save the template through the manager (round-trips through buildTemplate).
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await appPage.getByTestId('template-list-item').filter({ hasText: 'Asset' }).click()
   await appPage.getByTestId('template-save').click()
   await expect(appPage.getByTestId('template-form-error')).toHaveCount(0)
@@ -371,7 +371,7 @@ test('a typed number field normalizes its visible draft after a no-op commit', a
 }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Normalize Lab')
 
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await appPage.getByTestId('template-label').fill('Counter')
   await appPage.getByTestId('template-add-field').click()
   await appPage.getByTestId('field-key').nth(0).fill('units')
@@ -402,7 +402,7 @@ test('compare mode resolves typed fields per side (ghost uses the from-snapshot 
   await createProjectThroughUi(appPage, electronApp, workspaceDir, projectName)
 
   // Template "Gauge" with a single typed field, voltage.
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await expect(appPage.getByTestId('template-manager')).toBeVisible()
   await appPage.getByTestId('template-label').fill('Gauge')
   await appPage.getByTestId('template-add-field').click()
@@ -430,7 +430,7 @@ test('compare mode resolves typed fields per side (ghost uses the from-snapshot 
   await openContextMenuAction(appPage, 'Old Gauge', 'Delete…')
   await expect(treeRow(appPage, 'Old Gauge')).toHaveCount(0)
 
-  await appPage.getByTestId('open-templates-btn').click()
+  await clickNativeMenuCommand(electronApp, 'project:templates')
   await appPage.getByTestId('template-list-item').filter({ hasText: 'Gauge' }).click()
   await appPage.getByTestId('template-add-field').click()
   await appPage.getByTestId('field-key').nth(1).fill('amperage')
