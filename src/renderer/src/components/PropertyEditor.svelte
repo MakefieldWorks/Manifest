@@ -142,6 +142,8 @@
 
   async function deleteProperty(key: string) {
     if (readOnly) return
+    const confirmed = window.confirm(`Delete property "${key}"? This cannot be undone.`)
+    if (!confirmed) return
     const props = { ...(node.properties ?? {}) }
     delete props[key]
     await onUpdate(node.id, { properties: props })
@@ -267,19 +269,19 @@
             class="text-[10px] text-stone-300 hover:text-sky-500 opacity-0 group-hover:opacity-100
                    transition-opacity shrink-0"
             onclick={() => startPromote(key)}
-            title="Promote to a typed template field"
+            title="Set this property's type"
             data-testid="promote-prop"
-          >→ typed</button>
+          >Set type…</button>
         {/if}
 
         <button
           class="text-stone-300 hover:text-red-400 opacity-0 group-hover:opacity-100
-                 transition-opacity text-xs shrink-0 disabled:opacity-0"
+                 transition-opacity text-[10px] shrink-0 disabled:opacity-0"
           onclick={() => deleteProperty(key)}
           disabled={readOnly}
           aria-label="Delete property {key}"
           data-testid="delete-prop"
-        >✕</button>
+        >Delete</button>
       </div>
 
       {#if editingKey === key && editingError}
@@ -308,6 +310,9 @@
             onclick={() => { promotingKey = null }}
           >Cancel</button>
         </div>
+        <p class="ml-[8.5rem] mb-1 text-[10px] text-stone-400" data-testid="promote-guidance">
+          Choose a type before entering a value. Existing values must match the selected type.
+        </p>
       {/if}
     {/each}
   </div>
@@ -319,6 +324,11 @@
 {#if !readOnly}
   <div class="border-t border-stone-100 pt-3">
     <p class="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-2">Add Property</p>
+    {#if template}
+      <p class="mb-2 text-[10px] text-stone-400">
+        For typed data, add the key first, choose Set type…, then enter the value.
+      </p>
+    {/if}
     <div class="flex gap-2">
       <div class="flex flex-col gap-1 flex-1">
         <input

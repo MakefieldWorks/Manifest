@@ -148,6 +148,53 @@ test('create template, type a node, promote, reject invalidating edit, delete un
   await expect(appPage.getByTestId('prop-value').filter({ hasText: 'approved' })).toBeVisible()
 })
 
+test('guides typed date creation and confirms a freeform property deletion', async ({
+  appPage,
+  electronApp,
+  workspaceDir,
+}) => {
+  const projectName = 'Safe Property Lab'
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, projectName)
+
+  await clickNativeMenuCommand(electronApp, 'project:templates')
+  await appPage.getByTestId('template-label').fill('Asset')
+  await appPage.getByTestId('template-save').click()
+  await appPage.getByTestId('template-manager-close').click()
+
+  await openContextMenuAction(appPage, projectName, 'Add Child')
+  await appPage.getByTestId('add-child-template').selectOption('asset')
+  await appPage.getByTestId('add-child-input').fill('Calibration Unit')
+  await appPage.getByTestId('add-child-commit').click()
+  await treeRow(appPage, 'Calibration Unit').click()
+
+  // A value is optional while the property is freeform, so type can be chosen
+  // before entering a date.
+  await appPage.getByTestId('new-prop-key').fill('commissioned')
+  await appPage.getByTestId('add-prop-btn').click()
+  await appPage.getByTestId('promote-prop').click()
+  await appPage.getByTestId('promote-type').selectOption('date')
+  await appPage.getByTestId('promote-confirm').click()
+  const commissioned = appPage.getByTestId('tpl-input-commissioned')
+  await expect(commissioned).toHaveAttribute('type', 'date')
+  await commissioned.fill('2026-08-10')
+  await commissioned.press('Tab')
+  await expect(commissioned).toHaveValue('2026-08-10')
+
+  await appPage.getByTestId('new-prop-key').fill('notes')
+  await appPage.getByTestId('new-prop-value').fill('Keep this value')
+  await appPage.getByTestId('add-prop-btn').click()
+  const notesValue = appPage.getByTestId('prop-value').filter({ hasText: 'Keep this value' })
+  await expect(notesValue).toBeVisible()
+
+  appPage.once('dialog', (dialog) => dialog.dismiss())
+  await appPage.getByRole('button', { name: 'Delete property notes' }).click()
+  await expect(notesValue).toBeVisible()
+
+  appPage.once('dialog', (dialog) => dialog.accept())
+  await appPage.getByRole('button', { name: 'Delete property notes' }).click()
+  await expect(notesValue).toHaveCount(0)
+})
+
 test('auto-derives the template id from the label and validates field keys inline', async ({
   appPage,
   electronApp,

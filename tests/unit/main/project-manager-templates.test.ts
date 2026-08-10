@@ -207,6 +207,22 @@ describe('nodeUpdate — coercion and validation', () => {
 })
 
 describe('templateUpdate — bound-node guard', () => {
+  it('allows an empty freeform property to become an unset typed field', async () => {
+    await openWith(makeManifest())
+    manager.templateCreate('asset', { label: 'Asset', fields: {} })
+    const created = manager.nodeCreate('root-id', 'Calibration Unit', 'asset')
+    const id = (created as any).data.nodes.find((node: any) => node.name === 'Calibration Unit').id
+    manager.nodeUpdate(id, { properties: { commissioned: '' } })
+
+    const result = manager.templateUpdate('asset', {
+      fields: { commissioned: { type: 'date' } },
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.data.templates?.asset?.fields.commissioned?.type).toBe('date')
+  })
+
   it('rejects a field-type change that would invalidate an existing bound value', async () => {
     await openWith(makeManifest())
     manager.templateCreate('software-item', softwareItem)
