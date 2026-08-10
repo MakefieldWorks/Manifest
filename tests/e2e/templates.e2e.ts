@@ -186,8 +186,13 @@ test('guides typed date creation and confirms a freeform property deletion', asy
   const notesValue = appPage.getByTestId('prop-value').filter({ hasText: 'Keep this value' })
   await expect(notesValue).toBeVisible()
 
-  appPage.once('dialog', (dialog) => dialog.dismiss())
+  let deleteConfirmation = ''
+  appPage.once('dialog', (dialog) => {
+    deleteConfirmation = dialog.message()
+    void dialog.dismiss()
+  })
   await appPage.getByRole('button', { name: 'Delete property notes' }).click()
+  expect(deleteConfirmation).toContain('Delete property "notes"?')
   await expect(notesValue).toBeVisible()
 
   appPage.once('dialog', (dialog) => dialog.accept())
