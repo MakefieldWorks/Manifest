@@ -583,7 +583,10 @@ export class ProjectManager {
       if ((node.templateId ?? null) !== id) continue
       for (const [key, field] of Object.entries(proposed.fields)) {
         const value = node.properties[key]
-        if (value === undefined || value === null) continue
+        // An empty string is the freeform-editor representation of an unset
+        // value. Treat it the same as a missing typed field so a user can set
+        // its type before entering a value (notably for dates and numbers).
+        if (value === undefined || value === null || value === '') continue
         const check = validateTypedPropertyValue(value, field)
         if (!check.valid) {
           return err(
