@@ -160,6 +160,21 @@ test('creates and opens an example project from the empty project hub', async ({
   ])
 })
 
+test('keeps a focused selected tree row above an adjacent hovered row', async ({ appPage }) => {
+  await appPage.getByTestId('open-example-project-btn').click()
+  await expect(appPage.getByTestId('project-view')).toBeVisible()
+  await treeRow(appPage, 'Systems Room').getByRole('button', { name: 'Expand' }).click()
+  await treeRow(appPage, 'Rack A').getByRole('button', { name: 'Expand' }).click()
+
+  const powerSupply = treeRow(appPage, 'Power Supply')
+  const telemetryGateway = treeRow(appPage, 'Telemetry Gateway')
+  await powerSupply.click()
+  await telemetryGateway.hover()
+
+  await expect.poll(() => powerSupply.evaluate(node => document.activeElement === node)).toBe(true)
+  await expect(powerSupply.locator('xpath=..')).toHaveCSS('z-index', '10')
+})
+
 test('renders platform-aware desktop chrome', async ({ appPage, electronApp, workspaceDir }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Chrome Bench')
 
@@ -176,18 +191,36 @@ test('renders platform-aware desktop chrome', async ({ appPage, electronApp, wor
   expect(projectTitlebarClass.includes('[-webkit-app-region:drag]')).toBe(chrome.supportsWindowDragRegion)
 })
 
-test('opens a dedicated settings window and saves launch behavior', async ({ appPage, electronApp }) => {
+test('opens a dedicated settings window, syncs dark mode, and saves preferences', async ({ appPage, electronApp }) => {
   await expect(appPage.getByTestId('create-project-btn')).toBeVisible()
   const settingsPage = await openSettingsWindow(electronApp)
   await settingsPage.waitForLoadState('domcontentloaded')
 
   await expect(settingsPage.getByRole('heading', { name: 'General' })).toBeVisible()
+  await settingsPage.getByTestId('theme-preference').selectOption('dark')
+  await expect(settingsPage.getByRole('status')).toContainText('Appearance updated')
+  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-dark')
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-dark')
+
   await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
   await expect(settingsPage.getByRole('status')).toContainText('Saved')
 
   const preferences = await settingsPage.evaluate(() => window.api.settings.getPreferences())
-  expect(preferences).toEqual({ ok: true, data: { launchBehavior: 'reopen-last-project' } })
-  await settingsPage.evaluate(() => window.api.settings.updatePreferences({ launchBehavior: 'project-hub' }))
+  expect(preferences).toEqual({
+    ok: true,
+    data: {
+      launchBehavior: 'reopen-last-project',
+      appearance: {
+        mode: 'dark',
+        lightThemeId: 'manifest-light',
+        darkThemeId: 'manifest-dark',
+      },
+    },
+  })
+  await settingsPage.evaluate(() => window.api.settings.updatePreferences({
+    launchBehavior: 'project-hub',
+    appearance: { mode: 'system' },
+  }))
   const closed = settingsPage.waitForEvent('close')
   await settingsPage.getByTestId('settings-done').click()
   await closed
@@ -206,6 +239,8 @@ test('reopens the last project when that launch behavior is selected', async ({ 
     const settingsPage = await openSettingsWindow(firstApp)
     await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
     await expect(settingsPage.getByRole('status')).toContainText('Saved')
+    await settingsPage.getByTestId('theme-preference').selectOption('dark')
+    await expect(settingsPage.getByRole('status')).toContainText('Appearance updated')
     const settingsClosed = settingsPage.waitForEvent('close')
     await settingsPage.getByTestId('settings-done').click()
     await settingsClosed
@@ -216,6 +251,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
   const reopenedApp = await launchAppWithArgs([], userDataDir)
   try {
     const reopenedPage = await reopenedApp.firstWindow()
+    await expect.poll(() => reopenedPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-dark')
     await expect(reopenedPage.getByTestId('project-view')).toBeVisible()
     await expect(treeRow(reopenedPage, 'Reopen Lab')).toBeVisible()
     const reopenedProject = await currentProject(reopenedPage)

@@ -35,6 +35,7 @@ The core idea is simple. Your project lives as a readable `Manifest.manifestproj
 - Create named snapshots and restore prior states.
 - Compare snapshots, or compare the current project against a snapshot, with a merged diff/tree view; export the diff as a Markdown or CSV report.
 - Search node names and property values.
+- Follow the system appearance or choose a fixed light or dark theme from Settings.
 
 ## Stack
 

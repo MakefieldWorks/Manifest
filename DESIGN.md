@@ -177,14 +177,16 @@ collapse into a single summarized fold marker, and the collapse is animated rath
 Regions of the tree literally change magnification based on relevance. That, not any color or
 shape choice, is what makes the interface feel like an instrument being focused.
 
-The interface is currently light-only. That is an acknowledged gap, not a stated intent — see
-Do's and Don'ts.
+The interface ships with paired **Manifest Light** and **Manifest Dark** themes. It follows the
+operating-system appearance by default, while people can choose either fixed appearance in
+Settings. The theme changes the instrument's chrome, never the meanings assigned to change color.
 
 **Key Characteristics:**
 - Warm stone neutrals on a paper ground (`panel-paper`), never cool gray
 - Color exclusively semantic; zero decorative accents in the chrome
 - High information density — 32px rows, 12px as the dominant type size
 - Near-flat surfaces; depth from tonal layering and hairlines
+- Light and dark chrome are paired token sets; semantic change states retain their meaning in both
 - Uppercase micro-labels with wide tracking as the system's texture
 - Focus expressed as a 1px ring, never a color shift
 - Motion reserved for structural change (folds), not for state feedback
@@ -249,6 +251,28 @@ codebase; it is a defect, not a precedent.)
 **The Amber Overload Rule.** Amber already carries renamed, property-changed, template-changed,
 High severity, search matches, folds, and advisories. It is at capacity. New advisory states must
 reuse an existing amber pattern exactly or find a non-color signal — do not add a seventh meaning.
+
+### Themes
+
+Themes are a complete map of semantic tokens, not a collection of component-level overrides.
+`src/shared/theme.ts` owns the built-in definitions and the renderer applies their values as CSS
+custom properties. Tailwind utilities are bridged to those roles in `tailwind.config.js`, which
+keeps existing component markup independent of a specific palette.
+
+The current preference stores an appearance mode plus separate light and dark theme IDs:
+
+```ts
+interface AppearancePreference {
+  mode: 'system' | 'light' | 'dark'
+  lightThemeId: string
+  darkThemeId: string
+}
+```
+
+That pairing is intentional. When user-defined theme packs arrive, a person can choose any valid
+light theme and any valid dark theme independently; System mode simply resolves the matching one.
+A theme pack must provide every named token, declare `light` or `dark`, use validated hex colors,
+and meet contrast checks. It may supply token values only — never arbitrary CSS.
 
 ## Typography
 
@@ -466,7 +490,8 @@ interactivity — and adds a red ring only as a sixth.
 - **Do** set counts and columnar numbers in `tabular-nums`.
 - **Do** mark `cursor-default` on buttons. This is a desktop app, not a web page.
 - **Do** honor `prefersReducedMotion()` on anything that animates.
-- **Do** keep new colors token-addressable rather than hard-coded, so a dark theme stays reachable.
+- **Do** keep new colors token-addressable rather than hard-coded. A token must have a valid value
+  in every theme before the component that uses it ships.
 - **Do** truncate with `truncate` + `min-w-0` when a pane narrows. Panes shrink; they don't reflow.
 
 ### Don't:
@@ -483,6 +508,6 @@ interactivity — and adds a red ring only as a sixth.
 - **Don't** set sentence-case prose below 12px. 10px is for uppercase micro-labels only.
 - **Don't** animate hover or focus states. Motion is reserved for structural change — folds
   opening and closing — so that movement on screen always means the tree's shape changed.
-- **Don't** half-build dark mode. Light-only is an acknowledged gap; when it is addressed it must
-  be addressed as a complete theme pass, not as scattered `dark:` variants.
+- **Don't** add scattered `dark:` variants or a component-specific override. Every theme change
+  belongs in the shared token definitions so the system remains extensible.
 - **Don't** make anything pill-shaped clickable. The pill silhouette is reserved for state readouts.
