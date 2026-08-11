@@ -2,6 +2,166 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Bootstrap values for the token-driven theme system. They mirror the built-in
+ * definitions in shared/theme.ts so the window paints correctly before the
+ * async settings preference reaches the renderer. The renderer then applies
+ * the selected definition as inline custom properties.
+ */
+:root {
+  color-scheme: light;
+  --theme-surface-canvas: 248 248 247;
+  --theme-surface-raised: 255 255 255;
+  --theme-surface-recessed: 250 250 249;
+  --theme-surface-hairline: 245 245 244;
+  --theme-surface-selected: 231 229 228;
+  --theme-surface-disabled: 214 211 209;
+  --theme-control-primary: 41 37 36;
+  --theme-control-primary-hover: 68 64 60;
+  --theme-text-disabled: 214 211 209;
+  --theme-text-faint: 168 162 158;
+  --theme-text-muted: 120 113 108;
+  --theme-text-secondary: 87 83 78;
+  --theme-text-body: 68 64 60;
+  --theme-text-strong: 41 37 36;
+  --theme-text-primary: 28 25 23;
+  --theme-text-on-primary: 255 255 255;
+  --theme-border-subtle: 245 245 244;
+  --theme-border-default: 231 229 228;
+  --theme-border-strong: 214 211 209;
+  --theme-border-emphasis: 120 113 108;
+  --theme-border-inverse: 68 64 60;
+  --theme-focus-soft: 231 229 228;
+  --theme-focus: 214 211 209;
+  --theme-focus-strong: 168 162 158;
+  --theme-attention-wash: 255 251 235;
+  --theme-attention-tint: 254 243 199;
+  --theme-attention-edge: 253 230 138;
+  --theme-attention-edge-strong: 252 211 77;
+  --theme-attention-signal: 251 191 36;
+  --theme-attention-fill: 245 158 11;
+  --theme-attention-ink-soft: 217 119 6;
+  --theme-attention-ink: 180 83 9;
+  --theme-attention-ink-strong: 146 64 14;
+  --theme-attention-ink-deep: 120 53 15;
+  --theme-success-wash: 236 253 245;
+  --theme-success-tint: 209 250 229;
+  --theme-success-edge: 167 243 208;
+  --theme-success-ink-soft: 5 150 105;
+  --theme-success-ink: 4 120 87;
+  --theme-success-ink-strong: 6 95 70;
+  --theme-success-ink-deep: 6 78 59;
+  --theme-danger-wash: 254 242 242;
+  --theme-danger-tint: 254 226 226;
+  --theme-danger-edge: 254 202 202;
+  --theme-danger-edge-strong: 252 165 165;
+  --theme-danger-fill: 185 28 28;
+  --theme-danger-ink-soft: 248 113 113;
+  --theme-danger-ink: 220 38 38;
+  --theme-danger-ink-strong: 185 28 28;
+  --theme-danger-ink-deep: 153 27 27;
+  --theme-info-wash: 240 249 255;
+  --theme-info-tint: 224 242 254;
+  --theme-info-edge: 186 230 253;
+  --theme-info-edge-strong: 125 211 252;
+  --theme-info-signal: 56 189 248;
+  --theme-info-fill: 14 165 233;
+  --theme-info-ink-soft: 14 165 233;
+  --theme-info-ink: 3 105 161;
+  --theme-info-ink-strong: 7 89 133;
+  --theme-info-ink-deep: 12 74 110;
+  --theme-violet-wash: 245 243 255;
+  --theme-violet-tint: 237 233 254;
+  --theme-violet-edge: 221 214 254;
+  --theme-violet-ink: 109 40 217;
+  --theme-violet-ink-deep: 91 33 182;
+  --theme-purple-wash: 250 245 255;
+  --theme-purple-ink-deep: 88 28 135;
+  --theme-indigo-tint: 224 231 255;
+  --theme-indigo-ink: 67 56 202;
+  --theme-slate-tint: 241 245 249;
+  --theme-slate-edge: 226 232 240;
+  --theme-slate-ink: 71 85 105;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --theme-surface-canvas: 28 25 23;
+    --theme-surface-raised: 41 37 36;
+    --theme-surface-recessed: 33 30 28;
+    --theme-surface-hairline: 51 46 43;
+    --theme-surface-selected: 64 57 54;
+    --theme-surface-disabled: 87 83 78;
+    --theme-control-primary: 68 64 60;
+    --theme-control-primary-hover: 87 83 78;
+    --theme-text-disabled: 120 113 108;
+    --theme-text-faint: 168 162 158;
+    --theme-text-muted: 193 188 184;
+    --theme-text-secondary: 214 211 209;
+    --theme-text-body: 231 229 228;
+    --theme-text-strong: 245 245 244;
+    --theme-text-primary: 250 250 249;
+    --theme-text-on-primary: 255 255 255;
+    --theme-border-subtle: 51 46 43;
+    --theme-border-default: 68 64 60;
+    --theme-border-strong: 87 83 78;
+    --theme-border-emphasis: 168 162 158;
+    --theme-border-inverse: 214 211 209;
+    --theme-focus-soft: 87 83 78;
+    --theme-focus: 120 113 108;
+    --theme-focus-strong: 168 162 158;
+    --theme-attention-wash: 66 32 6;
+    --theme-attention-tint: 113 63 18;
+    --theme-attention-edge: 146 64 14;
+    --theme-attention-edge-strong: 180 83 9;
+    --theme-attention-signal: 217 119 6;
+    --theme-attention-fill: 146 64 14;
+    --theme-attention-ink-soft: 251 191 36;
+    --theme-attention-ink: 252 211 77;
+    --theme-attention-ink-strong: 253 230 138;
+    --theme-attention-ink-deep: 254 243 199;
+    --theme-success-wash: 5 46 22;
+    --theme-success-tint: 6 78 59;
+    --theme-success-edge: 6 95 70;
+    --theme-success-ink-soft: 52 211 153;
+    --theme-success-ink: 110 231 183;
+    --theme-success-ink-strong: 167 243 208;
+    --theme-success-ink-deep: 209 250 229;
+    --theme-danger-wash: 69 10 10;
+    --theme-danger-tint: 127 29 29;
+    --theme-danger-edge: 153 27 27;
+    --theme-danger-edge-strong: 185 28 28;
+    --theme-danger-fill: 153 27 27;
+    --theme-danger-ink-soft: 248 113 113;
+    --theme-danger-ink: 252 165 165;
+    --theme-danger-ink-strong: 254 202 202;
+    --theme-danger-ink-deep: 254 226 226;
+    --theme-info-wash: 8 47 73;
+    --theme-info-tint: 12 74 110;
+    --theme-info-edge: 7 89 133;
+    --theme-info-edge-strong: 3 105 161;
+    --theme-info-signal: 2 132 199;
+    --theme-info-fill: 7 89 133;
+    --theme-info-ink-soft: 56 189 248;
+    --theme-info-ink: 125 211 252;
+    --theme-info-ink-strong: 186 230 253;
+    --theme-info-ink-deep: 224 242 254;
+    --theme-violet-wash: 46 16 101;
+    --theme-violet-tint: 76 29 149;
+    --theme-violet-edge: 91 33 182;
+    --theme-violet-ink: 196 181 253;
+    --theme-violet-ink-deep: 237 233 254;
+    --theme-purple-wash: 59 7 100;
+    --theme-purple-ink-deep: 243 232 255;
+    --theme-indigo-tint: 49 46 129;
+    --theme-indigo-ink: 165 180 252;
+    --theme-slate-tint: 51 65 85;
+    --theme-slate-edge: 71 85 105;
+    --theme-slate-ink: 203 213 225;
+  }
+}
+
 /* Base resets for desktop app feel */
 * {
   -webkit-user-select: none;
@@ -18,7 +178,8 @@ input, textarea, [contenteditable], .selectable {
 body {
   margin: 0;
   overflow: hidden;
-  background: #f8f8f7;
+  background: rgb(var(--theme-surface-canvas));
+  color: rgb(var(--theme-text-body));
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
 }
 

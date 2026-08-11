@@ -3,12 +3,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import type { LaunchBehavior } from '../../shared/ipc'
+  import type { AppearanceMode } from '../../shared/theme'
 
   type SettingsSection = 'general' | 'workspace'
 
   const desktopChrome = window.api.platform
   let activeSection: SettingsSection = $state('general')
   let launchBehavior: LaunchBehavior = $state('project-hub')
+  let appearanceMode: AppearanceMode = $state('system')
   let loading = $state(true)
   let saving = $state(false)
   let resetting = $state(false)
@@ -38,6 +40,7 @@
     const preferences = await window.api.settings.getPreferences()
     if (preferences.ok) {
       launchBehavior = preferences.data.launchBehavior
+      appearanceMode = preferences.data.appearance.mode
     } else {
       error = `Could not load settings: ${preferences.error.message}`
     }
@@ -63,6 +66,21 @@
       return
     }
     status = 'Saved. This will take effect the next time Manifest starts.'
+  }
+
+  async function saveAppearanceMode(next: AppearanceMode) {
+    appearanceMode = next
+    saving = true
+    error = null
+    status = null
+    const result = await window.api.settings.updatePreferences({ appearance: { mode: next } })
+    saving = false
+    if (!result.ok) {
+      error = `Could not save appearance: ${result.error.message}`
+      return
+    }
+    appearanceMode = result.data.appearance.mode
+    status = 'Appearance updated.'
   }
 
   async function resetLayout() {
@@ -138,7 +156,31 @@
           <p class="mt-1.5 text-sm text-stone-500">Application behavior that applies to every Manifest project.</p>
         </header>
 
-        <section class="pt-7" aria-labelledby="startup-heading">
+        <section class="pt-7" aria-labelledby="appearance-heading">
+          <h2 id="appearance-heading" class="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Appearance</h2>
+          <div class="mt-3 divide-y divide-stone-100 overflow-hidden rounded-lg border border-stone-200 bg-white">
+            <div class="flex items-center justify-between gap-8 px-5 py-4">
+              <div class="min-w-0">
+                <label for="theme-preference" class="text-sm font-medium text-stone-800">Theme</label>
+                <p class="mt-1 text-xs leading-5 text-stone-500">Use your system appearance or keep Manifest in a fixed light or dark mode.</p>
+              </div>
+              <select
+                id="theme-preference"
+                value={appearanceMode}
+                onchange={(event) => void saveAppearanceMode((event.currentTarget as HTMLSelectElement).value as AppearanceMode)}
+                disabled={loading || saving}
+                class="w-48 shrink-0 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-800 shadow-sm outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200 disabled:opacity-50"
+                data-testid="theme-preference"
+              >
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="pt-8" aria-labelledby="startup-heading">
           <h2 id="startup-heading" class="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Startup</h2>
           <div class="mt-3 divide-y divide-stone-100 overflow-hidden rounded-lg border border-stone-200 bg-white">
             <div class="flex items-center justify-between gap-8 px-5 py-4">

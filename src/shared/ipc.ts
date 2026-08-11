@@ -35,6 +35,7 @@ import type { MergedTree } from './merged-tree'
 import type { ReportFormat } from './report'
 import type { MenuCommandId, MenuCommandState } from './menu-commands'
 import type { DesktopChromeInfo } from './desktop-chrome'
+import type { AppearancePreference } from './theme'
 
 // Channel name constants — use these everywhere, never raw strings.
 export const IPC = {
@@ -85,6 +86,7 @@ export const IPC = {
   SETTINGS_UPDATE_WORKSPACE: 'settings:updateWorkspace',
   SETTINGS_GET_PREFERENCES: 'settings:getPreferences',
   SETTINGS_UPDATE_PREFERENCES: 'settings:updatePreferences',
+  SETTINGS_PREFERENCES_CHANGED: 'settings:preferencesChanged',
   SETTINGS_RESET_LAYOUT: 'settings:resetLayout',
   SETTINGS_LAYOUT_RESET: 'settings:layoutReset',
   SETTINGS_CLOSE_WINDOW: 'settings:closeWindow',
@@ -115,10 +117,12 @@ export type LaunchBehavior = 'project-hub' | 'reopen-last-project'
 
 export interface AppPreferences {
   launchBehavior: LaunchBehavior
+  appearance: AppearancePreference
 }
 
 export interface AppPreferencesPatch {
   launchBehavior?: LaunchBehavior
+  appearance?: Partial<AppearancePreference>
 }
 
 /** A project shown in Manifest's desktop project hub and native File > Open Recent menu. */
@@ -246,6 +250,7 @@ export interface ManifestAPI {
     updateWorkspace(patch: WorkspaceSettingsPatch): Promise<Result<WorkspaceSettings>>
     getPreferences(): Promise<Result<AppPreferences>>
     updatePreferences(patch: AppPreferencesPatch): Promise<Result<AppPreferences>>
+    onPreferencesChanged(handler: (preferences: AppPreferences) => void): () => void
     resetLayout(): Promise<Result<WorkspaceSettings>>
     closeWindow(): Promise<Result<void>>
     onLayoutReset(handler: (settings: WorkspaceSettings) => void): () => void

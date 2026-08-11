@@ -1,6 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { basename, dirname } from 'path'
 import type { Project } from '../shared/types'
+import {
+  DEFAULT_APPEARANCE_PREFERENCE,
+  normalizeAppearancePreference,
+  type AppearancePreference,
+} from '../shared/theme'
 import { findProjectDocument } from './project-launcher'
 
 export interface WindowBounds {
@@ -62,10 +67,12 @@ export type LaunchBehavior = 'project-hub' | 'reopen-last-project'
 
 export interface AppPreferences {
   launchBehavior: LaunchBehavior
+  appearance: AppearancePreference
 }
 
 export interface AppPreferencesPatch {
   launchBehavior?: LaunchBehavior
+  appearance?: Partial<AppearancePreference>
 }
 
 const DEFAULT_TREE_WIDTH = 288
@@ -76,6 +83,7 @@ function defaultSettings(): StoredSettings {
     window: null,
     preferences: {
       launchBehavior: 'project-hub',
+      appearance: { ...DEFAULT_APPEARANCE_PREFERENCE },
     },
     workspace: {
       treeWidth: DEFAULT_TREE_WIDTH,
@@ -104,14 +112,29 @@ export class AppSettingsStore {
   }
 
   getPreferences(): AppPreferences {
-    return { ...this.settings.preferences }
+    return {
+      ...this.settings.preferences,
+      appearance: { ...this.settings.preferences.appearance },
+    }
   }
 
   updatePreferences(patch: AppPreferencesPatch): AppPreferences {
+    let changed = false
     if (patch.launchBehavior && this.settings.preferences.launchBehavior !== patch.launchBehavior) {
       this.settings.preferences.launchBehavior = patch.launchBehavior
-      this.save()
+      changed = true
     }
+    if (patch.appearance) {
+      const nextAppearance = normalizeAppearancePreference({
+        ...this.settings.preferences.appearance,
+        ...patch.appearance,
+      })
+      if (!sameAppearance(nextAppearance, this.settings.preferences.appearance)) {
+        this.settings.preferences.appearance = nextAppearance
+        changed = true
+      }
+    }
+    if (changed) this.save()
     return this.getPreferences()
   }
 
@@ -233,8 +256,11 @@ function normalizeSettings(raw: unknown): StoredSettings {
   if (windowState) settings.window = windowState
 
   const preferences = source.preferences
-  if (preferences && typeof preferences === 'object' && preferences.launchBehavior === 'reopen-last-project') {
-    settings.preferences.launchBehavior = 'reopen-last-project'
+  if (preferences && typeof preferences === 'object') {
+    if (preferences.launchBehavior === 'reopen-last-project') {
+      settings.preferences.launchBehavior = 'reopen-last-project'
+    }
+    settings.preferences.appearance = normalizeAppearancePreference(preferences.appearance)
   }
 
   const workspace = source.workspace
@@ -310,4 +336,10 @@ function isStoredLastProject(value: unknown): value is StoredLastProject {
     && candidate.path.trim() !== ''
     && typeof candidate.name === 'string'
     && candidate.name.trim() !== ''
+}
+
+function sameAppearance(a: AppearancePreference, b: AppearancePreference): boolean {
+  return a.mode === b.mode
+    && a.lightThemeId === b.lightThemeId
+    && a.darkThemeId === b.darkThemeId
 }

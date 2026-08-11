@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, screen, clipboard } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, screen, clipboard, nativeTheme } from 'electron'
 import { existsSync } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join } from 'path'
@@ -25,6 +25,7 @@ import {
   type WorkspaceSettingsPatch,
 } from './app-settings'
 import { desktopChromeForPlatform } from '../shared/desktop-chrome'
+import { isAppearanceMode, resolveTheme } from '../shared/theme'
 import { buildDiagnostics } from './diagnostics'
 import {
   ensureFinalProjectSave,
@@ -53,7 +54,6 @@ const recentProjects = new RecentProjectsStore(join(userData, 'recent-projects.j
 const appSettings = new AppSettingsStore(join(userData, 'app-settings.json'))
 const DOCUMENTATION_URL = 'https://github.com/rgehrsitz/Manifest#readme'
 const REPORT_ISSUE_URL = 'https://github.com/rgehrsitz/Manifest/issues/new'
-const WINDOW_BACKGROUND_COLOR = '#f8f8f7'
 const SETTINGS_WINDOW_WIDTH = 760
 const SETTINGS_WINDOW_HEIGHT = 560
 
@@ -83,7 +83,7 @@ function createWindow(): BrowserWindow {
     show: false,
     title: 'Manifest',
     icon: iconPath,
-    backgroundColor: WINDOW_BACKGROUND_COLOR,
+    backgroundColor: windowBackgroundColor(),
     titleBarStyle: desktopChrome.titleBarStyle,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -155,7 +155,7 @@ function createSettingsWindow(): BrowserWindow {
     show: false,
     title: 'Manifest Settings',
     icon: getBrandIconPath(),
-    backgroundColor: WINDOW_BACKGROUND_COLOR,
+    backgroundColor: windowBackgroundColor(),
     titleBarStyle: desktopChrome.titleBarStyle,
     parent: owner ?? undefined,
     modal: owner !== null,
@@ -217,6 +217,38 @@ function settingsWindowPosition(
 function clampWindowCoordinate(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(value, Math.max(min, max))))
 }
+
+function synchronizeNativeAppearance(): void {
+  nativeTheme.themeSource = appSettings.getPreferences().appearance.mode
+  updateWindowThemeBackgrounds()
+}
+
+function windowBackgroundColor(): string {
+  const preference = appSettings.getPreferences().appearance
+  const theme = resolveTheme(preference, nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+  return theme.tokens['surface-canvas']
+}
+
+function updateWindowThemeBackgrounds(): void {
+  const backgroundColor = windowBackgroundColor()
+  for (const win of [mainWindow, settingsWindow]) {
+    if (win && !win.isDestroyed()) win.setBackgroundColor(backgroundColor)
+  }
+}
+
+function broadcastPreferencesChanged(): void {
+  const preferences = appSettings.getPreferences()
+  for (const win of [mainWindow, settingsWindow]) {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send(IPC.SETTINGS_PREFERENCES_CHANGED, preferences)
+    }
+  }
+}
+
+nativeTheme.on('updated', () => {
+  updateWindowThemeBackgrounds()
+  broadcastPreferencesChanged()
+})
 
 // ─── IPC handlers ────────────────────────────────────────────────────────────
 
@@ -443,9 +475,12 @@ function registerIpcHandlers(): void {
     ok(appSettings.getPreferences())
   )
 
-  ipcMain.handle(IPC.SETTINGS_UPDATE_PREFERENCES, (_, patch: unknown) =>
-    ok(appSettings.updatePreferences(normalizePreferencesPatch(patch)))
-  )
+  ipcMain.handle(IPC.SETTINGS_UPDATE_PREFERENCES, (_, patch: unknown) => {
+    const preferences = appSettings.updatePreferences(normalizePreferencesPatch(patch))
+    synchronizeNativeAppearance()
+    broadcastPreferencesChanged()
+    return ok(preferences)
+  })
 
   ipcMain.handle(IPC.SETTINGS_RESET_LAYOUT, () => {
     const settings = appSettings.resetLayout()
@@ -494,6 +529,7 @@ function registerIpcHandlers(): void {
 
 app.whenReady().then(async () => {
   appLogger.info('app starting', { version: app.getVersion(), platform: process.platform })
+  synchronizeNativeAppearance()
 
   const gitStatus = await gitService.checkVersion()
   appLogger.info('git version check', { version: gitStatus.version, meetsMinimum: gitStatus.meetsMinimum })
@@ -912,9 +948,19 @@ function normalizeWorkspaceSettingsPatch(input: unknown): WorkspaceSettingsPatch
 function normalizePreferencesPatch(input: unknown): AppPreferencesPatch {
   if (!input || typeof input !== 'object') return {}
   const source = input as Record<string, unknown>
-  return source.launchBehavior === 'project-hub' || source.launchBehavior === 'reopen-last-project'
-    ? { launchBehavior: source.launchBehavior }
-    : {}
+  const patch: AppPreferencesPatch = {}
+  if (source.launchBehavior === 'project-hub' || source.launchBehavior === 'reopen-last-project') {
+    patch.launchBehavior = source.launchBehavior
+  }
+  if (source.appearance && typeof source.appearance === 'object') {
+    const appearance = source.appearance as Record<string, unknown>
+    const appearancePatch: NonNullable<AppPreferencesPatch['appearance']> = {}
+    if (isAppearanceMode(appearance.mode)) appearancePatch.mode = appearance.mode
+    if (typeof appearance.lightThemeId === 'string') appearancePatch.lightThemeId = appearance.lightThemeId
+    if (typeof appearance.darkThemeId === 'string') appearancePatch.darkThemeId = appearance.darkThemeId
+    if (Object.keys(appearancePatch).length > 0) patch.appearance = appearancePatch
+  }
+  return patch
 }
 
 function resetMainWindowLayout(settings: WorkspaceSettings): void {

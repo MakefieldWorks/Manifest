@@ -106,14 +106,52 @@ describe('AppSettingsStore', () => {
     expect(cleared.lastCreateDirectory).toBeNull()
   })
 
-  it('persists launch behavior and defaults to the project hub', () => {
+  it('persists appearance and launch behavior while preserving defaults', () => {
     const store = new AppSettingsStore(storePath())
 
-    expect(store.getPreferences()).toEqual({ launchBehavior: 'project-hub' })
-    store.updatePreferences({ launchBehavior: 'reopen-last-project' })
+    expect(store.getPreferences()).toEqual({
+      launchBehavior: 'project-hub',
+      appearance: {
+        mode: 'system',
+        lightThemeId: 'manifest-light',
+        darkThemeId: 'manifest-dark',
+      },
+    })
+    store.updatePreferences({
+      launchBehavior: 'reopen-last-project',
+      appearance: { mode: 'dark' },
+    })
 
     expect(new AppSettingsStore(storePath()).getPreferences()).toEqual({
       launchBehavior: 'reopen-last-project',
+      appearance: {
+        mode: 'dark',
+        lightThemeId: 'manifest-light',
+        darkThemeId: 'manifest-dark',
+      },
+    })
+  })
+
+  it('normalizes invalid stored theme IDs without discarding another preference', () => {
+    mkdirSync(join(tmpDir, 'settings'), { recursive: true })
+    writeFileSync(storePath(), JSON.stringify({
+      preferences: {
+        launchBehavior: 'reopen-last-project',
+        appearance: {
+          mode: 'dark',
+          lightThemeId: 'untrusted-light',
+          darkThemeId: 'untrusted-dark',
+        },
+      },
+    }), 'utf8')
+
+    expect(new AppSettingsStore(storePath()).getPreferences()).toEqual({
+      launchBehavior: 'reopen-last-project',
+      appearance: {
+        mode: 'dark',
+        lightThemeId: 'manifest-light',
+        darkThemeId: 'manifest-dark',
+      },
     })
   })
 
