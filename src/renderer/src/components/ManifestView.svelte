@@ -643,6 +643,8 @@
         {@const display = displayedItems[virt.index]}
         {#if display}
           {@const item = display.payload}
+          <!-- Transformed virtual wrappers form sibling stacking contexts. Keep the
+               active row above its neighbor so a hover fill cannot cover its outer focus ring. -->
           <div
             class="absolute top-0 left-0 right-0 px-1
                    {item.kind === 'row' && (selectedId === item.row.node.id || focusedIndex === virt.index) ? 'z-10' : ''}"

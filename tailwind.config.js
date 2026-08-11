@@ -6,6 +6,10 @@
 // semantic states without scattering `dark:` variants through components.
 const token = (name) => `rgb(var(--theme-${name}) / <alpha-value>)`
 
+// Legacy Tailwind shades remain a compatibility surface. They intentionally
+// resolve to the smaller set of semantic contrast roles instead of creating
+// theme tokens for every raw palette step.
+
 export default {
   content: ['./src/renderer/**/*.{html,js,ts,svelte}'],
   theme: {

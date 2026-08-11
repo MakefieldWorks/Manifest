@@ -172,7 +172,13 @@ test('keeps a focused selected tree row above an adjacent hovered row', async ({
   await telemetryGateway.hover()
 
   await expect.poll(() => powerSupply.evaluate(node => document.activeElement === node)).toBe(true)
-  await expect(powerSupply.locator('xpath=..')).toHaveCSS('z-index', '10')
+  await expect.poll(async () => {
+    const [selectedZIndex, hoveredZIndex] = await Promise.all([
+      powerSupply.locator('xpath=..').evaluate(node => Number.parseInt(getComputedStyle(node).zIndex, 10) || 0),
+      telemetryGateway.locator('xpath=..').evaluate(node => Number.parseInt(getComputedStyle(node).zIndex, 10) || 0),
+    ])
+    return selectedZIndex - hoveredZIndex
+  }).toBeGreaterThan(0)
 })
 
 test('renders platform-aware desktop chrome', async ({ appPage, electronApp, workspaceDir }) => {

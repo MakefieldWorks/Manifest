@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+import postcss, { type Container, type Root } from 'postcss'
 import {
   BUILT_IN_THEMES,
   DEFAULT_APPEARANCE_PREFERENCE,
@@ -45,4 +48,62 @@ describe('theme definitions', () => {
       darkThemeId: 'manifest-dark',
     })
   })
+
+  it('keeps CSS bootstrap token values aligned with the built-in themes', () => {
+    const css = postcss.parse(readFileSync(join(__dirname, '../../../src/renderer/src/app.css'), 'utf8'))
+
+    expect(cssBootstrapTokens(css, 'light')).toEqual(
+      cssTokensForTheme('manifest-light'),
+    )
+    expect(cssBootstrapTokens(css, 'dark')).toEqual(
+      cssTokensForTheme('manifest-dark'),
+    )
+  })
 })
+
+function cssBootstrapTokens(css: Root, scheme: 'light' | 'dark'): Record<string, string> {
+  let bootstrapRoot: Container | undefined
+
+  if (scheme === 'light') {
+    css.walkRules(':root', rule => {
+      if (rule.parent === css) bootstrapRoot = rule
+    })
+  } else {
+    css.walkAtRules('media', media => {
+      if (media.params.replace(/\s+/g, ' ') !== '(prefers-color-scheme: dark)') return
+      media.walkRules(':root', rule => {
+        if (rule.parent === media) bootstrapRoot = rule
+      })
+    })
+  }
+
+  expect(bootstrapRoot).toBeDefined()
+  const declarations: Array<[string, string]> = []
+  let colorScheme: string | undefined
+  bootstrapRoot!.walkDecls(declaration => {
+    if (declaration.prop === 'color-scheme') colorScheme = declaration.value
+    if (declaration.prop.startsWith('--theme-')) {
+      declarations.push([declaration.prop.slice('--theme-'.length), declaration.value])
+    }
+  })
+
+  expect(colorScheme).toBe(scheme)
+  expect(declarations).toHaveLength(THEME_TOKEN_NAMES.length)
+  expect(new Set(declarations.map(([name]) => name))).toHaveLength(THEME_TOKEN_NAMES.length)
+  return Object.fromEntries(declarations)
+}
+
+function cssTokensForTheme(id: string): Record<string, string> {
+  const theme = BUILT_IN_THEMES.find(candidate => candidate.id === id)
+  expect(theme).toBeDefined()
+
+  return Object.fromEntries(
+    THEME_TOKEN_NAMES.map(name => [name, hexToRgb(theme!.tokens[name])]),
+  )
+}
+
+function hexToRgb(hex: string): string {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
+  if (!match) throw new Error(`Expected a six-digit hex color, received ${hex}`)
+  return match.slice(1).map(component => String(Number.parseInt(component, 16))).join(' ')
+}
