@@ -119,15 +119,18 @@ describe('AppSettingsStore', () => {
     })
     store.updatePreferences({
       launchBehavior: 'reopen-last-project',
-      appearance: { mode: 'dark' },
+      appearance: { mode: 'dark', lightThemeId: 'manifest-graphite-light' },
+    })
+    store.updatePreferences({
+      appearance: { darkThemeId: 'manifest-graphite-dark' },
     })
 
     expect(new AppSettingsStore(storePath()).getPreferences()).toEqual({
       launchBehavior: 'reopen-last-project',
       appearance: {
         mode: 'dark',
-        lightThemeId: 'manifest-light',
-        darkThemeId: 'manifest-dark',
+        lightThemeId: 'manifest-graphite-light',
+        darkThemeId: 'manifest-graphite-dark',
       },
     })
   })

@@ -197,16 +197,35 @@ test('renders platform-aware desktop chrome', async ({ appPage, electronApp, wor
   expect(projectTitlebarClass.includes('[-webkit-app-region:drag]')).toBe(chrome.supportsWindowDragRegion)
 })
 
-test('opens a dedicated settings window, syncs dark mode, and saves preferences', async ({ appPage, electronApp }) => {
+test('opens a dedicated settings window, syncs selected schemes, and saves preferences', async ({ appPage, electronApp }) => {
   await expect(appPage.getByTestId('create-project-btn')).toBeVisible()
   const settingsPage = await openSettingsWindow(electronApp)
   await settingsPage.waitForLoadState('domcontentloaded')
 
   await expect(settingsPage.getByRole('heading', { name: 'General' })).toBeVisible()
-  await settingsPage.getByTestId('theme-preference').selectOption('dark')
+  expect(await settingsPage.getByTestId('light-theme-preference').locator('option').evaluateAll(options => options.map(option => option.value))).toEqual([
+    'manifest-light',
+    'manifest-graphite-light',
+  ])
+  expect(await settingsPage.getByTestId('dark-theme-preference').locator('option').evaluateAll(options => options.map(option => option.value))).toEqual([
+    'manifest-dark',
+    'manifest-graphite-dark',
+  ])
+
+  await settingsPage.getByTestId('theme-preference').selectOption('light')
+  await settingsPage.getByTestId('light-theme-preference').selectOption('manifest-graphite-light')
   await expect(settingsPage.getByRole('status')).toContainText('Appearance updated')
-  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-dark')
-  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-dark')
+  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-light')
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-light')
+  await expect.poll(() => appPage.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--theme-surface-canvas').trim()))
+    .toBe('244 246 248')
+
+  await settingsPage.getByTestId('dark-theme-preference').selectOption('manifest-graphite-dark')
+  await settingsPage.getByTestId('theme-preference').selectOption('dark')
+  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
+  await expect.poll(() => appPage.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--theme-surface-canvas').trim()))
+    .toBe('16 21 27')
 
   await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
   await expect(settingsPage.getByRole('status')).toContainText('Saved')
@@ -218,8 +237,8 @@ test('opens a dedicated settings window, syncs dark mode, and saves preferences'
       launchBehavior: 'reopen-last-project',
       appearance: {
         mode: 'dark',
-        lightThemeId: 'manifest-light',
-        darkThemeId: 'manifest-dark',
+        lightThemeId: 'manifest-graphite-light',
+        darkThemeId: 'manifest-graphite-dark',
       },
     },
   })
@@ -245,6 +264,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
     const settingsPage = await openSettingsWindow(firstApp)
     await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
     await expect(settingsPage.getByRole('status')).toContainText('Saved')
+    await settingsPage.getByTestId('dark-theme-preference').selectOption('manifest-graphite-dark')
     await settingsPage.getByTestId('theme-preference').selectOption('dark')
     await expect(settingsPage.getByRole('status')).toContainText('Appearance updated')
     const settingsClosed = settingsPage.waitForEvent('close')
@@ -257,7 +277,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
   const reopenedApp = await launchAppWithArgs([], userDataDir)
   try {
     const reopenedPage = await reopenedApp.firstWindow()
-    await expect.poll(() => reopenedPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-dark')
+    await expect.poll(() => reopenedPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
     await expect(reopenedPage.getByTestId('project-view')).toBeVisible()
     await expect(treeRow(reopenedPage, 'Reopen Lab')).toBeVisible()
     const reopenedProject = await currentProject(reopenedPage)

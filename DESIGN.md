@@ -1,6 +1,6 @@
 ---
 name: Manifest
-description: A calibrated instrument panel for structured projects — warm neutral chrome, with color reserved entirely for change.
+description: A calibrated instrument panel for structured projects — theme-neutral chrome, with color reserved entirely for change.
 colors:
   panel-paper: "#f8f8f7"
   surface-raised: "#ffffff"
@@ -177,12 +177,13 @@ collapse into a single summarized fold marker, and the collapse is animated rath
 Regions of the tree literally change magnification based on relevance. That, not any color or
 shape choice, is what makes the interface feel like an instrument being focused.
 
-The interface ships with paired **Manifest Light** and **Manifest Dark** themes. It follows the
-operating-system appearance by default, while people can choose either fixed appearance in
-Settings. The theme changes the instrument's chrome, never the meanings assigned to change color.
+The interface ships with two paired theme families: **Manifest Light / Dark** and **Manifest
+Graphite Light / Dark**. It follows the operating-system appearance by default, while people can
+choose either fixed appearance and independently choose the light and dark schemes in Settings.
+Themes change the instrument's chrome, never the meanings assigned to change color.
 
 **Key Characteristics:**
-- Warm stone neutrals on a paper ground (`panel-paper`), never cool gray
+- Warm Stone or cool Graphite neutral chrome, chosen as a whole theme — never mixed within a view
 - Color exclusively semantic; zero decorative accents in the chrome
 - High information density — 32px rows, 12px as the dominant type size
 - Near-flat surfaces; depth from tonal layering and hairlines
@@ -223,7 +224,10 @@ strongest invariant.
 
 ### Neutral
 
-Six ink steps and five surface steps, all from stone.
+Six ink steps and five surface steps. **Manifest Light / Dark** use the canonical warm stone
+family. **Manifest Graphite Light / Dark** use a higher-contrast, low-chroma carbon family for
+people who prefer a cooler instrument surface. Both families preserve the semantic accent roles
+below, so color meanings never change with a selected scheme.
 
 - **Panel Paper** (`panel-paper`): the app body ground. Deliberately *not* stone-50 — a hair
   warmer and greener. It is the one hand-chosen color in the system; preserve it exactly.
@@ -244,9 +248,10 @@ Six ink steps and five surface steps, all from stone.
 branding, emphasis, category, or delight. If a new element needs to stand out, it earns it through
 weight, size, spacing, or a hairline — never a color the diff view is already using.
 
-**The Warm Neutral Rule.** Every gray is stone. Never `gray`, `zinc`, `neutral`, or `slate`. A
-single cool gray next to stone reads as a rendering bug. (One `text-slate-600` survives in the
-codebase; it is a defect, not a precedent.)
+**The Theme-Neutral Rule.** Every neutral comes from the active theme's family. Manifest themes
+use warm stone; Graphite themes use low-chroma carbon. Never mix the two families in a component,
+and never use `gray`, `zinc`, `neutral`, or raw `slate` utilities. (One `text-slate-600` survives
+in the codebase; it is a defect, not a precedent.)
 
 **The Amber Overload Rule.** Amber already carries renamed, property-changed, template-changed,
 High severity, search matches, folds, and advisories. It is at capacity. New advisory states must
@@ -269,10 +274,12 @@ interface AppearancePreference {
 }
 ```
 
-That pairing is intentional. When user-defined theme packs arrive, a person can choose any valid
-light theme and any valid dark theme independently; System mode simply resolves the matching one.
-A theme pack must provide every named token, declare `light` or `dark`, use validated hex colors,
-and meet contrast checks. It may supply token values only — never arbitrary CSS.
+That pairing is intentional. Settings exposes a separate selector for each scheme, so a person can
+pair any built-in light theme with any built-in dark theme; System mode simply resolves the
+matching one. The shipped families are **Manifest** (warm Stone) and **Graphite** (cool carbon).
+When user-defined theme packs arrive, they follow the same pairing model. A theme pack must provide
+every named token, declare `light` or `dark`, use validated hex colors, and meet contrast checks.
+It may supply token values only — never arbitrary CSS.
 
 ## Typography
 
@@ -476,7 +483,8 @@ interactivity — and adds a red ring only as a sixth.
 
 - **Do** reserve all color for change semantics. A new element earns emphasis through weight,
   size, spacing, or a hairline. (The Reserved Spectrum Rule)
-- **Do** use stone for every neutral. Never `gray`, `zinc`, `neutral`, or `slate`.
+- **Do** use the selected theme's neutral family for every neutral. Never `gray`, `zinc`,
+  `neutral`, or raw `slate` utilities.
 - **Do** pair every change hue with a non-color signal — a text label, a glyph, an opacity shift, a
   strikethrough. Colorblind-safe change states are a binding product requirement. The incumbent
   system meets it for `added`, `moved-to`, `renamed`, `property-changed`, `template-changed`,

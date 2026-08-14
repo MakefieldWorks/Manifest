@@ -261,6 +261,74 @@ const darkTokens: ThemeTokens = {
   'slate-ink': '#cbd5e1',
 }
 
+/**
+ * A higher-contrast carbon-neutral pair. It retains the established semantic
+ * change language while adapting chrome and foreground contrast for Graphite.
+ */
+const graphiteLightTokens: ThemeTokens = {
+  ...lightTokens,
+  'surface-canvas': '#f4f6f8',
+  'surface-raised': '#ffffff',
+  'surface-recessed': '#edf1f5',
+  'surface-hairline': '#e4e9ee',
+  'surface-selected': '#d8e0e8',
+  'surface-disabled': '#c0cad5',
+  'control-primary': '#1f2933',
+  'control-primary-hover': '#354252',
+  'text-disabled': '#7c8795',
+  'text-faint': '#6b7785',
+  'text-muted': '#5d6978',
+  'text-secondary': '#465160',
+  'text-body': '#34404d',
+  'text-strong': '#27313c',
+  'text-primary': '#131a22',
+  'text-on-primary': '#ffffff',
+  'border-subtle': '#e4e9ee',
+  'border-default': '#d8e0e8',
+  'border-strong': '#c0cad5',
+  'border-emphasis': '#657384',
+  'border-inverse': '#34404d',
+  'focus-soft': '#d8e0e8',
+  'focus': '#aeb9c5',
+  'focus-strong': '#607080',
+  'attention-fill': '#a84b08',
+  'attention-ink-soft': '#a84b08',
+  'attention-ink': '#9a3f08',
+  'attention-ink-strong': '#7c2d12',
+  'attention-ink-deep': '#5f240d',
+  'success-ink-soft': '#047857',
+  'danger-ink-soft': '#dc2626',
+  'info-ink-soft': '#0369a1',
+}
+
+const graphiteDarkTokens: ThemeTokens = {
+  ...darkTokens,
+  'surface-canvas': '#10151b',
+  'surface-raised': '#182029',
+  'surface-recessed': '#131a22',
+  'surface-hairline': '#222d38',
+  'surface-selected': '#2d3a47',
+  'surface-disabled': '#465463',
+  'control-primary': '#303d4b',
+  'control-primary-hover': '#3d4c5c',
+  'text-disabled': '#718093',
+  'text-faint': '#93a1b2',
+  'text-muted': '#b0bdca',
+  'text-secondary': '#c8d1db',
+  'text-body': '#d9e0e7',
+  'text-strong': '#ebeff3',
+  'text-primary': '#f8fafc',
+  'text-on-primary': '#ffffff',
+  'border-subtle': '#222d38',
+  'border-default': '#2d3a47',
+  'border-strong': '#465463',
+  'border-emphasis': '#718093',
+  'border-inverse': '#c8d1db',
+  'focus-soft': '#465463',
+  'focus': '#718093',
+  'focus-strong': '#b0bdca',
+}
+
 export const BUILT_IN_THEMES: readonly ThemeDefinition[] = [
   {
     id: 'manifest-light',
@@ -269,10 +337,22 @@ export const BUILT_IN_THEMES: readonly ThemeDefinition[] = [
     tokens: lightTokens,
   },
   {
+    id: 'manifest-graphite-light',
+    label: 'Manifest Graphite Light',
+    scheme: 'light',
+    tokens: graphiteLightTokens,
+  },
+  {
     id: 'manifest-dark',
     label: 'Manifest Dark',
     scheme: 'dark',
     tokens: darkTokens,
+  },
+  {
+    id: 'manifest-graphite-dark',
+    label: 'Manifest Graphite Dark',
+    scheme: 'dark',
+    tokens: graphiteDarkTokens,
   },
 ]
 

@@ -3,14 +3,24 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import type { LaunchBehavior } from '../../shared/ipc'
-  import type { AppearanceMode } from '../../shared/theme'
+  import {
+    DEFAULT_APPEARANCE_PREFERENCE,
+    themesForScheme,
+    type AppearanceMode,
+    type AppearancePreference,
+    type ThemeScheme,
+  } from '../../shared/theme'
 
   type SettingsSection = 'general' | 'workspace'
 
   const desktopChrome = window.api.platform
+  const lightThemes = themesForScheme('light')
+  const darkThemes = themesForScheme('dark')
   let activeSection: SettingsSection = $state('general')
   let launchBehavior: LaunchBehavior = $state('project-hub')
   let appearanceMode: AppearanceMode = $state('system')
+  let lightThemeId: string = $state(DEFAULT_APPEARANCE_PREFERENCE.lightThemeId)
+  let darkThemeId: string = $state(DEFAULT_APPEARANCE_PREFERENCE.darkThemeId)
   let loading = $state(true)
   let saving = $state(false)
   let resetting = $state(false)
@@ -40,7 +50,7 @@
     const preferences = await window.api.settings.getPreferences()
     if (preferences.ok) {
       launchBehavior = preferences.data.launchBehavior
-      appearanceMode = preferences.data.appearance.mode
+      applyAppearancePreference(preferences.data.appearance)
     } else {
       error = `Could not load settings: ${preferences.error.message}`
     }
@@ -68,19 +78,35 @@
     status = 'Saved. This will take effect the next time Manifest starts.'
   }
 
-  async function saveAppearanceMode(next: AppearanceMode) {
-    appearanceMode = next
+  function applyAppearancePreference(preference: AppearancePreference) {
+    appearanceMode = preference.mode
+    lightThemeId = preference.lightThemeId
+    darkThemeId = preference.darkThemeId
+  }
+
+  async function saveAppearance(patch: Partial<AppearancePreference>) {
     saving = true
     error = null
     status = null
-    const result = await window.api.settings.updatePreferences({ appearance: { mode: next } })
+    const result = await window.api.settings.updatePreferences({ appearance: patch })
     saving = false
     if (!result.ok) {
       error = `Could not save appearance: ${result.error.message}`
       return
     }
-    appearanceMode = result.data.appearance.mode
+    applyAppearancePreference(result.data.appearance)
     status = 'Appearance updated.'
+  }
+
+  function saveAppearanceMode(next: AppearanceMode) {
+    appearanceMode = next
+    void saveAppearance({ mode: next })
+  }
+
+  function saveTheme(scheme: ThemeScheme, nextId: string) {
+    if (scheme === 'light') lightThemeId = nextId
+    else darkThemeId = nextId
+    void saveAppearance(scheme === 'light' ? { lightThemeId: nextId } : { darkThemeId: nextId })
   }
 
   async function resetLayout() {
@@ -161,8 +187,8 @@
           <div class="mt-3 divide-y divide-stone-100 overflow-hidden rounded-lg border border-stone-200 bg-white">
             <div class="flex items-center justify-between gap-8 px-5 py-4">
               <div class="min-w-0">
-                <label for="theme-preference" class="text-sm font-medium text-stone-800">Theme</label>
-                <p class="mt-1 text-xs leading-5 text-stone-500">Use your system appearance or keep Manifest in a fixed light or dark mode.</p>
+                <label for="theme-preference" class="text-sm font-medium text-stone-800">Appearance mode</label>
+                <p class="mt-1 text-xs leading-5 text-stone-500">Follow your system or keep Manifest in a fixed light or dark appearance.</p>
               </div>
               <select
                 id="theme-preference"
@@ -175,6 +201,42 @@
                 <option value="system">System</option>
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
+                </select>
+            </div>
+            <div class="flex items-center justify-between gap-8 px-5 py-4">
+              <div class="min-w-0">
+                <label for="light-theme-preference" class="text-sm font-medium text-stone-800">Light scheme</label>
+                <p class="mt-1 text-xs leading-5 text-stone-500">Used in Light mode and whenever System appearance is light.</p>
+              </div>
+              <select
+                id="light-theme-preference"
+                value={lightThemeId}
+                onchange={(event) => saveTheme('light', (event.currentTarget as HTMLSelectElement).value)}
+                disabled={loading || saving}
+                class="w-48 shrink-0 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-800 shadow-sm outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200 disabled:opacity-50"
+                data-testid="light-theme-preference"
+              >
+                {#each lightThemes as theme}
+                  <option value={theme.id}>{theme.label}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="flex items-center justify-between gap-8 px-5 py-4">
+              <div class="min-w-0">
+                <label for="dark-theme-preference" class="text-sm font-medium text-stone-800">Dark scheme</label>
+                <p class="mt-1 text-xs leading-5 text-stone-500">Used in Dark mode and whenever System appearance is dark.</p>
+              </div>
+              <select
+                id="dark-theme-preference"
+                value={darkThemeId}
+                onchange={(event) => saveTheme('dark', (event.currentTarget as HTMLSelectElement).value)}
+                disabled={loading || saving}
+                class="w-48 shrink-0 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-800 shadow-sm outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200 disabled:opacity-50"
+                data-testid="dark-theme-preference"
+              >
+                {#each darkThemes as theme}
+                  <option value={theme.id}>{theme.label}</option>
+                {/each}
               </select>
             </div>
           </div>
