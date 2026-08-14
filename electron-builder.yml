@@ -19,6 +19,7 @@ fileAssociations:
 mac:
   category: public.app-category.productivity
   icon: resources/icon.icns
+  minimumSystemVersion: 12.0
   target:
     - target: dmg
       arch:
