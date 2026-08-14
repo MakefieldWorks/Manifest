@@ -576,7 +576,7 @@ app.whenReady().then(async () => {
   const iconPath = getBrandIconPath()
   configureAboutPanel(iconPath)
   if (process.platform === 'darwin' && iconPath) {
-    app.dock.setIcon(iconPath)
+    app.dock?.setIcon(iconPath)
   }
   await drainPendingOpenTargets()
   await reopenLastProjectIfRequested()
