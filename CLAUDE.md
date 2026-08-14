@@ -45,3 +45,23 @@ Framework: **Vitest** (unit + integration) + **Playwright** (E2E)
 - Validation functions live in `src/shared/validation.ts`. Never duplicate them.
 - Error codes live in `src/shared/errors.ts`. Use `SCREAMING_SNAKE` constants.
 - All IPC responses use `Result<T>` — never throw across the IPC boundary.
+
+## CI policy (read before adding `.github/workflows/`)
+
+No CI is configured yet. When it is, do not let Windows or macOS jobs
+(`windows-*`, `macos-*` runners) trigger automatically on every push or PR —
+GitHub bills those at 2x/10x the Linux rate, and `vpp3_electron` blew through
+its monthly Actions-minutes allowance in ~12 days doing exactly that (daily
+full-matrix cron stacked on top of a per-push Windows job). Fixed there by
+making Windows/macOS opt-in only via a PR label (e.g. `ci:full`) — see
+`vpp3_electron`'s `.github/scripts/classify-ci-paths.mjs`, `pr-ci.yml`, and
+`cross-platform-smoke.yml` for the reference implementation.
+
+- Ubuntu-hosted runners are 1x and fine to run on every push/PR by default.
+- Windows/macOS: gate behind an opt-in label or a manual/tag trigger, never
+  path-based auto-triggering on every push.
+- If Windows/macOS coverage becomes frequent enough that opt-in gating is
+  itself the bottleneck, self-hosted runners are the next lever — but they
+  are registered per-repo, not shared. `vpp3_electron`'s runners
+  (`mac-mini-always-on`, `XIDAX`) are scoped to that repo only and cannot be
+  pointed at Manifest; a separate registration would be needed here.

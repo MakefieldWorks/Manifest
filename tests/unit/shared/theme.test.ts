@@ -9,13 +9,24 @@ import {
   isThemeDefinition,
   normalizeAppearancePreference,
   resolveTheme,
+  themesForScheme,
 } from '../../../src/shared/theme'
 
 describe('theme definitions', () => {
   it('ships complete, validated light and dark token sets', () => {
     expect(BUILT_IN_THEMES.map(theme => theme.id)).toEqual([
       'manifest-light',
+      'manifest-graphite-light',
       'manifest-dark',
+      'manifest-graphite-dark',
+    ])
+    expect(themesForScheme('light').map(theme => theme.id)).toEqual([
+      'manifest-light',
+      'manifest-graphite-light',
+    ])
+    expect(themesForScheme('dark').map(theme => theme.id)).toEqual([
+      'manifest-dark',
+      'manifest-graphite-dark',
     ])
 
     for (const theme of BUILT_IN_THEMES) {
@@ -35,6 +46,17 @@ describe('theme definitions', () => {
       ...DEFAULT_APPEARANCE_PREFERENCE,
       mode: 'dark',
     }, 'light').id).toBe('manifest-dark')
+    const graphitePreference = {
+      ...DEFAULT_APPEARANCE_PREFERENCE,
+      lightThemeId: 'manifest-graphite-light',
+      darkThemeId: 'manifest-graphite-dark',
+    }
+    expect(resolveTheme(graphitePreference, 'light').id).toBe('manifest-graphite-light')
+    expect(resolveTheme(graphitePreference, 'dark').id).toBe('manifest-graphite-dark')
+    expect(resolveTheme({ ...graphitePreference, mode: 'light' }, 'dark').id).toBe('manifest-graphite-light')
+    expect(resolveTheme({ ...graphitePreference, mode: 'dark' }, 'light').id).toBe('manifest-graphite-dark')
+    expect(resolveTheme(graphitePreference, 'light').tokens['surface-canvas'])
+      .not.toBe(resolveTheme(DEFAULT_APPEARANCE_PREFERENCE, 'light').tokens['surface-canvas'])
   })
 
   it('falls back safely when a stored appearance is incomplete or unknown', () => {
@@ -47,16 +69,30 @@ describe('theme definitions', () => {
       lightThemeId: 'manifest-light',
       darkThemeId: 'manifest-dark',
     })
+    expect(normalizeAppearancePreference({
+      mode: 'system',
+      lightThemeId: 'manifest-graphite-light',
+      darkThemeId: 'manifest-graphite-dark',
+    })).toEqual({
+      mode: 'system',
+      lightThemeId: 'manifest-graphite-light',
+      darkThemeId: 'manifest-graphite-dark',
+    })
+    expect(normalizeAppearancePreference({
+      mode: 'system',
+      lightThemeId: 'manifest-graphite-dark',
+      darkThemeId: 'manifest-graphite-light',
+    })).toEqual(DEFAULT_APPEARANCE_PREFERENCE)
   })
 
   it('keeps CSS bootstrap token values aligned with the built-in themes', () => {
     const css = postcss.parse(readFileSync(join(__dirname, '../../../src/renderer/src/app.css'), 'utf8'))
 
     expect(cssBootstrapTokens(css, 'light')).toEqual(
-      cssTokensForTheme('manifest-light'),
+      cssTokensForTheme(DEFAULT_APPEARANCE_PREFERENCE.lightThemeId),
     )
     expect(cssBootstrapTokens(css, 'dark')).toEqual(
-      cssTokensForTheme('manifest-dark'),
+      cssTokensForTheme(DEFAULT_APPEARANCE_PREFERENCE.darkThemeId),
     )
   })
 })
