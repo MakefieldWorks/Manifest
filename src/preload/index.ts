@@ -24,6 +24,9 @@ const api: ManifestAPI = {
       ipcRenderer.invoke(IPC.PROJECT_GET_CURRENT),
     close: () =>
       ipcRenderer.invoke(IPC.PROJECT_CLOSE),
+    undo: () => ipcRenderer.invoke(IPC.PROJECT_UNDO),
+    redo: () => ipcRenderer.invoke(IPC.PROJECT_REDO),
+    editHistory: () => ipcRenderer.invoke(IPC.PROJECT_EDIT_HISTORY),
     onOpenedFromOs: (handler) => {
       const listener = (_event: Electron.IpcRendererEvent, result: unknown) => {
         handler(result as Awaited<ReturnType<ManifestAPI['project']['open']>>)
@@ -33,6 +36,10 @@ const api: ManifestAPI = {
         ipcRenderer.removeListener(IPC.PROJECT_OPENED_FROM_OS, listener)
       }
     },
+  },
+
+  text: {
+    undoRedo: (direction) => ipcRenderer.invoke(IPC.TEXT_UNDO_REDO, direction),
   },
 
   node: {

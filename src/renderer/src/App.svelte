@@ -2,9 +2,9 @@
 
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte'
-  import type { Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, ReferenceBlocker, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
+  import type { EditHistoryState, Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, ReferenceBlocker, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
   import { isUsableTemplate, templateLabel } from '../../shared/validation'
-  import { snapshotRefLabel } from '../../shared/snapshot-ref'
+  import { CURRENT_PROJECT_REF, snapshotRefLabel } from '../../shared/snapshot-ref'
   import {
     createDisabledMenuCommandState,
     type MenuCommandId,
@@ -15,6 +15,7 @@
   import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
   import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
   import { flattenTree } from './lib/tree-rows'
+  import { isTextEditing } from './lib/edit-focus'
   import { cycleIndex } from './lib/tree-typeahead'
   import ManifestView from './components/ManifestView.svelte'
   import DetailPane from './components/DetailPane.svelte'
@@ -24,6 +25,60 @@
   import RecoveryDialog from './components/RecoveryDialog.svelte'
   import RevertDialog from './components/RevertDialog.svelte'
   import SnapshotsPanel from './components/SnapshotsPanel.svelte'
+
+  let editHistory: EditHistoryState = $state({ undoLabel: null, redoLabel: null })
+  let undoRedoBusy = $state(false)
+  let textEditing = $state(false)
+
+  function updateEditFocus() { textEditing = isTextEditing(document.activeElement) }
+
+  function handleUndoRedoKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.altKey || isTextEditing(document.activeElement)) return
+    const modifier = desktopChrome.platform === 'darwin' ? event.metaKey : event.ctrlKey
+    if (!modifier) return
+    const key = event.key.toLowerCase()
+    const direction = key === 'z' ? (event.shiftKey ? 'redo' : 'undo') :
+      key === 'y' && event.ctrlKey ? 'redo' : null
+    if (!direction) return
+    event.preventDefault()
+    event.stopPropagation()
+    void applyUndoRedo(direction)
+  }
+
+  // Cancel stale replies when another edit, close, or project switch wins the race.
+  $effect(() => {
+    const current = project
+    let cancelled = false
+    editHistory = { undoLabel: null, redoLabel: null }
+    if (current) {
+      void window.api.project.editHistory().then(result => {
+        if (!cancelled && result.ok) editHistory = result.data
+      })
+    }
+    return () => { cancelled = true }
+  })
+
+  const canUndoProject = $derived.by(() => appState === 'open' && project !== null && !editingLocked &&
+    !snapshotCreating && !snapshotComparing && !importDialogOpen && !templateManagerOpen &&
+    !moveToNodeId && !addingChildTo && !revertDialogSnapshotName && !recoveryDialogPoint)
+
+  async function applyUndoRedo(direction: 'undo' | 'redo') {
+    if (!canUndoProject || !editHistory[direction === 'undo' ? 'undoLabel' : 'redoLabel']) return
+    const label = editHistory[direction === 'undo' ? 'undoLabel' : 'redoLabel']
+    undoRedoBusy = true
+    try {
+      const result = await window.api.project[direction]()
+      if (!result.ok) { showToast(result.error.message); return }
+      applyProject(result.data)
+      markWorkingCopyChanged()
+      if (workingCopyBaseSnapshot) {
+        const comparison = await window.api.snapshot.loadCompare(workingCopyBaseSnapshot, CURRENT_PROJECT_REF)
+        if (comparison.ok) workingCopyDirty = comparison.data.nodes.some(node => node.status !== 'unchanged') ||
+          (comparison.data.templateChanges?.length ?? 0) > 0
+      }
+      showToast(`${direction === 'undo' ? 'Undid' : 'Redid'} ${label?.toLowerCase()}`)
+    } finally { undoRedoBusy = false }
+  }
 
   type AppState = 'welcome' | 'creating' | 'loading' | 'open'
 
@@ -223,7 +278,7 @@
   // Each of those operations mutates currentProject in main; interleaving a renderer
   // mutation can leave the project in a half-restored state.
   const editingLocked = $derived(
-    compareMode || snapshotRestoringName !== null || recoveryApplyingId !== null
+    undoRedoBusy || snapshotCreating || compareMode || snapshotRestoringName !== null || recoveryApplyingId !== null
   )
 
   function lockReason(): string {
@@ -240,6 +295,9 @@
   }
 
   onMount(async () => {
+    window.addEventListener('keydown', handleUndoRedoKeydown, true)
+    document.addEventListener('focusin', updateEditFocus)
+    document.addEventListener('focusout', updateEditFocus)
     unsubscribeMenuCommands = window.api.menu.onCommand((command) => {
       void runMenuCommand(command)
     })
@@ -277,6 +335,9 @@
   })
 
   onDestroy(() => {
+    window.removeEventListener('keydown', handleUndoRedoKeydown, true)
+    document.removeEventListener('focusin', updateEditFocus)
+    document.removeEventListener('focusout', updateEditFocus)
     unsubscribeMenuCommands?.()
     unsubscribeMenuCommands = null
     unsubscribeProjectOpenFromOs?.()
@@ -450,7 +511,7 @@
   function buildMenuCommandState(): MenuCommandState {
     const state = createDisabledMenuCommandState()
     const hasOpenProject = appState === 'open' && project !== null
-    const projectBusy = snapshotRestoringName !== null || recoveryApplyingId !== null
+    const projectBusy = undoRedoBusy || snapshotCreating || snapshotRestoringName !== null || recoveryApplyingId !== null
     const canUseProject = hasOpenProject && !projectBusy
     const canEditProject = canUseProject && !editingLocked
     const selectedLiveNode = canEditProject && selectedNode && !selectedId?.startsWith('ghost:')
@@ -459,8 +520,10 @@
     const selectedEditableChild = selectedLiveNode !== null && selectedLiveNode.parentId !== null
     const compareLoaded = hasOpenProject && compareMode && mergedTree !== null
 
+    state['project:undo'] = textEditing || (canUndoProject && editHistory.undoLabel !== null)
+    state['project:redo'] = textEditing || (canUndoProject && editHistory.redoLabel !== null)
     state['project:new'] = appState === 'welcome' && project === null
-    state['project:open'] = appState !== 'loading' && appState !== 'creating' && !creating && !snapshotRestoringName && !recoveryApplyingId
+    state['project:open'] = appState !== 'loading' && appState !== 'creating' && !creating && !projectBusy
     state['project:save'] = canUseProject
     state['project:close'] = canUseProject
     state['project:import'] = canEditProject
@@ -485,6 +548,12 @@
   }
 
   async function runMenuCommand(command: MenuCommandId) {
+    if (command === 'project:undo' || command === 'project:redo') {
+      const direction = command === 'project:undo' ? 'undo' : 'redo'
+      if (isTextEditing(document.activeElement)) await window.api.text.undoRedo(direction)
+      else await applyUndoRedo(direction)
+      return
+    }
     if (!canRunMenuCommand(command)) return
 
     switch (command) {
@@ -1632,6 +1701,20 @@
         </div>
       </div>
       <div class="flex items-center gap-2 [-webkit-app-region:no-drag]">
+        <button
+          onclick={() => applyUndoRedo('undo')}
+          disabled={!canUndoProject || !editHistory.undoLabel}
+          title={editHistory.undoLabel ? `Undo ${editHistory.undoLabel.toLowerCase()}` : 'Nothing to undo'}
+          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600 disabled:opacity-40"
+          data-testid="project-undo-btn"
+        >Undo</button>
+        <button
+          onclick={() => applyUndoRedo('redo')}
+          disabled={!canUndoProject || !editHistory.redoLabel}
+          title={editHistory.redoLabel ? `Redo ${editHistory.redoLabel.toLowerCase()}` : 'Nothing to redo'}
+          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600 disabled:opacity-40"
+          data-testid="project-redo-btn"
+        >Redo</button>
         <button
           onclick={toggleSnapshots}
           aria-pressed={snapshotPanelOpen ? 'true' : 'false'}

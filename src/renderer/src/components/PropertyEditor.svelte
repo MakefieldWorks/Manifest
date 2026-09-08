@@ -142,7 +142,7 @@
 
   async function deleteProperty(key: string) {
     if (readOnly) return
-    const confirmed = window.confirm(`Delete property "${key}"? This cannot be undone.`)
+    const confirmed = window.confirm(`Delete property "${key}"? You can undo this while the project remains open.`)
     if (!confirmed) return
     const props = { ...(node.properties ?? {}) }
     delete props[key]

@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, renameSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { v7 as uuidv7 } from 'uuid'
+import { EditHistory } from './edit-history'
 import type {
   Project,
   RecoveryPointApplyRequest,
@@ -109,6 +110,8 @@ export interface HistoryBackfillStatus {
 
 export class ProjectManager {
   private currentProject: Project | null = null
+  private readonly edits = new EditHistory()
+  private historyOperationInProgress = false
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null
   private backfillStatus: HistoryBackfillStatus = {
     inProgress: false, completed: 0, total: 0,
@@ -167,6 +170,7 @@ export class ProjectManager {
 
       const projectWarnings = this.collectProjectWarnings(projectPath)
       const runtimeProject = this.withProjectWarnings(project, projectWarnings)
+      this.edits.clear()
       this.currentProject = runtimeProject
       this.logger.info('project created', { name, path: projectPath })
       return ok(runtimeProject)
@@ -266,6 +270,7 @@ export class ProjectManager {
       }
 
       const runtimeProject = this.withProjectWarnings(project, projectWarnings)
+      this.edits.clear()
       this.currentProject = runtimeProject
       this.logger.info('project opened', { name: project.name, path: projectPath, nodes: project.nodes.length })
       this.scheduleHistoryBackfill()
@@ -300,6 +305,7 @@ export class ProjectManager {
   discardCurrentProject(): void {
     this.cancelAutosave()
     this.backfillToken++  // signal any in-flight backfill to exit early
+    this.edits.clear()
     this.currentProject = null
     this.search.close()
     this.history.close()
@@ -348,6 +354,39 @@ export class ProjectManager {
   // not need this — it polls getHistoryBackfillStatus for the progress display.
   async waitForHistoryBackfill(): Promise<void> {
     if (this.backfillPromise) await this.backfillPromise
+  }
+
+  editHistoryState() { return this.edits.state() }
+
+  undo(): Result<Project> { return this.applyEditHistory('undo') }
+  redo(): Result<Project> { return this.applyEditHistory('redo') }
+
+  private applyEditHistory(direction: 'undo' | 'redo'): Result<Project> {
+    const previous = this.currentProject
+    if (!previous) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    if (this.historyOperationInProgress) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
+    }
+    const next = this.edits.preview(previous, direction)
+    if (!next) return err(ErrorCode.VALIDATION_FAILED, `Nothing to ${direction}.`)
+    const indexed = this.rebuildSearchIndex(next, 'rebuild')
+    if (!indexed.ok) {
+      this.restoreSearchIndex(previous)
+      return indexed as Result<Project>
+    }
+    this.currentProject = next
+    this.edits.accept(direction)
+    this.scheduleAutosave()
+    return ok(next)
+  }
+
+  private async withHistoryOperation<T>(operation: () => Promise<Result<T>>): Promise<Result<T>> {
+    if (this.historyOperationInProgress) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
+    }
+    this.historyOperationInProgress = true
+    try { return await operation() }
+    finally { this.historyOperationInProgress = false }
   }
 
   // ─── Node CRUD ──────────────────────────────────────────────────────────────
@@ -405,7 +444,7 @@ export class ProjectManager {
       nodes: [...this.currentProject.nodes, newNode],
     }
 
-    return this.commitProjectMutation(nextProject, () => {
+    return this.commitProjectMutation(nextProject, 'Add node', () => {
       this.search.upsertNode(nextProject.path!, newNode)
     })
   }
@@ -512,7 +551,7 @@ export class ProjectManager {
       nodes: this.currentProject.nodes.map(n => n.id === id ? updatedNode : n),
     }
 
-    return this.commitProjectMutation(nextProject, () => {
+    return this.commitProjectMutation(nextProject, 'Edit node', () => {
       this.search.upsertNode(nextProject.path!, updatedNode)
     })
   }
@@ -544,7 +583,7 @@ export class ProjectManager {
       modified: new Date().toISOString(),
       templates: { ...this.currentProject.templates, [id]: template },
     }
-    return this.commitProjectMutation(nextProject, () => {
+    return this.commitProjectMutation(nextProject, 'Create template', () => {
       this.search.rebuild(nextProject)
     })
   }
@@ -609,7 +648,7 @@ export class ProjectManager {
       modified: new Date().toISOString(),
       templates: { ...this.currentProject.templates, [id]: proposed },
     }
-    return this.commitProjectMutation(nextProject, () => {
+    return this.commitProjectMutation(nextProject, 'Edit template', () => {
       this.search.rebuild(nextProject)
     })
   }
@@ -635,7 +674,7 @@ export class ProjectManager {
         (n.templateId ?? null) === id ? { ...n, templateId: null, modified: now } : n
       ),
     }
-    return this.commitProjectMutation(nextProject, () => {
+    return this.commitProjectMutation(nextProject, 'Delete template', () => {
       this.search.rebuild(nextProject)
     })
   }
@@ -786,7 +825,7 @@ export class ProjectManager {
     // instead of rebuilding the whole index — keeps import cost O(import size),
     // not O(tree size). Mirrors nodeCreate/nodeUpdate/nodeMove; if a sync throws,
     // commitProjectMutation falls back to a full rebuild via restoreSearchIndex.
-    const committed = this.commitProjectMutation(nextProject, () => {
+    const committed = this.commitProjectMutation(nextProject, 'Import CSV', () => {
       const projectPath = nextProject.path!
       for (const node of newNodes) this.search.upsertNode(projectPath, node)
       for (const node of updatedNodeList) this.search.upsertNode(projectPath, node)
@@ -909,7 +948,7 @@ export class ProjectManager {
       templates: { ...this.currentProject.templates, ...out.templates },
       nodes: [...this.currentProject.nodes, ...newNodes],
     }
-    const committed = this.commitProjectMutation(nextProject, () => {
+    const committed = this.commitProjectMutation(nextProject, 'Import NetBox', () => {
       const projectPath = nextProject.path!
       for (const node of newNodes) this.search.upsertNode(projectPath, node)
     })
@@ -1004,7 +1043,7 @@ export class ProjectManager {
       ...(nextTemplates ? { templates: nextTemplates } : {}),
     }
 
-    return this.commitProjectMutation(nextProject, () => {
+    return this.commitProjectMutation(nextProject, 'Delete node', () => {
       this.search.deleteNodes(nextProject.path!, Array.from(toDelete))
       // Re-index unlinked survivors so search reflects the cleared references.
       if (unlinkKeysByNode.size > 0) {
@@ -1099,7 +1138,7 @@ export class ProjectManager {
     }
 
     const movedNode = nextProject.nodes.find(n => n.id === id)!
-    return this.commitProjectMutation(nextProject, () => {
+    return this.commitProjectMutation(nextProject, 'Move node', () => {
       this.search.upsertNode(nextProject.path!, movedNode)
     })
   }
@@ -1177,6 +1216,10 @@ export class ProjectManager {
   // ─── Snapshots / history ───────────────────────────────────────────────────
 
   async snapshotCreate(name: string): Promise<Result<Snapshot>> {
+    return this.withHistoryOperation(() => this.performSnapshotCreate(name))
+  }
+
+  private async performSnapshotCreate(name: string): Promise<Result<Snapshot>> {
     if (!this.currentProject) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
@@ -1627,6 +1670,10 @@ export class ProjectManager {
   }
 
   async snapshotRevert(request: SnapshotRevertRequest): Promise<Result<SnapshotRevertResult>> {
+    return this.withHistoryOperation(() => this.performSnapshotRevert(request))
+  }
+
+  private async performSnapshotRevert(request: SnapshotRevertRequest): Promise<Result<SnapshotRevertResult>> {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
@@ -1670,6 +1717,7 @@ export class ProjectManager {
         this.restoreSearchIndex(previousProject)
         return writeResult as Result<SnapshotRevertResult>
       }
+      this.edits.clear()
 
       const event: SnapshotTimelineEvent = {
         id: uuidv7(),
@@ -1699,6 +1747,10 @@ export class ProjectManager {
   }
 
   async recoveryPointApply(request: RecoveryPointApplyRequest): Promise<Result<RecoveryPointApplyResult>> {
+    return this.withHistoryOperation(() => this.performRecoveryPointApply(request))
+  }
+
+  private async performRecoveryPointApply(request: RecoveryPointApplyRequest): Promise<Result<RecoveryPointApplyResult>> {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
@@ -1741,6 +1793,7 @@ export class ProjectManager {
         this.restoreSearchIndex(previousProject)
         return writeResult as Result<RecoveryPointApplyResult>
       }
+      this.edits.clear()
 
       const event: SnapshotTimelineEvent = {
         id: uuidv7(),
@@ -1819,12 +1872,19 @@ export class ProjectManager {
 
   private commitProjectMutation(
     nextProject: Project,
+    label: string,
     syncSearch: () => void
   ): Result<Project> {
     const previousProject = this.currentProject
     if (!previousProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
     }
+
+    if (this.historyOperationInProgress) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
+    }
+    const edit = this.edits.prepare(previousProject, nextProject, label)
+    if (!edit) return ok(previousProject)
 
     try {
       syncSearch()
@@ -1835,6 +1895,7 @@ export class ProjectManager {
       return err(ErrorCode.SQLITE_CAPABILITY, `Failed to update search index: ${msg}`)
     }
 
+    this.edits.record(edit)
     this.currentProject = nextProject
     this.scheduleAutosave()
     return ok(nextProject)

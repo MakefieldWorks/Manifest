@@ -121,6 +121,12 @@ export interface Project {
   projectWarnings?: ProjectWarning[]
 }
 
+/** Session-only editing history, independent of immutable snapshots. */
+export interface EditHistoryState {
+  undoLabel: string | null
+  redoLabel: string | null
+}
+
 // ─── CSV import ─────────────────────────────────────────────────────────────────
 
 export type ImportPlacement = 'flat' | 'path'

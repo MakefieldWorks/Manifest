@@ -281,6 +281,17 @@ function registerIpcHandlers(): void {
     projectManager.saveProject()
   )
 
+  ipcMain.handle(IPC.PROJECT_UNDO, () => projectManager.undo())
+  ipcMain.handle(IPC.PROJECT_REDO, () => projectManager.redo())
+  ipcMain.handle(IPC.PROJECT_EDIT_HISTORY, () => ok(projectManager.editHistoryState()))
+  ipcMain.handle(IPC.TEXT_UNDO_REDO, (event, direction: unknown) => {
+    if (direction !== 'undo' && direction !== 'redo') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Invalid text editing command')
+    }
+    event.sender[direction]()
+    return ok(undefined)
+  })
+
   ipcMain.handle(IPC.PROJECT_GET_CURRENT, () => {
     const project = projectManager.getCurrent()
     return ok(project)

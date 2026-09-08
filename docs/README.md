@@ -21,6 +21,7 @@ Manifest is a local-first desktop app for managing structured, hierarchical proj
 | [UI_PRINCIPLES.md](UI_PRINCIPLES.md) | Visual and interaction principles for the renderer |
 | [TODOS.md](TODOS.md) | Active and deferred product/engineering work |
 | [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md) | Pilot-readiness dogfood checklist and import decision gate |
+| [UNDO_REDO.md](UNDO_REDO.md) | Project editing history, text undo, and snapshot/session boundaries |
 
 ---
 

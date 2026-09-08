@@ -125,8 +125,9 @@ export function buildAppMenuTemplate(options: AppMenuTemplateOptions): MenuItemC
   template.push({
     label: 'Edit',
     submenu: [
-      { role: 'undo' },
-      { role: 'redo' },
+      commandItem('project:undo', options.dispatch),
+      { ...commandItem('project:redo', options.dispatch),
+        accelerator: options.platform === 'win32' ? 'Control+Y' : MENU_COMMANDS['project:redo'].accelerator },
       separator(),
       { role: 'cut' },
       { role: 'copy' },
