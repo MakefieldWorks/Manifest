@@ -13,6 +13,7 @@
   import type { MergedTree } from '../../shared/merged-tree'
   import { computeSubtreeSummaries, templatesForNode } from '../../shared/merged-tree'
   import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
+  import type { BatchPropertyUpdateRequest } from '../../shared/batch-properties'
   import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
   import { flattenTree } from './lib/tree-rows'
   import { isTextEditing } from './lib/edit-focus'
@@ -21,6 +22,8 @@
   import DetailPane from './components/DetailPane.svelte'
   import MoveToDialog from './components/MoveToDialog.svelte'
   import DuplicateDialog from './components/DuplicateDialog.svelte'
+  import BatchSelectionPane from './components/BatchSelectionPane.svelte'
+  import BatchPropertyDialog from './components/BatchPropertyDialog.svelte'
   import TemplateManager from './components/TemplateManager.svelte'
   import ImportDialog from './components/ImportDialog.svelte'
   import RecoveryDialog from './components/RecoveryDialog.svelte'
@@ -76,7 +79,7 @@
 
   const canUndoProject = $derived.by(() => appState === 'open' && project !== null && !editingLocked &&
     !snapshotCreating && !snapshotComparing && !importDialogOpen && !templateManagerOpen &&
-    !duplicateNodeId && !moveToNodeId && !addingChildTo && !revertDialogSnapshotName && !recoveryDialogPoint)
+    !duplicateNodeId && !batchDialogOpen && !moveToNodeId && !addingChildTo && !revertDialogSnapshotName && !recoveryDialogPoint)
 
   async function applyUndoRedo(direction: 'undo' | 'redo') {
     if (!canUndoProject || !editHistory[direction === 'undo' ? 'undoLabel' : 'redoLabel']) return
@@ -109,6 +112,7 @@
 
   // Tree UI state
   let selectedId:  string | null = $state(null)
+  let selectedIds: Set<string> = $state(new Set())
   // When the user has a ghost selected in compare mode and leaves compare mode
   // (closing the snapshot pair), the ghost id can't survive in `selectedId`
   // because nothing in the live project resolves it. We stash it here so the
@@ -159,6 +163,7 @@
   let renameRequestId = $state(0)
 
   let moveToNodeId: string | null = $state(null)
+  let batchDialogOpen = $state(false)
 
   // Snapshot/history UI state
   let snapshotPanelOpen: boolean = $state(false)
@@ -266,6 +271,10 @@
     }
     return project.nodes.find((node) => node.id === selectedId) ?? null
   })
+
+  const selectedNodes = $derived.by(() =>
+    project ? project.nodes.filter(node => selectedIds.has(node.id)) : []
+  )
 
   const detailProject = $derived.by(() => {
     if (!project) return null
@@ -428,6 +437,10 @@
     // Ghost selections (issue #3) live in mergedTree.nodes, not project.nodes,
     // so don't clobber them just because the live project mutated.
     const isGhostSelection = selectedId?.startsWith('ghost:') ?? false
+    if (!isGhostSelection) {
+      const liveIds = new Set(p.nodes.map(node => node.id))
+      selectedIds = new Set([...selectedIds].filter(id => liveIds.has(id)))
+    }
     if (selectedId && !isGhostSelection && !p.nodes.find(n => n.id === selectedId)) {
       const root = p.nodes.find(n => n.parentId === null)
       setSelection(root?.id ?? null)
@@ -486,6 +499,7 @@
     importSummaryDismissed = false
     templateManagerOpen = false
     duplicateNodeId = null
+    batchDialogOpen = false
     moveToNodeId = null
     addingChildTo = null
     addingChildName = ''
@@ -528,10 +542,10 @@
   function buildMenuCommandState(): MenuCommandState {
     const state = createDisabledMenuCommandState()
     const hasOpenProject = appState === 'open' && project !== null
-    const projectBusy = duplicateNodeId !== null || undoRedoBusy || snapshotCreating || snapshotRestoringName !== null || recoveryApplyingId !== null
+    const projectBusy = duplicateNodeId !== null || batchDialogOpen || undoRedoBusy || snapshotCreating || snapshotRestoringName !== null || recoveryApplyingId !== null
     const canUseProject = hasOpenProject && !projectBusy
     const canEditProject = canUseProject && !editingLocked
-    const selectedLiveNode = canEditProject && selectedNode && !selectedId?.startsWith('ghost:')
+    const selectedLiveNode = canEditProject && selectedIds.size === 1 && selectedNode && !selectedId?.startsWith('ghost:')
       ? selectedNode
       : null
     const selectedEditableChild = selectedLiveNode !== null && selectedLiveNode.parentId !== null
@@ -833,12 +847,32 @@
    */
   function setSelection(id: string | null): void {
     selectedId = id
+    selectedIds = id ? new Set([id]) : new Set()
     stashedGhostSelection = null
   }
 
-  function handleSelect(id: string) {
+  function handleSelect(id: string, modifiers?: { toggle: boolean; range: boolean }) {
     selectedScrollAlign = 'auto'
-    setSelection(id)
+    if (compareMode || id.startsWith('ghost:') || (!modifiers?.toggle && !modifiers?.range)) {
+      setSelection(id)
+    } else if (modifiers.range && selectedId) {
+      const visibleIds = flatRows.filter(row => !row.id.startsWith('ghost:')).map(row => row.node.id)
+      const anchor = visibleIds.indexOf(selectedId)
+      const target = visibleIds.indexOf(id)
+      if (anchor >= 0 && target >= 0) {
+        const [start, end] = anchor < target ? [anchor, target] : [target, anchor]
+        selectedIds = new Set(visibleIds.slice(start, end + 1))
+        selectedId = id
+        stashedGhostSelection = null
+      } else setSelection(id)
+    } else {
+      const next = new Set(selectedIds)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      selectedIds = next
+      selectedId = next.has(id) ? id : [...next][next.size - 1] ?? null
+      stashedGhostSelection = null
+    }
     addingChildTo = null
   }
 
@@ -951,6 +985,22 @@
       setSelection(copy.id)
       selectedScrollAlign = 'center'
     }
+    return null
+  }
+
+  function openBatchPropertyDialog() {
+    if (editingLocked || selectedNodes.length < 2) return
+    batchDialogOpen = true
+  }
+
+  async function confirmBatchPropertyUpdate(request: BatchPropertyUpdateRequest): Promise<string | null> {
+    if (!project || editingLocked || selectedNodes.length < 2) return 'The selection is no longer available.'
+    const result = await window.api.node.batchUpdateProperties(request)
+    if (!result.ok) return result.error.message
+    applyProject(result.data)
+    markWorkingCopyChanged()
+    batchDialogOpen = false
+    showToast(`Updated ${request.nodeIds.length} selected nodes`)
     return null
   }
 
@@ -1301,9 +1351,11 @@
       stashedGhostSelection = selectedId
       const root = project?.nodes.find(node => node.parentId === null)
       selectedId = root?.id ?? null
+      selectedIds = selectedId ? new Set([selectedId]) : new Set()
     } else if (project && selectedId && !project.nodes.find(node => node.id === selectedId)) {
       const root = project.nodes.find(node => node.parentId === null)
       selectedId = root?.id ?? null
+      selectedIds = selectedId ? new Set([selectedId]) : new Set()
     }
   }
 
@@ -1352,6 +1404,7 @@
       }
       compareExpanded = new Set([...expandedIds, ...ancestors])
       compareMode = true
+      selectedIds = selectedId ? new Set([selectedId]) : new Set()
       clearSearch()  // search is a browse-mode aid; don't carry it into compare
 
       // Restore a stashed ghost selection if this snapshot pair still
@@ -1364,6 +1417,7 @@
       if (stashedGhostSelection) {
         if (result.data.nodes.some(n => n.id === stashedGhostSelection)) {
           selectedId = stashedGhostSelection
+          selectedIds = new Set([stashedGhostSelection])
           // Expand ancestors so the restored ghost is visible.
           const ghostAncestors = getAncestorIds(stashedGhostSelection, result.data.nodes)
           compareExpanded = new Set([...compareExpanded, ...ghostAncestors, stashedGhostSelection])
@@ -1528,6 +1582,15 @@
 <!-- ─── Move-to dialog ────────────────────────────────────────────────────── -->
 {#if duplicateNode && project}
   <DuplicateDialog node={duplicateNode} nodes={project.nodes} onConfirm={confirmDuplicate} onCancel={() => { duplicateNodeId = null }} />
+{/if}
+
+{#if batchDialogOpen && project && selectedNodes.length > 1}
+  <BatchPropertyDialog
+    {project}
+    nodes={selectedNodes}
+    onConfirm={confirmBatchPropertyUpdate}
+    onCancel={() => { batchDialogOpen = false }}
+  />
 {/if}
 
 {#if moveToNodeId && project}
@@ -1967,6 +2030,7 @@
                   lensExpandedFolds = next
                 }}
                 {selectedId}
+                {selectedIds}
                 selectedScrollAlign={selectedScrollAlign}
                 onSelect={handleSelect}
                 onToggle={handleToggle}
@@ -2052,22 +2116,32 @@
       <!-- ── Right pane: detail ─────────────────────────────────────────── -->
       <div class="flex-1 overflow-hidden" data-testid="detail-pane">
         {#if detailProject}
-        <DetailPane
-          node={selectedNode}
-          project={detailProject}
-          {renameRequestId}
-          readOnly={editingLocked}
-          readOnlyReason={compareMode && mergedTree
-            ? `Viewing ${snapshotRefLabel(mergedTree.fromSnapshot)} -> ${snapshotRefLabel(mergedTree.toSnapshot)}. Snapshots are read-only; exit compare to edit the current project.`
-            : snapshotRestoringName
-              ? 'Reverting current project — editing will resume when revert finishes.'
-              : recoveryApplyingId
-                ? 'Applying recovery point — editing will resume when recovery finishes.'
-                : undefined}
-          onUpdate={handleNodeUpdate}
-          onPromoteField={handlePromoteField}
-          onError={showToast}
-        />
+          {#if selectedNodes.length > 1 && !compareMode}
+            <BatchSelectionPane
+              nodes={selectedNodes}
+              primaryName={selectedNode?.name ?? selectedNodes[0].name}
+              readOnly={editingLocked}
+              onEdit={openBatchPropertyDialog}
+              onClear={() => setSelection(selectedId)}
+            />
+          {:else}
+            <DetailPane
+              node={selectedNode}
+              project={detailProject}
+              {renameRequestId}
+              readOnly={editingLocked}
+              readOnlyReason={compareMode && mergedTree
+                ? `Viewing ${snapshotRefLabel(mergedTree.fromSnapshot)} -> ${snapshotRefLabel(mergedTree.toSnapshot)}. Snapshots are read-only; exit compare to edit the current project.`
+                : snapshotRestoringName
+                  ? 'Reverting current project — editing will resume when revert finishes.'
+                  : recoveryApplyingId
+                    ? 'Applying recovery point — editing will resume when recovery finishes.'
+                    : undefined}
+              onUpdate={handleNodeUpdate}
+              onPromoteField={handlePromoteField}
+              onError={showToast}
+            />
+          {/if}
         {/if}
       </div>
 

@@ -2,6 +2,7 @@
 
 ## Completed
 
+- Multi-select and atomic batch property editing with mixed-value handling, an exact affected-node preview, validation across the full selection, and one-step Undo/Redo. **Implemented:** 2026-09-08
 - Duplicate nodes/subtrees beside their source with name validation, shared templates, remapped internal references, and one-step Undo/Redo. **Implemented:** 2026-09-08
 - Project-level Undo/Redo for node edits, template changes, and CSV/NetBox imports, with native text undo kept separate. Session and snapshot boundaries are documented in `docs/UNDO_REDO.md`. **Implemented:** 2026-09-08
 - Unified search-in-tree: the visible search box filters the hierarchy to matching nodes plus ancestors, highlights matches in-tree, shows property-match snippets inline, and uses Enter/Shift+Enter/Escape for cycling and clearing. Typing while the tree is focused feeds the same search box instead of opening a hidden mode. **Updated:** 2026-06-22

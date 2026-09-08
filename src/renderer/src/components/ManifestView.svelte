@@ -36,7 +36,8 @@
     expandedFolds?: Set<string>
     onFoldExpand?: (foldId: string) => void
     selectedId?: string | null
-    onSelect?: (id: string) => void
+    selectedIds?: Set<string>
+    onSelect?: (id: string, modifiers?: { toggle: boolean; range: boolean }) => void
     onToggle?: (id: string) => void
     onAddChild?: (parentId: string) => void
     onDuplicate?: (id: string) => void
@@ -66,6 +67,7 @@
     expandedFolds = new Set<string>(),
     onFoldExpand,
     selectedId = null,
+    selectedIds = new Set<string>(),
     onSelect,
     onToggle,
     onAddChild,
@@ -614,6 +616,7 @@
 <div
   bind:this={containerEl}
   role="tree"
+  aria-multiselectable={mode === 'browse'}
   aria-label="Project tree"
   class="h-full overflow-y-auto overscroll-contain bg-white focus:outline-none"
   tabindex="0"
@@ -649,7 +652,7 @@
                active row above its neighbor so a hover fill cannot cover its outer focus ring. -->
           <div
             class="absolute top-0 left-0 right-0 px-1
-                   {item.kind === 'row' && (selectedId === item.row.node.id || focusedIndex === virt.index) ? 'z-10' : ''}"
+                   {item.kind === 'row' && (selectedIds.has(item.row.node.id) || selectedId === item.row.node.id || focusedIndex === virt.index) ? 'z-10' : ''}"
             style:transform="translateY({virt.start}px)"
             style:height="{virt.size}px"
           >
@@ -668,12 +671,12 @@
             {:else}
               <TreeRow
                 row={item.row}
-                selected={selectedId === item.row.node.id}
+                selected={selectedIds.has(item.row.node.id) || selectedId === item.row.node.id}
                 focused={focusedIndex === virt.index}
                 matched={matchedIds.has(item.row.node.id)}
                 {matchQuery}
                 matchDetail={matchDetails.get(item.row.node.id)}
-                onSelect={(id) => onSelect?.(id)}
+                onSelect={(id, modifiers) => onSelect?.(id, modifiers)}
                 onToggle={(id) => onToggle?.(id)}
                 onContextMenu={handleRowContextMenu}
               />

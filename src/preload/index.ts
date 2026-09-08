@@ -44,6 +44,7 @@ const api: ManifestAPI = {
 
   node: {
     duplicate: (id, name) => ipcRenderer.invoke(IPC.NODE_DUPLICATE, { id, name }),
+    batchUpdateProperties: (request) => ipcRenderer.invoke(IPC.NODE_BATCH_UPDATE_PROPERTIES, request),
     create: (parentId, name, templateId) =>
       ipcRenderer.invoke(IPC.NODE_CREATE, { parentId, name, templateId }),
     update: (id, changes) =>

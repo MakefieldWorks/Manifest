@@ -25,6 +25,7 @@ import { join } from 'path'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { collectSubtreeIds } from '../shared/subtree'
+import { planBatchPropertyUpdate, type BatchPropertyUpdateRequest } from '../shared/batch-properties'
 import type {
   Project,
   RecoveryPointApplyRequest,
@@ -514,6 +515,40 @@ export class ProjectManager {
     }
     return this.commitProjectMutation(nextProject, 'Duplicate subtree', () => {
       for (const node of copies) this.search.upsertNode(nextProject.path!, node)
+    })
+  }
+
+  // Apply one property change to an explicit node set as one atomic, undoable edit.
+  nodeBatchUpdateProperties(request: BatchPropertyUpdateRequest): Result<Project> {
+    const project = this.currentProject
+    if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    if (this.historyOperationInProgress) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
+    }
+    if (!request || typeof request !== 'object') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Invalid batch property update')
+    }
+    const plan = planBatchPropertyUpdate(project, request)
+    if (!plan.valid) return err(ErrorCode.VALIDATION_FAILED, plan.message)
+    if (plan.changes.length === 0) return ok(project)
+
+    const now = new Date().toISOString()
+    const changesById = new Map(plan.changes.map(change => [change.nodeId, change]))
+    const updatedNodes: ManifestNode[] = []
+    const key = request.key.trim()
+    const nodes = project.nodes.map(node => {
+      const change = changesById.get(node.id)
+      if (!change) return node
+      const properties = { ...node.properties }
+      if (change.after === undefined) delete properties[key]
+      else properties[key] = change.after
+      const updated = { ...node, properties, modified: now }
+      updatedNodes.push(updated)
+      return updated
+    })
+    const nextProject = { ...project, modified: now, nodes }
+    return this.commitProjectMutation(nextProject, 'Batch edit properties', () => {
+      for (const node of updatedNodes) this.search.upsertNode(nextProject.path!, node)
     })
   }
 

@@ -36,6 +36,7 @@ import {
 } from './final-save'
 import type { Project, Result, NodeTemplate, ImportMapping, NetboxImportOptions } from '../shared/types'
 import type { ReportFormat } from '../shared/report'
+import type { BatchPropertyUpdateRequest } from '../shared/batch-properties'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -305,6 +306,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.NODE_DUPLICATE, (_, { id, name }: { id: string; name: string }) =>
     projectManager.nodeDuplicate(id, name)
+  )
+
+  ipcMain.handle(IPC.NODE_BATCH_UPDATE_PROPERTIES, (_, request: BatchPropertyUpdateRequest) =>
+    projectManager.nodeBatchUpdateProperties(request)
   )
 
   ipcMain.handle(IPC.NODE_CREATE, (
