@@ -497,6 +497,9 @@ export class ProjectManager {
         modified: now,
       }
     })
+    // Normalize the parent's complete sibling order around the insertion. This
+    // matches move/delete semantics and also repairs gaps or ties tolerated in
+    // hand-edited project files.
     const siblingOrders = new Map(siblings.map((node, index) => [node.id, index < insertionOrder ? index : index + 1]))
     const nextProject: Project = {
       ...project,

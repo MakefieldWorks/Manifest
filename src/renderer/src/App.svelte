@@ -33,7 +33,14 @@
   let duplicateNodeId = $state<string | null>(null)
   const duplicateNode = $derived.by(() => project?.nodes.find(node => node.id === duplicateNodeId))
 
-  function updateEditFocus() { textEditing = isTextEditing(document.activeElement) }
+  function updateEditFocus(event: FocusEvent) {
+    const sync = () => { textEditing = isTextEditing(document.activeElement) }
+    // A removed dialog input can still be document.activeElement while its
+    // focusout event is dispatching. Re-read after focus settles so native
+    // edit commands do not remain disabled after the dialog closes.
+    if (event.type === 'focusout') queueMicrotask(sync)
+    else sync()
+  }
 
   function handleEditKeydown(event: KeyboardEvent) {
     if (event.isComposing || event.altKey || isTextEditing(document.activeElement)) return
@@ -529,6 +536,9 @@
       : null
     const selectedEditableChild = selectedLiveNode !== null && selectedLiveNode.parentId !== null
     const compareLoaded = hasOpenProject && compareMode && mergedTree !== null
+    const canMutateSelectedChild = Boolean(selectedEditableChild) && !textEditing &&
+      !importDialogOpen && !templateManagerOpen && !moveToNodeId && !addingChildTo &&
+      !snapshotComparing && !revertDialogSnapshotName && !recoveryDialogPoint
 
     state['project:undo'] = textEditing || (canUndoProject && editHistory.undoLabel !== null)
     state['project:redo'] = textEditing || (canUndoProject && editHistory.redoLabel !== null)
@@ -546,9 +556,9 @@
     state['report:exportCsv'] = compareLoaded && !projectBusy
     state['node:addChild'] = selectedLiveNode !== null
     state['node:rename'] = selectedLiveNode !== null
-    state['node:duplicate'] = Boolean(selectedEditableChild) && !importDialogOpen && !templateManagerOpen && !moveToNodeId && !addingChildTo && !snapshotComparing && !revertDialogSnapshotName && !recoveryDialogPoint
-    state['node:moveTo'] = Boolean(selectedEditableChild)
-    state['node:delete'] = Boolean(selectedEditableChild)
+    state['node:duplicate'] = canMutateSelectedChild
+    state['node:moveTo'] = canMutateSelectedChild
+    state['node:delete'] = canMutateSelectedChild
     state['history:reindex'] = canUseProject
 
     return state

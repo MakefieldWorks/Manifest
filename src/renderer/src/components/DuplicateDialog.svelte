@@ -72,8 +72,8 @@
       {#if !validation.valid}
         <p id="duplicate-validation" class="text-xs text-red-600" data-testid="duplicate-validation">{validation.message}</p>
       {/if}
-      <p class="text-xs text-stone-500">All property values are copied, including serial numbers. Templates stay shared with the original.</p>
-      <p class="text-xs text-stone-500">References within the copy point to copied nodes. References outside it keep their existing targets.</p>
+      <p class="text-xs text-stone-500">All property values are copied, including serial numbers. Templates and their defaults stay shared with the original.</p>
+      <p class="text-xs text-stone-500">Typed reference values within the copy point to copied nodes. External references keep their existing targets.</p>
       {#if error}<p role="alert" class="text-xs text-red-600" data-testid="duplicate-error">{error}</p>{/if}
     </div>
     <div class="flex justify-end gap-2 border-t border-stone-100 px-5 py-3">

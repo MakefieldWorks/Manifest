@@ -88,6 +88,20 @@ test('keyboard shortcut opens a focused modal and Enter creates the copy', async
   await createLab(appPage, electronApp, workspaceDir)
   await addChild(appPage, electronApp, 'Device')
   await appPage.locator('[data-testid="tree-node"]', { hasText: 'Device' }).click()
+  const enabled = () => electronApp.evaluate(({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('node:duplicate')!.enabled)
+  await clickNativeMenuCommand(electronApp, 'node:rename')
+  await expect(appPage.getByTestId('name-input')).toBeFocused()
+  await expect.poll(enabled).toBe(false)
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getFocusedWindow()!
+    const modifiers = process.platform === 'darwin' ? ['meta'] : ['control']
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D', modifiers })
+    win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D', modifiers })
+  })
+  await expect(appPage.getByTestId('duplicate-dialog')).toHaveCount(0)
+  await appPage.getByTestId('name-input').press('Escape')
+  await appPage.locator('[data-testid="tree-node"]', { hasText: 'Device' }).focus()
+  await expect.poll(enabled).toBe(true)
   await electronApp.evaluate(({ BrowserWindow }) => {
     const win = BrowserWindow.getFocusedWindow()!
     const modifiers = process.platform === 'darwin' ? ['meta'] : ['control']
