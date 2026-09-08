@@ -39,6 +39,7 @@ import type {
   NodeHistoryEntry,
   NodeHistoryIndexStatus,
   SearchResult,
+  SearchResultPage,
   Result,
   Snapshot,
   DiffEntry,
@@ -1255,19 +1256,25 @@ export class ProjectManager {
 
   // ─── Search ─────────────────────────────────────────────────────────────────
 
-  // Linear scan over in-memory nodes. Matches name + property values.
-  // Phase 3 will replace this with a SQLite FTS5 index.
+  // Compatibility entry point for internal callers that only need the first page.
   searchNodes(query: string): Result<SearchResult[]> {
-    if (!this.currentProject) return ok([])
+    const page = this.searchNodesPage(query)
+    return page.ok ? ok(page.data.results) : page
+  }
+
+  searchNodesPage(query: string, offset = 0, limit = 50): Result<SearchResultPage> {
+    const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0
+    if (!this.currentProject) return ok({ results: [], total: 0, offset: safeOffset, hasMore: false })
 
     const q = query.trim().toLowerCase()
-    if (!q) return ok([])
+    if (!q) return ok({ results: [], total: 0, offset: safeOffset, hasMore: false })
 
     const nodeMap = new Map(this.currentProject.nodes.map(n => [n.id, n]))
     const project = this.currentProject
 
     try {
-      const results = this.search.query(project.path!, q)
+      const page = this.search.queryPage(project.path!, q, offset, limit)
+      const results = page.hits
         .reduce<SearchResult[]>((acc, hit) => {
           const node = nodeMap.get(hit.nodeId)
           if (!node) return acc
@@ -1282,7 +1289,7 @@ export class ProjectManager {
           return acc
         }, [])
 
-      return ok(results)
+      return ok({ results, total: page.total, offset: page.offset, hasMore: page.hasMore })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.warn('search query failed; attempting index rebuild', {
@@ -1299,7 +1306,8 @@ export class ProjectManager {
       }
 
       try {
-        const retried = this.search.query(project.path!, q)
+        const page = this.search.queryPage(project.path!, q, offset, limit)
+        const retried = page.hits
           .reduce<SearchResult[]>((acc, hit) => {
             const node = nodeMap.get(hit.nodeId)
             if (!node) return acc
@@ -1314,7 +1322,7 @@ export class ProjectManager {
             return acc
           }, [])
 
-        return ok(retried)
+        return ok({ results: retried, total: page.total, offset: page.offset, hasMore: page.hasMore })
       } catch (retryError: unknown) {
         const retryMsg = retryError instanceof Error ? retryError.message : String(retryError)
         this.logger.error('search query failed after rebuild', { path: project.path, error: retryMsg })

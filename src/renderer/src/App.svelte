@@ -124,8 +124,11 @@
   let expandedIds: Set<string>   = $state(new Set())
   let searchQuery: string        = $state('')
   let searchResults: SearchResult[] = $state([])
+  let searchTotal: number = $state(0)
+  let searchHasMore: boolean = $state(false)
   let searchResultIndex: number = $state(0)
   let searching:   boolean       = $state(false)
+  let searchLoadingMore: boolean = $state(false)
   let selectedScrollAlign: 'auto' | 'center' = $state('auto')
   let searchInputEl: HTMLInputElement | null = $state(null)
 
@@ -1229,6 +1232,8 @@
   // ─── Search ───────────────────────────────────────────────────────────────
 
   let searchTimer: ReturnType<typeof setTimeout> | null = null
+  let searchRequestId = 0
+  const searchPageSize = 50
 
   function revealSearchResult(index = searchResultIndex): void {
     const result = searchResults[index]
@@ -1240,32 +1245,64 @@
 
   function cycleSearchResult(reverse: boolean): void {
     if (searchResults.length === 0) return
+    if (!reverse && searchResultIndex === searchResults.length - 1 && searchHasMore) {
+      void loadMoreSearchResults(true)
+      return
+    }
     const next = cycleIndex(searchResultIndex, searchResults.length, reverse)
     revealSearchResult(next)
   }
 
   function runSearch(query: string): void {
     if (searchTimer) clearTimeout(searchTimer)
+    const requestId = ++searchRequestId
     if (!query.trim()) {
       searchResults = []
+      searchTotal = 0
+      searchHasMore = false
       searchResultIndex = 0
       searching = false
+      searchLoadingMore = false
       return
     }
     searching = true
+    searchLoadingMore = false
     searchResults = []
+    searchTotal = 0
+    searchHasMore = false
     searchResultIndex = 0
     searchTimer = setTimeout(async () => {
-      const result = await window.api.search.query(query)
-      if (query !== searchQuery) return
+      const result = await window.api.search.query(query, 0, searchPageSize)
+      if (requestId !== searchRequestId || query !== searchQuery) return
       searching = false
       if (result.ok) {
-        searchResults = result.data
+        searchResults = result.data.results
+        searchTotal = result.data.total
+        searchHasMore = result.data.hasMore
         searchResultIndex = 0
         await tick()
         revealSearchResult(0)
       }
     }, 200)
+  }
+
+  async function loadMoreSearchResults(selectFirstNew = false): Promise<void> {
+    if (searching || searchLoadingMore || !searchHasMore) return
+    const query = searchQuery
+    const requestId = searchRequestId
+    const offset = searchResults.length
+    searchLoadingMore = true
+    const result = await window.api.search.query(query, offset, searchPageSize)
+    if (requestId !== searchRequestId || query !== searchQuery) return
+    searchLoadingMore = false
+    if (!result.ok || result.data.offset !== offset) return
+    searchResults = [...searchResults, ...result.data.results]
+    searchTotal = result.data.total
+    searchHasMore = result.data.hasMore
+    if (selectFirstNew && result.data.results.length > 0) {
+      await tick()
+      revealSearchResult(offset)
+    }
   }
 
   function handleSearchInput(e: Event) {
@@ -1297,10 +1334,14 @@
 
   function clearSearch() {
     if (searchTimer) clearTimeout(searchTimer)
+    searchRequestId++
     searchQuery = ''
     searchResults = []
+    searchTotal = 0
+    searchHasMore = false
     searchResultIndex = 0
     searching = false
+    searchLoadingMore = false
   }
 
   // ─── Snapshots / history ────────────────────────────────────────────────
@@ -2019,13 +2060,22 @@
                 {:else if searchResults.length === 0}
                   No results for "{searchQuery}"
                 {:else}
-                  {searchResultIndex + 1}/{searchResults.length} result{searchResults.length === 1 ? '' : 's'} for "{searchQuery}"
+                  Result {searchResultIndex + 1} of {searchTotal} for "{searchQuery}"
+                  {#if searchResults.length < searchTotal} · {searchResults.length} loaded{/if}
                 {/if}
               </p>
               {#if searchResults.length > 1}
                 <span class="shrink-0 text-[10px] text-stone-400">Enter next · Shift+Enter prev</span>
               {/if}
             </div>
+            {#if searchHasMore}
+              <button
+                class="mt-1 text-xs font-medium text-stone-600 hover:text-stone-900 disabled:text-stone-300"
+                disabled={searchLoadingMore}
+                onclick={() => { void loadMoreSearchResults() }}
+                data-testid="search-load-more"
+              >{searchLoadingMore ? 'Loading…' : `Load more results (${searchResults.length} of ${searchTotal})`}</button>
+            {/if}
           {/if}
         </div>
 

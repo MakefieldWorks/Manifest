@@ -4,6 +4,7 @@ import { join } from 'path'
 import type { ManifestNode, Project } from '../shared/types'
 
 const SEARCH_RESULT_LIMIT = 50
+const MAX_SEARCH_RESULT_LIMIT = 200
 
 interface SearchRow {
   nodeId: string
@@ -17,6 +18,13 @@ export interface SearchIndexHit {
   nodeName: string
   matchField: 'name' | 'property'
   snippet: string
+}
+
+export interface SearchIndexPage {
+  hits: SearchIndexHit[]
+  total: number
+  offset: number
+  hasMore: boolean
 }
 
 export class SearchIndexService {
@@ -82,16 +90,29 @@ export class SearchIndexService {
   }
 
   query(projectPath: string, query: string, limit = SEARCH_RESULT_LIMIT): SearchIndexHit[] {
+    return this.queryPage(projectPath, query, 0, limit).hits
+  }
+
+  queryPage(
+    projectPath: string,
+    query: string,
+    offset = 0,
+    limit = SEARCH_RESULT_LIMIT,
+  ): SearchIndexPage {
     const db = this.requireDatabase(projectPath)
     const trimmed = query.trim()
-    if (!trimmed) return []
+    const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0
+    const safeLimit = Number.isFinite(limit)
+      ? Math.max(1, Math.min(MAX_SEARCH_RESULT_LIMIT, Math.floor(limit)))
+      : SEARCH_RESULT_LIMIT
+    if (!trimmed) return { hits: [], total: 0, offset: safeOffset, hasMore: false }
 
     const hits = new Map<string, SearchRow>()
     const queryTokens = tokenize(trimmed)
     const ftsQuery = buildFtsQuery(queryTokens)
 
     if (ftsQuery) {
-      const ranked = db.prepare<[string, number], SearchRow>(`
+      const ranked = db.prepare<[string], SearchRow>(`
         SELECT
           node_id AS nodeId,
           node_name AS nodeName,
@@ -100,39 +121,37 @@ export class SearchIndexService {
         FROM node_search
         WHERE node_search MATCH ?
         ORDER BY rank
-        LIMIT ?
-      `).all(ftsQuery, limit)
+      `).all(ftsQuery)
 
       for (const row of ranked) {
         hits.set(row.nodeId, row)
       }
     }
 
-    if (hits.size < limit) {
-      const pattern = `%${escapeLike(trimmed.toLowerCase())}%`
-      const fallback = db.prepare<[string, string, number], Omit<SearchRow, 'rank'>>(`
-        SELECT
-          node_id AS nodeId,
-          node_name AS nodeName,
-          properties_text AS propertiesText
-        FROM node_search
-        WHERE (
-          lower(node_name) LIKE ? ESCAPE '\\'
-          OR lower(properties_text) LIKE ? ESCAPE '\\'
-        )
-        LIMIT ?
-      `).all(pattern, pattern, limit)
+    const pattern = `%${escapeLike(trimmed.toLowerCase())}%`
+    const fallback = db.prepare<[string, string], Omit<SearchRow, 'rank'>>(`
+      SELECT
+        node_id AS nodeId,
+        node_name AS nodeName,
+        properties_text AS propertiesText
+      FROM node_search
+      WHERE (
+        lower(node_name) LIKE ? ESCAPE '\\'
+        OR lower(properties_text) LIKE ? ESCAPE '\\'
+      )
+    `).all(pattern, pattern)
 
-      for (const row of fallback) {
-        if (!hits.has(row.nodeId)) {
-          hits.set(row.nodeId, { ...row, rank: 1000 + hits.size })
-        }
+    for (const row of fallback) {
+      if (!hits.has(row.nodeId)) {
+        hits.set(row.nodeId, { ...row, rank: 1000 })
       }
     }
 
-    return Array.from(hits.values())
-      .sort((a, b) => a.rank - b.rank || a.nodeName.localeCompare(b.nodeName))
-      .slice(0, limit)
+    const ordered = Array.from(hits.values())
+      .sort((a, b) => a.rank - b.rank || a.nodeName.localeCompare(b.nodeName) || a.nodeId.localeCompare(b.nodeId))
+    const total = ordered.length
+    const pageRows = ordered.slice(safeOffset, safeOffset + safeLimit)
+    const pageHits = pageRows
       .map((row) => {
         const matchField = detectMatchField(row.nodeName, row.propertiesText, trimmed, queryTokens)
         return {
@@ -144,6 +163,13 @@ export class SearchIndexService {
             : extractSnippet(row.propertiesText, trimmed),
         }
       })
+
+    return {
+      hits: pageHits,
+      total,
+      offset: safeOffset,
+      hasMore: safeOffset + pageHits.length < total,
+    }
   }
 
   private withFreshDatabase(projectPath: string, seed: (db: Database.Database) => void): void {

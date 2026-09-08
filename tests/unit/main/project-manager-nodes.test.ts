@@ -382,6 +382,31 @@ describe('searchNodes', () => {
     expect(result.data.some(r => r.nodeName === 'Oscilloscope')).toBe(true)
   })
 
+  it('pages through every match with an exact total and stable boundaries', () => {
+    for (let index = 1; index <= 57; index++) {
+      expect(manager.nodeCreate('root-id', `Inventory Device ${String(index).padStart(2, '0')}`).ok).toBe(true)
+    }
+
+    const first = manager.searchNodesPage('Inventory Device', 0, 50)
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    expect(first.data.total).toBe(57)
+    expect(first.data.results).toHaveLength(50)
+    expect(first.data.offset).toBe(0)
+    expect(first.data.hasMore).toBe(true)
+
+    const second = manager.searchNodesPage('Inventory Device', 50, 50)
+    expect(second.ok).toBe(true)
+    if (!second.ok) return
+    expect(second.data.total).toBe(57)
+    expect(second.data.results).toHaveLength(7)
+    expect(second.data.offset).toBe(50)
+    expect(second.data.hasMore).toBe(false)
+
+    const allIds = [...first.data.results, ...second.data.results].map(result => result.nodeId)
+    expect(new Set(allIds).size).toBe(57)
+  })
+
   it('returns empty array for no match', () => {
     const result = manager.searchNodes('xyzzy-no-match')
     expect(result.ok).toBe(true)

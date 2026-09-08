@@ -411,6 +411,13 @@ export interface SearchResult {
   snippet: string
 }
 
+export interface SearchResultPage {
+  results: SearchResult[]
+  total: number
+  offset: number
+  hasMore: boolean
+}
+
 export interface GitStatus {
   available: boolean
   version: string | null
