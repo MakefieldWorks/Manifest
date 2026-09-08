@@ -25,7 +25,11 @@ import { join } from 'path'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { collectSubtreeIds } from '../shared/subtree'
-import { planBatchPropertyUpdate, type BatchPropertyUpdateRequest } from '../shared/batch-properties'
+import {
+  planBatchPropertyUpdate,
+  type BatchPropertyUpdateRequest,
+  type BatchPropertyUpdateResult,
+} from '../shared/batch-properties'
 import type {
   Project,
   RecoveryPointApplyRequest,
@@ -519,7 +523,7 @@ export class ProjectManager {
   }
 
   // Apply one property change to an explicit node set as one atomic, undoable edit.
-  nodeBatchUpdateProperties(request: BatchPropertyUpdateRequest): Result<Project> {
+  nodeBatchUpdateProperties(request: BatchPropertyUpdateRequest): Result<BatchPropertyUpdateResult> {
     const project = this.currentProject
     if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
     if (this.historyOperationInProgress) {
@@ -530,7 +534,7 @@ export class ProjectManager {
     }
     const plan = planBatchPropertyUpdate(project, request)
     if (!plan.valid) return err(ErrorCode.VALIDATION_FAILED, plan.message)
-    if (plan.changes.length === 0) return ok(project)
+    if (plan.changes.length === 0) return ok({ project, changesApplied: 0 })
 
     const now = new Date().toISOString()
     const changesById = new Map(plan.changes.map(change => [change.nodeId, change]))
@@ -547,9 +551,12 @@ export class ProjectManager {
       return updated
     })
     const nextProject = { ...project, modified: now, nodes }
-    return this.commitProjectMutation(nextProject, 'Batch edit properties', () => {
+    const committed = this.commitProjectMutation(nextProject, 'Batch edit properties', () => {
       for (const node of updatedNodes) this.search.upsertNode(nextProject.path!, node)
     })
+    return committed.ok
+      ? ok({ project: committed.data, changesApplied: plan.changes.length })
+      : committed
   }
 
   // Update a node's name, properties, and/or template binding.

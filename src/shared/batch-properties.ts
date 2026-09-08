@@ -23,6 +23,11 @@ export interface BatchPropertyChange {
   after?: PropertyValue
 }
 
+export interface BatchPropertyUpdateResult {
+  project: Project
+  changesApplied: number
+}
+
 export type BatchPropertyPlan =
   | { valid: true; changes: BatchPropertyChange[] }
   | { valid: false; message: string; changes: [] }
@@ -63,13 +68,24 @@ export function planBatchPropertyUpdate(
     selected.push(node)
   }
 
+  // When any selected template types this key, use that same field type for
+  // freeform destinations too. One batch input must not silently become a
+  // number on one node and a string on another.
+  const selectedFields = selected.flatMap(node => {
+    const field = templateFields(node.templateId ? project.templates?.[node.templateId] : undefined)[key]
+    return field ? [field] : []
+  })
+  const selectedTypes = new Set(selectedFields.map(field => field.type))
+  if (selectedTypes.size > 1) return invalid(`Templates define “${key}” with different types.`)
+  const sharedField = selectedFields[0]
+
   const changes: BatchPropertyChange[] = []
   for (const node of selected) {
     const before = node.properties[key]
     let after: PropertyValue | undefined
     if (!request.clear) {
       const raw = request.value
-      const field = templateFields(node.templateId ? project.templates?.[node.templateId] : undefined)[key]
+      const field = templateFields(node.templateId ? project.templates?.[node.templateId] : undefined)[key] ?? sharedField
       if (field) {
         const coerced = coercePropertyValue(raw, field)
         if (!coerced.valid) return invalid(`${node.name}: ${coerced.message ?? `Invalid value for “${key}”`}`)

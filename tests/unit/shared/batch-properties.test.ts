@@ -37,7 +37,7 @@ describe('batch property planning', () => {
       valid: true,
       changes: [
         { nodeId: 'a', nodeName: 'A', before: 4, after: 8 },
-        { nodeId: 'b', nodeName: 'B', before: undefined, after: '8' },
+        { nodeId: 'b', nodeName: 'B', before: undefined, after: 8 },
       ],
     })
   })

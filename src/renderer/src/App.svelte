@@ -113,6 +113,8 @@
   // Tree UI state
   let selectedId:  string | null = $state(null)
   let selectedIds: Set<string> = $state(new Set())
+  let selectionRecency: string[] = $state([])
+  let selectionAnchorId: string | null = $state(null)
   // When the user has a ghost selected in compare mode and leaves compare mode
   // (closing the snapshot pair), the ghost id can't survive in `selectedId`
   // because nothing in the live project resolves it. We stash it here so the
@@ -440,6 +442,8 @@
     if (!isGhostSelection) {
       const liveIds = new Set(p.nodes.map(node => node.id))
       selectedIds = new Set([...selectedIds].filter(id => liveIds.has(id)))
+      selectionRecency = selectionRecency.filter(id => liveIds.has(id))
+      if (selectionAnchorId && !liveIds.has(selectionAnchorId)) selectionAnchorId = null
     }
     if (selectedId && !isGhostSelection && !p.nodes.find(n => n.id === selectedId)) {
       const root = p.nodes.find(n => n.parentId === null)
@@ -848,6 +852,8 @@
   function setSelection(id: string | null): void {
     selectedId = id
     selectedIds = id ? new Set([id]) : new Set()
+    selectionRecency = id ? [id] : []
+    selectionAnchorId = id
     stashedGhostSelection = null
   }
 
@@ -857,20 +863,29 @@
       setSelection(id)
     } else if (modifiers.range && selectedId) {
       const visibleIds = flatRows.filter(row => !row.id.startsWith('ghost:')).map(row => row.node.id)
-      const anchor = visibleIds.indexOf(selectedId)
+      const anchor = visibleIds.indexOf(selectionAnchorId ?? selectedId)
       const target = visibleIds.indexOf(id)
       if (anchor >= 0 && target >= 0) {
         const [start, end] = anchor < target ? [anchor, target] : [target, anchor]
         selectedIds = new Set(visibleIds.slice(start, end + 1))
         selectedId = id
+        selectionRecency = [...selectionRecency.filter(candidate => selectedIds.has(candidate) && candidate !== id), id]
         stashedGhostSelection = null
       } else setSelection(id)
     } else {
       const next = new Set(selectedIds)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+        selectionRecency = selectionRecency.filter(candidate => candidate !== id)
+      } else {
+        next.add(id)
+        selectionRecency = [...selectionRecency.filter(candidate => candidate !== id), id]
+      }
       selectedIds = next
-      selectedId = next.has(id) ? id : [...next][next.size - 1] ?? null
+      selectedId = next.has(id)
+        ? id
+        : [...selectionRecency].reverse().find(candidate => next.has(candidate)) ?? [...next][0] ?? null
+      selectionAnchorId = selectedId
       stashedGhostSelection = null
     }
     addingChildTo = null
@@ -997,10 +1012,10 @@
     if (!project || editingLocked || selectedNodes.length < 2) return 'The selection is no longer available.'
     const result = await window.api.node.batchUpdateProperties(request)
     if (!result.ok) return result.error.message
-    applyProject(result.data)
+    applyProject(result.data.project)
     markWorkingCopyChanged()
     batchDialogOpen = false
-    showToast(`Updated ${request.nodeIds.length} selected nodes`)
+    showToast(`Updated ${result.data.changesApplied} selected node${result.data.changesApplied === 1 ? '' : 's'}`)
     return null
   }
 
@@ -1352,10 +1367,14 @@
       const root = project?.nodes.find(node => node.parentId === null)
       selectedId = root?.id ?? null
       selectedIds = selectedId ? new Set([selectedId]) : new Set()
+      selectionRecency = selectedId ? [selectedId] : []
+      selectionAnchorId = selectedId
     } else if (project && selectedId && !project.nodes.find(node => node.id === selectedId)) {
       const root = project.nodes.find(node => node.parentId === null)
       selectedId = root?.id ?? null
       selectedIds = selectedId ? new Set([selectedId]) : new Set()
+      selectionRecency = selectedId ? [selectedId] : []
+      selectionAnchorId = selectedId
     }
   }
 
@@ -1405,6 +1424,8 @@
       compareExpanded = new Set([...expandedIds, ...ancestors])
       compareMode = true
       selectedIds = selectedId ? new Set([selectedId]) : new Set()
+      selectionRecency = selectedId ? [selectedId] : []
+      selectionAnchorId = selectedId
       clearSearch()  // search is a browse-mode aid; don't carry it into compare
 
       // Restore a stashed ghost selection if this snapshot pair still
@@ -1418,6 +1439,8 @@
         if (result.data.nodes.some(n => n.id === stashedGhostSelection)) {
           selectedId = stashedGhostSelection
           selectedIds = new Set([stashedGhostSelection])
+          selectionRecency = [stashedGhostSelection]
+          selectionAnchorId = stashedGhostSelection
           // Expand ancestors so the restored ghost is visible.
           const ghostAncestors = getAncestorIds(stashedGhostSelection, result.data.nodes)
           compareExpanded = new Set([...compareExpanded, ...ghostAncestors, stashedGhostSelection])

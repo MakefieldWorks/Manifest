@@ -21,7 +21,7 @@
     <p class="mt-2 text-sm text-stone-500">
       Set or clear one property across this exact selection. You will review every affected node before applying it.
     </p>
-    <p class="mt-2 text-xs text-stone-400">Cmd/Ctrl-click toggles one node. Shift-click selects a visible range.</p>
+    <p class="mt-2 text-xs text-stone-400">Cmd/Ctrl-click or Space toggles a node. Shift-click or Shift+Arrow selects a visible range.</p>
     <div class="mt-4 max-h-64 overflow-auto rounded-lg border border-stone-200 bg-stone-50 p-2">
       {#each nodes as node (node.id)}
         <div class="truncate rounded px-2 py-1 text-sm text-stone-700" title={node.name}>{node.name}</div>

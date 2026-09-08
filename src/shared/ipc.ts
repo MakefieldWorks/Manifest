@@ -37,7 +37,7 @@ import type { ReportFormat } from './report'
 import type { MenuCommandId, MenuCommandState } from './menu-commands'
 import type { DesktopChromeInfo } from './desktop-chrome'
 import type { AppearancePreference } from './theme'
-import type { BatchPropertyUpdateRequest } from './batch-properties'
+import type { BatchPropertyUpdateRequest, BatchPropertyUpdateResult } from './batch-properties'
 
 // Channel name constants — use these everywhere, never raw strings.
 export const IPC = {
@@ -174,7 +174,7 @@ export interface ManifestAPI {
     /** Copy a non-root node and its descendants immediately after the source sibling. */
     duplicate(id: string, name: string): Promise<Result<Project>>
     /** Atomically set or clear one property across two or more nodes. */
-    batchUpdateProperties(request: BatchPropertyUpdateRequest): Promise<Result<Project>>
+    batchUpdateProperties(request: BatchPropertyUpdateRequest): Promise<Result<BatchPropertyUpdateResult>>
     /** Update node name, properties, and/or template binding. Returns full updated Project. */
     update(
       id: string,

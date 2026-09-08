@@ -48,7 +48,9 @@ describe('batch property updates', () => {
     value(manager.nodeUpdate(outside, { properties: { firmware: 'leave-me' } }))
     const before = structuredClone(manager.getCurrent()!)
 
-    const after = value(manager.nodeBatchUpdateProperties({ nodeIds: [a, b], key: 'firmware', clear: false, value: 'v3' }))
+    const applied = value(manager.nodeBatchUpdateProperties({ nodeIds: [a, b], key: 'firmware', clear: false, value: 'v3' }))
+    const after = applied.project
+    expect(applied.changesApplied).toBe(2)
     expect(after.nodes.find(node => node.id === a)!.properties.firmware).toBe('v3')
     expect(after.nodes.find(node => node.id === b)!.properties.firmware).toBe('v3')
     expect(after.nodes.find(node => node.id === outside)!.properties.firmware).toBe('leave-me')
@@ -80,10 +82,11 @@ describe('batch property updates', () => {
     const b = create('B')
     value(manager.nodeUpdate(a, { properties: { serial: '123' } }))
     const first = value(manager.nodeBatchUpdateProperties({ nodeIds: [a, b], key: 'serial', clear: true }))
-    expect(first.nodes.find(node => node.id === a)!.properties.serial).toBeUndefined()
+    expect(first.changesApplied).toBe(1)
+    expect(first.project.nodes.find(node => node.id === a)!.properties.serial).toBeUndefined()
     expect(manager.editHistoryState().undoLabel).toBe('Batch edit properties')
     const history = manager.editHistoryState()
-    value(manager.nodeBatchUpdateProperties({ nodeIds: [a, b], key: 'serial', clear: true }))
+    expect(value(manager.nodeBatchUpdateProperties({ nodeIds: [a, b], key: 'serial', clear: true })).changesApplied).toBe(0)
     expect(manager.editHistoryState()).toEqual(history)
   })
 

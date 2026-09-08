@@ -421,6 +421,7 @@
   // not into it; Enter/Space activates the fold (calls onFoldExpand).
 
   let focusedIndex = $state(-1)
+  let keyboardSelectionPending = false
 
   // Keyboard nav iterates `displayedItems`. Exiting items are skipped — they
   // are visually present mid-transition but conceptually leaving; navigating
@@ -476,6 +477,19 @@
     return findParentRowIndex(nav, idx, depth)
   }
 
+  function selectFromKeyboard(id: string, modifiers?: { toggle: boolean; range: boolean }) {
+    keyboardSelectionPending = true
+    onSelect?.(id, modifiers)
+    queueMicrotask(() => { keyboardSelectionPending = false })
+  }
+
+  function extendSelectionTo(index: number) {
+    const item = displayedItems[index]?.payload
+    if (mode === 'browse' && item?.kind === 'row' && item.row.kind !== 'ghost') {
+      selectFromKeyboard(item.row.node.id, { toggle: false, range: true })
+    }
+  }
+
   function handleKeyDown(e: KeyboardEvent) {
     // Esc closes the context menu first.
     if (contextMenu && e.key === 'Escape') {
@@ -521,14 +535,18 @@
         e.preventDefault()
         let next = idx + 1
         while (next < displayedItems.length && !isNavigable(next)) next++
-        void navigateTo(next < displayedItems.length ? next : idx)
+        const destination = next < displayedItems.length ? next : idx
+        if (e.shiftKey) extendSelectionTo(destination)
+        void navigateTo(destination)
         break
       }
       case 'ArrowUp': {
         e.preventDefault()
         let prev = idx - 1
         while (prev >= 0 && !isNavigable(prev)) prev--
-        void navigateTo(prev >= 0 ? prev : idx)
+        const destination = prev >= 0 ? prev : idx
+        if (e.shiftKey) extendSelectionTo(destination)
+        void navigateTo(destination)
         break
       }
       case 'ArrowRight': {
@@ -565,13 +583,25 @@
         }
         break
       }
-      case 'Enter':
-      case ' ': {
+      case 'Enter': {
         e.preventDefault()
         const item = displayedItems[idx]?.payload
         if (item?.kind === 'row') {
           // Ghosts are selectable (issue #3) — DetailPane shows read-only view.
-          onSelect?.(item.row.id)
+          selectFromKeyboard(item.row.id)
+          focusedIndex = idx
+        } else if (item?.kind === 'fold' && item.section.foldId) {
+          onFoldExpand?.(item.section.foldId)
+        }
+        break
+      }
+      case ' ': {
+        e.preventDefault()
+        const item = displayedItems[idx]?.payload
+        if (item?.kind === 'row') {
+          if (mode === 'browse' && item.row.kind !== 'ghost') {
+            selectFromKeyboard(item.row.node.id, { toggle: !e.shiftKey, range: e.shiftKey })
+          } else selectFromKeyboard(item.row.id)
           focusedIndex = idx
         } else if (item?.kind === 'fold' && item.section.foldId) {
           onFoldExpand?.(item.section.foldId)
@@ -604,7 +634,10 @@
   // nav doesn't change selectedId, so this never fights live keyboard movement.
   $effect(() => {
     void selectedId
-    untrack(() => { focusedIndex = -1 })
+    untrack(() => {
+      if (keyboardSelectionPending) keyboardSelectionPending = false
+      else focusedIndex = -1
+    })
   })
 </script>
 
