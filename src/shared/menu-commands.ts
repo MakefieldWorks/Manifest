@@ -4,6 +4,14 @@
 // validity.
 
 export const MENU_COMMANDS = {
+  'project:undo': {
+    label: 'Undo',
+    accelerator: 'CommandOrControl+Z',
+  },
+  'project:redo': {
+    label: 'Redo',
+    accelerator: 'CommandOrControl+Shift+Z',
+  },
   'project:new': {
     label: 'New Project',
     accelerator: 'CommandOrControl+N',

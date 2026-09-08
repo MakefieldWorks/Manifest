@@ -44,6 +44,7 @@
       <h2 class="text-sm font-semibold text-stone-800">Revert Current Project</h2>
       <p class="text-xs text-stone-400 mt-0.5">
         The current project will match "{snapshotName}". Saved snapshots and later timeline events will remain unchanged.
+        This clears the current Undo/Redo history.
       </p>
     </div>
 

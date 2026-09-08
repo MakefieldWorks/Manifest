@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, shell, type MenuItem } from 'electron'
+import { app, BrowserWindow, Menu, shell, type MenuItem } from 'electron'
 import { IPC } from '../shared/ipc'
 import {
   MENU_COMMAND_IDS,
@@ -26,6 +26,9 @@ let installOptions: {
   copyDiagnostics(): void
 } | null = null
 let recentProjects: RecentProjectMenuEntry[] = []
+
+// Settings is a child window: its text editing must never undo the main project.
+app.on('browser-window-focus', () => updateApplicationMenuState(commandState))
 
 export function installApplicationMenu(options: {
   platform: NodeJS.Platform
@@ -98,7 +101,8 @@ export function updateApplicationMenuState(nextState: unknown): void {
   commandState = normalizeMenuCommandState(nextState)
   for (const id of MENU_COMMAND_IDS) {
     const item = commandItems.get(id)
-    if (item) item.enabled = commandState[id]
+    if (item) item.enabled = commandState[id] ||
+      ((id === 'project:undo' || id === 'project:redo') && Boolean(BrowserWindow.getFocusedWindow()?.getParentWindow()))
   }
 }
 
@@ -107,9 +111,13 @@ export function currentApplicationMenuState(): MenuCommandState {
 }
 
 function dispatchMenuCommand(command: MenuCommandId): void {
-  if (!commandState[command]) return
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   if (!target || target.isDestroyed()) return
+  if (target.getParentWindow() && (command === 'project:undo' || command === 'project:redo')) {
+    target.webContents[command === 'project:undo' ? 'undo' : 'redo']()
+    return
+  }
+  if (!commandState[command]) return
   target.webContents.send(IPC.MENU_COMMAND, command)
 }
 

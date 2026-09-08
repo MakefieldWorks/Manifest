@@ -41,6 +41,7 @@
       <h2 class="text-sm font-semibold text-stone-800">Recover Current Project</h2>
       <p class="text-xs text-stone-400 mt-0.5">
         The current project will be replaced with this saved recovery point.
+        This clears the current Undo/Redo history.
       </p>
     </div>
 

@@ -8,6 +8,7 @@
 
 import type {
   Project,
+  EditHistoryState,
   ManifestNode,
   NodeTemplate,
   Snapshot,
@@ -45,6 +46,10 @@ export const IPC = {
   PROJECT_SAVE:        'project:save',
   PROJECT_GET_CURRENT: 'project:getCurrent',
   PROJECT_CLOSE:       'project:close',
+  PROJECT_UNDO:        'project:undo',
+  PROJECT_REDO:        'project:redo',
+  PROJECT_EDIT_HISTORY: 'project:editHistory',
+  TEXT_UNDO_REDO:      'text:undoRedo',
   PROJECT_OPENED_FROM_OS: 'project:openedFromOs',
   NODE_CREATE:         'node:create',
   NODE_UPDATE:         'node:update',
@@ -151,7 +156,14 @@ export interface ManifestAPI {
     save(): Promise<Result<void>>
     getCurrent(): Promise<Result<Project | null>>
     close(): Promise<Result<void>>
+    undo(): Promise<Result<Project>>
+    redo(): Promise<Result<Project>>
+    editHistory(): Promise<Result<EditHistoryState>>
     onOpenedFromOs(handler: (result: Result<Project>) => void): () => void
+  }
+  text: {
+    /** Native editing in the calling renderer only; never changes project history. */
+    undoRedo(direction: 'undo' | 'redo'): Promise<Result<void>>
   }
   node: {
     /** Create a child node under parentId, optionally bound to a template. Returns full updated Project. */
