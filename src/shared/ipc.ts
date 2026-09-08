@@ -52,6 +52,7 @@ export const IPC = {
   TEXT_UNDO_REDO:      'text:undoRedo',
   PROJECT_OPENED_FROM_OS: 'project:openedFromOs',
   NODE_CREATE:         'node:create',
+  NODE_DUPLICATE:      'node:duplicate',
   NODE_UPDATE:         'node:update',
   NODE_DELETE:         'node:delete',
   NODE_MOVE:           'node:move',
@@ -168,6 +169,8 @@ export interface ManifestAPI {
   node: {
     /** Create a child node under parentId, optionally bound to a template. Returns full updated Project. */
     create(parentId: string, name: string, templateId?: string | null): Promise<Result<Project>>
+    /** Copy a non-root node and its descendants immediately after the source sibling. */
+    duplicate(id: string, name: string): Promise<Result<Project>>
     /** Update node name, properties, and/or template binding. Returns full updated Project. */
     update(
       id: string,

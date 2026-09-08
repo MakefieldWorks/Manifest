@@ -303,6 +303,10 @@ function registerIpcHandlers(): void {
 
   // ── Node CRUD ────────────────────────────────────────────────────────────
 
+  ipcMain.handle(IPC.NODE_DUPLICATE, (_, { id, name }: { id: string; name: string }) =>
+    projectManager.nodeDuplicate(id, name)
+  )
+
   ipcMain.handle(IPC.NODE_CREATE, (
     _,
     { parentId, name, templateId }: { parentId: string; name: string; templateId?: string | null }

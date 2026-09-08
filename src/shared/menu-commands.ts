@@ -64,6 +64,10 @@ export const MENU_COMMANDS = {
     label: 'Rename Selected',
     accelerator: 'F2',
   },
+  'node:duplicate': {
+    label: 'Duplicate Selected...',
+    accelerator: 'CommandOrControl+D',
+  },
   'node:moveTo': {
     label: 'Move Selected To...',
   },

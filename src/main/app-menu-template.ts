@@ -171,6 +171,7 @@ export function buildAppMenuTemplate(options: AppMenuTemplateOptions): MenuItemC
     submenu: [
       commandItem('node:addChild', options.dispatch),
       commandItem('node:rename', options.dispatch),
+      commandItem('node:duplicate', options.dispatch),
       commandItem('node:moveTo', options.dispatch),
       commandItem('node:delete', options.dispatch),
       separator(),

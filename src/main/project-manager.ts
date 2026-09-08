@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, renameSync, statSyn
 import { join } from 'path'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
+import { collectSubtreeIds } from '../shared/subtree'
 import type {
   Project,
   RecoveryPointApplyRequest,
@@ -64,6 +65,7 @@ import {
 } from '../shared/snapshot-history-migration'
 import {
   validateNodeName,
+  validateDuplicateNodeName,
   validatePropertyKey,
   validatePropertyValue,
   validateSnapshotName,
@@ -446,6 +448,72 @@ export class ProjectManager {
 
     return this.commitProjectMutation(nextProject, 'Add node', () => {
       this.search.upsertNode(nextProject.path!, newNode)
+    })
+  }
+
+  // Duplicate an entire subtree as one reversible mutation. Templates are shared;
+  // only currently typed references into the source subtree are remapped.
+  nodeDuplicate(id: string, name: string): Result<Project> {
+    const project = this.currentProject
+    if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    if (this.historyOperationInProgress) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
+    }
+    const source = project.nodes.find(node => node.id === id)
+    if (!source || source.parentId === null) {
+      return err(ErrorCode.INVALID_HIERARCHY, source ? 'The project root cannot be duplicated.' : 'Node not found.')
+    }
+    const projectIds = new Set(project.nodes.map(node => node.id))
+    if (projectIds.size !== project.nodes.length || !projectIds.has(source.parentId)) {
+      return err(ErrorCode.INVALID_HIERARCHY, 'Repair duplicate node IDs or the missing parent before duplicating this node.')
+    }
+    if (typeof name !== 'string') return err(ErrorCode.VALIDATION_FAILED, 'Copy name must be text')
+    const copyName = name.trim()
+    const siblings = project.nodes.filter(node => node.parentId === source.parentId).sort((a, b) => a.order - b.order)
+    const validation = validateDuplicateNodeName(copyName, siblings.map(node => node.name))
+    if (!validation.valid) return err(ErrorCode.VALIDATION_FAILED, validation.message!)
+
+    const ids = collectSubtreeIds(project.nodes, id)
+    const copiesById = new Map([...ids].map(originalId => [originalId, uuidv7()]))
+    const insertionOrder = siblings.findIndex(node => node.id === id) + 1
+    const now = new Date().toISOString()
+    const copies = project.nodes.filter(node => ids.has(node.id)).map(node => {
+      const properties = { ...node.properties }
+      const fields = templateFields(node.templateId ? project.templates?.[node.templateId] : undefined)
+      for (const [key, field] of Object.entries(fields)) {
+        const target = properties[key]
+        if (field?.type === 'reference' && typeof target === 'string' && copiesById.has(target)) {
+          properties[key] = copiesById.get(target)!
+        }
+      }
+      return {
+        ...node,
+        id: copiesById.get(node.id)!,
+        parentId: node.id === id ? source.parentId : copiesById.get(node.parentId!)!,
+        name: node.id === id ? copyName : node.name,
+        order: node.id === id ? insertionOrder : node.order,
+        properties,
+        created: now,
+        modified: now,
+      }
+    })
+    // Normalize the parent's complete sibling order around the insertion. This
+    // matches move/delete semantics and also repairs gaps or ties tolerated in
+    // hand-edited project files.
+    const siblingOrders = new Map(siblings.map((node, index) => [node.id, index < insertionOrder ? index : index + 1]))
+    const nextProject: Project = {
+      ...project,
+      modified: now,
+      nodes: [
+        ...project.nodes.map(node => {
+          const order = siblingOrders.get(node.id)
+          return order !== undefined && order !== node.order ? { ...node, order, modified: now } : node
+        }),
+        ...copies,
+      ],
+    }
+    return this.commitProjectMutation(nextProject, 'Duplicate subtree', () => {
+      for (const node of copies) this.search.upsertNode(nextProject.path!, node)
     })
   }
 
