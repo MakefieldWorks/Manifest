@@ -12,12 +12,21 @@ the text history is empty. The toolbar always operates on project edits.
 
 ## What is restored
 
-Each successful operation is one history entry: add, rename, property edit,
+Each successful operation is one history entry: add, duplicate subtree, rename, property edit,
 template assignment, move/reorder, delete subtree, template create/update/delete,
 CSV import, or NetBox import. Undoing a force-delete restores both the deleted
 nodes and any references/template defaults that were cleared. Imports restore
 their created or updated nodes and generated templates together. Original node
 IDs and ordering are preserved, and the search index is updated.
+
+Duplicating creates new IDs for the copied node and every descendant. The copy
+appears immediately after the source sibling; descendants retain their ordering.
+Typed references within the copied subtree point to the new IDs. External
+references keep their targets, and references from existing nodes still point to
+the originals. Free-text values are never remapped. Templates and their defaults
+remain shared; all existing property values, including serial numbers, are copied.
+The project root cannot be duplicated. Undo removes the entire copy and restores
+sibling ordering; Redo restores the same copied IDs.
 
 Failed operations and changes that only alter timestamps do not consume history.
 A new successful edit after Undo clears Redo. Autosave and Save Now preserve both

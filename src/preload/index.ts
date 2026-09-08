@@ -43,6 +43,7 @@ const api: ManifestAPI = {
   },
 
   node: {
+    duplicate: (id, name) => ipcRenderer.invoke(IPC.NODE_DUPLICATE, { id, name }),
     create: (parentId, name, templateId) =>
       ipcRenderer.invoke(IPC.NODE_CREATE, { parentId, name, templateId }),
     update: (id, changes) =>

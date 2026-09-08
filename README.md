@@ -28,6 +28,7 @@ The core idea is simple. Your project lives as a readable `Manifest.manifestproj
 
 - Create and open Manifest projects from the desktop app.
 - Manage hierarchical node trees with add, rename, delete, reorder, and move operations.
+- Duplicate a node and its descendants with a name preview, fresh IDs, and remapped internal references. Use the tree context menu, Project menu, or Cmd/Ctrl+D.
 - Undo and redo project edits, template changes, and imports during the current session; text fields keep native text undo. See [Undo/Redo behavior](docs/UNDO_REDO.md).
 - Jump to nodes by name with inline type-to-jump in the tree: type while the tree is focused to reveal and select the next match, with Enter/Shift+Enter to cycle and Escape to clear.
 - Edit node properties in the detail pane, with optional typed-property templates (string, number, boolean, date, version, enum, and node-to-node `reference` fields) — typing lives in project-level templates while values stay clean JSON primitives.

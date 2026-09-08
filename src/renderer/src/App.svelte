@@ -20,6 +20,7 @@
   import ManifestView from './components/ManifestView.svelte'
   import DetailPane from './components/DetailPane.svelte'
   import MoveToDialog from './components/MoveToDialog.svelte'
+  import DuplicateDialog from './components/DuplicateDialog.svelte'
   import TemplateManager from './components/TemplateManager.svelte'
   import ImportDialog from './components/ImportDialog.svelte'
   import RecoveryDialog from './components/RecoveryDialog.svelte'
@@ -29,14 +30,22 @@
   let editHistory: EditHistoryState = $state({ undoLabel: null, redoLabel: null })
   let undoRedoBusy = $state(false)
   let textEditing = $state(false)
+  let duplicateNodeId = $state<string | null>(null)
+  const duplicateNode = $derived.by(() => project?.nodes.find(node => node.id === duplicateNodeId))
 
   function updateEditFocus() { textEditing = isTextEditing(document.activeElement) }
 
-  function handleUndoRedoKeydown(event: KeyboardEvent) {
+  function handleEditKeydown(event: KeyboardEvent) {
     if (event.isComposing || event.altKey || isTextEditing(document.activeElement)) return
     const modifier = desktopChrome.platform === 'darwin' ? event.metaKey : event.ctrlKey
     if (!modifier) return
     const key = event.key.toLowerCase()
+    if (key === 'd' && !event.shiftKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      void runMenuCommand('node:duplicate')
+      return
+    }
     const direction = key === 'z' ? (event.shiftKey ? 'redo' : 'undo') :
       key === 'y' && event.ctrlKey ? 'redo' : null
     if (!direction) return
@@ -60,7 +69,7 @@
 
   const canUndoProject = $derived.by(() => appState === 'open' && project !== null && !editingLocked &&
     !snapshotCreating && !snapshotComparing && !importDialogOpen && !templateManagerOpen &&
-    !moveToNodeId && !addingChildTo && !revertDialogSnapshotName && !recoveryDialogPoint)
+    !duplicateNodeId && !moveToNodeId && !addingChildTo && !revertDialogSnapshotName && !recoveryDialogPoint)
 
   async function applyUndoRedo(direction: 'undo' | 'redo') {
     if (!canUndoProject || !editHistory[direction === 'undo' ? 'undoLabel' : 'redoLabel']) return
@@ -295,7 +304,7 @@
   }
 
   onMount(async () => {
-    window.addEventListener('keydown', handleUndoRedoKeydown, true)
+    window.addEventListener('keydown', handleEditKeydown, true)
     document.addEventListener('focusin', updateEditFocus)
     document.addEventListener('focusout', updateEditFocus)
     unsubscribeMenuCommands = window.api.menu.onCommand((command) => {
@@ -335,7 +344,7 @@
   })
 
   onDestroy(() => {
-    window.removeEventListener('keydown', handleUndoRedoKeydown, true)
+    window.removeEventListener('keydown', handleEditKeydown, true)
     document.removeEventListener('focusin', updateEditFocus)
     document.removeEventListener('focusout', updateEditFocus)
     unsubscribeMenuCommands?.()
@@ -469,6 +478,7 @@
     importSummary = null
     importSummaryDismissed = false
     templateManagerOpen = false
+    duplicateNodeId = null
     moveToNodeId = null
     addingChildTo = null
     addingChildName = ''
@@ -511,7 +521,7 @@
   function buildMenuCommandState(): MenuCommandState {
     const state = createDisabledMenuCommandState()
     const hasOpenProject = appState === 'open' && project !== null
-    const projectBusy = undoRedoBusy || snapshotCreating || snapshotRestoringName !== null || recoveryApplyingId !== null
+    const projectBusy = duplicateNodeId !== null || undoRedoBusy || snapshotCreating || snapshotRestoringName !== null || recoveryApplyingId !== null
     const canUseProject = hasOpenProject && !projectBusy
     const canEditProject = canUseProject && !editingLocked
     const selectedLiveNode = canEditProject && selectedNode && !selectedId?.startsWith('ghost:')
@@ -536,6 +546,7 @@
     state['report:exportCsv'] = compareLoaded && !projectBusy
     state['node:addChild'] = selectedLiveNode !== null
     state['node:rename'] = selectedLiveNode !== null
+    state['node:duplicate'] = Boolean(selectedEditableChild) && !importDialogOpen && !templateManagerOpen && !moveToNodeId && !addingChildTo && !snapshotComparing && !revertDialogSnapshotName && !recoveryDialogPoint
     state['node:moveTo'] = Boolean(selectedEditableChild)
     state['node:delete'] = Boolean(selectedEditableChild)
     state['history:reindex'] = canUseProject
@@ -598,6 +609,9 @@
         return
       case 'node:rename':
         handleRenameRequest()
+        return
+      case 'node:duplicate':
+        if (selectedNode) handleDuplicate(selectedNode.id)
         return
       case 'node:moveTo':
         if (selectedNode && !selectedId?.startsWith('ghost:')) handleMoveTo(selectedNode.id)
@@ -904,6 +918,30 @@
       markWorkingCopyChanged()
     }
     else showToast(result.error.message)
+  }
+
+  function handleDuplicate(id: string) {
+    if (!project || editingLocked || duplicateNodeId) return
+    const source = project.nodes.find(node => node.id === id)
+    if (source?.parentId) duplicateNodeId = id
+  }
+
+  async function confirmDuplicate(name: string): Promise<string | null> {
+    const source = duplicateNode
+    if (!project || !source || editingLocked) return 'The source node is no longer available.'
+    const originalIds = new Set(project.nodes.map(node => node.id))
+    const result = await window.api.node.duplicate(source.id, name)
+    if (!result.ok) return result.error.message
+    applyProject(result.data)
+    markWorkingCopyChanged()
+    duplicateNodeId = null
+    const copy = result.data.nodes.find(node => !originalIds.has(node.id) && node.parentId === source.parentId)
+    if (copy) {
+      expandedIds = new Set([...expandedIds, ...getAncestorIds(copy.id, result.data.nodes), copy.id])
+      setSelection(copy.id)
+      selectedScrollAlign = 'center'
+    }
+    return null
   }
 
   function handleMoveTo(id: string) {
@@ -1478,6 +1516,10 @@
 
 
 <!-- ─── Move-to dialog ────────────────────────────────────────────────────── -->
+{#if duplicateNode && project}
+  <DuplicateDialog node={duplicateNode} nodes={project.nodes} onConfirm={confirmDuplicate} onCancel={() => { duplicateNodeId = null }} />
+{/if}
+
 {#if moveToNodeId && project}
   <MoveToDialog
     nodeId={moveToNodeId}
@@ -1919,6 +1961,7 @@
                 onSelect={handleSelect}
                 onToggle={handleToggle}
                 onAddChild={handleAddChild}
+                onDuplicate={handleDuplicate}
                 onImportHere={handleImportHere}
                 onMoveUp={handleMoveUp}
                 onMoveDown={handleMoveDown}

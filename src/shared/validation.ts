@@ -24,6 +24,7 @@ const TEMPLATE_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 const MAX_STRING_LEN = 10_000
+export const MAX_NODE_NAME_LEN = 255
 export const MAX_VERSION_LEN = 64
 
 // True when a string contains any C0 control character (0x00–0x1F) or DEL
@@ -65,13 +66,33 @@ export function validateNodeName(name: string): ValidationResult {
   if (!name || name.trim().length === 0) {
     return { valid: false, message: 'Node name cannot be empty' }
   }
-  if (name.length > 255) {
+  if (name.length > MAX_NODE_NAME_LEN) {
     return { valid: false, message: 'Node names cannot exceed 255 characters' }
   }
   if (name.includes('/') || name.includes('\\')) {
     return { valid: false, message: 'Node names cannot contain slashes' }
   }
   return { valid: true }
+}
+
+export function validateDuplicateNodeName(name: string, siblingNames: string[]): ValidationResult {
+  const valid = validateNodeName(name)
+  if (!valid.valid) return valid
+  if (siblingNames.some(sibling => sibling.toLowerCase() === name.toLowerCase())) {
+    return { valid: false, message: `A node named "${name}" already exists under this parent` }
+  }
+  return { valid: true }
+}
+
+export function suggestDuplicateNodeName(sourceName: string, siblingNames: string[]): string {
+  const used = new Set(siblingNames.map(name => name.toLowerCase()))
+  for (let number = 1; ; number++) {
+    const suffix = number === 1 ? ' copy' : ` copy ${number}`
+    // Do not split a surrogate pair when making room for the suffix.
+    const stem = sourceName.trim().slice(0, MAX_NODE_NAME_LEN - suffix.length).replace(/[\uD800-\uDBFF]$/, '').trimEnd()
+    const candidate = stem + suffix
+    if (!used.has(candidate.toLowerCase())) return candidate
+  }
 }
 
 export function validatePropertyKey(key: string): ValidationResult {

@@ -39,6 +39,7 @@
     onSelect?: (id: string) => void
     onToggle?: (id: string) => void
     onAddChild?: (parentId: string) => void
+    onDuplicate?: (id: string) => void
     onMoveUp?: (id: string) => void
     onMoveDown?: (id: string) => void
     onRenameRequest?: () => void
@@ -68,6 +69,7 @@
     onSelect,
     onToggle,
     onAddChild,
+    onDuplicate,
     onMoveUp,
     onMoveDown,
     onRenameRequest,
@@ -721,6 +723,12 @@
 
     {#if !menuIsRoot}
       <div class="border-t border-stone-100 my-1"></div>
+
+      <button
+        class="w-full text-left px-3 py-1.5 hover:bg-stone-50 [-webkit-app-region:no-drag]"
+        role="menuitem"
+        onclick={() => { const id = menuRow!.node.id; closeContextMenu(); onDuplicate?.(id) }}
+      >Duplicate…</button>
 
       <button
         class="w-full text-left px-3 py-1.5 hover:bg-stone-50 disabled:text-stone-300
