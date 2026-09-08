@@ -9,7 +9,7 @@
     row: VisibleRow
     selected: boolean
     focused: boolean
-    onSelect: (id: string) => void
+    onSelect: (id: string, modifiers?: { toggle: boolean; range: boolean }) => void
     onToggle: (id: string) => void
     /**
      * Called when the user right-clicks this row.
@@ -141,7 +141,7 @@
     data-row-id={row.id}
     data-row-status={row.kind === 'decorated' ? row.status : undefined}
     data-row-matched={matched ? 'true' : undefined}
-    onclick={() => onSelect(nodeId)}
+    onclick={(event) => onSelect(nodeId, { toggle: event.metaKey || event.ctrlKey, range: event.shiftKey })}
     ondblclick={handleDblClick}
     oncontextmenu={handleContextMenu}
   >
