@@ -43,9 +43,9 @@ export class EditHistory {
       const old = oldNodes.get(id)
       const next = newNodes.get(id)
       const different = !old || !next || !sameNode(old.node, next.node)
-      changed ||= different
       // Include physical array positions so delete/move undo restores exact order.
       if (different || old?.index !== next?.index) {
+        changed = true
         if (old) edit.before.push(old)
         if (next) edit.after.push(next)
       }

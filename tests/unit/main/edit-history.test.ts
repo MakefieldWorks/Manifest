@@ -9,6 +9,29 @@ function project(name: string): Project {
 }
 
 describe('bounded edit history', () => {
+  it('records pure array reorders and restores exact positions without changing node fields', () => {
+    const history = new EditHistory()
+    const before = project('Root')
+    const root = before.nodes[0]
+    before.nodes.push(
+      { ...root, id: 'a', name: 'A', parentId: root.id, order: 0 },
+      { ...root, id: 'b', name: 'B', parentId: root.id, order: 1 },
+      { ...root, id: 'c', name: 'C', parentId: root.id, order: 2 },
+    )
+    // Leave root and B in place; change only A/C's array positions.
+    const after = { ...before, nodes: [root, before.nodes[3], before.nodes[2], before.nodes[1]] }
+    const edit = history.prepare(before, after, 'Reorder array')
+    expect(edit).not.toBeNull()
+    history.record(edit!)
+    const undone = history.preview(after, 'undo')!
+    expect(undone.nodes).toEqual(before.nodes)
+    history.accept('undo')
+    const redone = history.preview(undone, 'redo')!
+    expect(redone.nodes).toEqual(after.nodes)
+    history.accept('redo')
+    expect(history.state()).toEqual({ undoLabel: 'Reorder array', redoLabel: null })
+  })
+
   it('evicts oldest operations without breaking undo/redo of retained operations', () => {
     const history = new EditHistory(2)
     for (const [before, after] of [['A', 'B'], ['B', 'C'], ['C', 'D']]) {
