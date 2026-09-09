@@ -13,4 +13,4 @@ Results use the same exact count and incremental loading as text search. The tre
 
 Clearing the search text keeps active filters. **Clear all** in the filter panel removes the filters while preserving search text. Escape from the search field removes both.
 
-Filters are session controls and are not stored in the project document. Saved views and the table inventory view are separate roadmap work.
+Filters are session controls and are not stored in the project document. The Tree/Table switch preserves those controls and the primary selection. Saved views remain separate roadmap work.

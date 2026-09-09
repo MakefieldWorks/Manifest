@@ -37,6 +37,19 @@ import {
   inventoryFilterSnippet,
   validateInventoryFilters,
 } from '../shared/inventory-filters'
+import {
+  buildInventoryRows,
+  DEFAULT_INVENTORY_COLUMNS,
+  inventoryPropertyKeys,
+  isInventoryColumn,
+  MAX_INVENTORY_COLUMNS,
+  sortInventoryRows,
+  type InventoryColumn,
+  type InventorySortDirection,
+  type InventoryTablePage,
+  type InventoryTableRequest,
+  type InventoryTableRow,
+} from '../shared/inventory-table'
 import type {
   Project,
   RecoveryPointApplyRequest,
@@ -93,7 +106,7 @@ import {
 import { diffProjects, diffTemplates } from '../shared/diff-engine'
 import { isCurrentRef, CURRENT_PROJECT_LABEL } from '../shared/snapshot-ref'
 import { buildMergedTree } from '../shared/merged-tree'
-import { parseCsv, CsvParseError } from '../shared/csv'
+import { parseCsv, serializeCsv, CsvParseError } from '../shared/csv'
 import { detectCloudSyncPath } from '../shared/cloud-sync'
 import { planImport } from '../shared/import'
 import { parseNetboxDump, inspectNetbox, planNetbox, NetboxParseError } from '../shared/netbox'
@@ -115,6 +128,13 @@ const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / 1024 / 1024
 const IMPORT_ISSUE_CAP = 100                   // max skipped/warning issues surfaced
 const AUTOSAVE_DEBOUNCE_MS = 2500              // 2.5 seconds
 const MAX_RECOVERY_POINTS = 10                 // cap stored auto-saved recovery points
+
+function inventoryColumnLabel(column: InventoryColumn): string {
+  if (column === 'name') return 'Name'
+  if (column === 'path') return 'Path'
+  if (column === 'template') return 'Template'
+  return column.slice(9)
+}
 
 
 export interface HistoryBackfillStatus {
@@ -1359,6 +1379,108 @@ export class ProjectManager {
         return err(ErrorCode.SQLITE_CAPABILITY, `Search is unavailable: ${retryMsg}`)
       }
     }
+  }
+
+  inventoryTable(rawRequest: unknown): Result<InventoryTablePage> {
+    const prepared = this.prepareInventoryTable(rawRequest)
+    if (!prepared.ok) return prepared
+    const { request, rows, propertyKeys } = prepared.data
+    const { offset, limit } = normalizeSearchPage(request.offset, request.limit)
+    const pageRows = rows.slice(offset, offset + limit)
+    return ok({
+      rows: pageRows,
+      total: rows.length,
+      offset,
+      hasMore: offset + pageRows.length < rows.length,
+      propertyKeys,
+    })
+  }
+
+  buildInventoryCsv(rawRequest: unknown): Result<{ content: string; suggestedName: string; rowCount: number }> {
+    const prepared = this.prepareInventoryTable(rawRequest)
+    if (!prepared.ok) return prepared
+    const { request, rows } = prepared.data
+    const headers = request.columns.map(inventoryColumnLabel)
+    const content = serializeCsv([
+      headers,
+      ...rows.map(row => request.columns.map(column => row.values[column] ?? '')),
+    ])
+    const projectName = this.currentProject?.name.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'manifest'
+    return ok({ content, suggestedName: `${projectName}-inventory.csv`, rowCount: rows.length })
+  }
+
+  private prepareInventoryTable(rawRequest: unknown): Result<{
+    request: InventoryTableRequest
+    rows: InventoryTableRow[]
+    propertyKeys: string[]
+  }> {
+    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is open.')
+    if (!rawRequest || typeof rawRequest !== 'object' || Array.isArray(rawRequest)) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Inventory table request must be an object.')
+    }
+    const candidate = rawRequest as Record<string, unknown>
+    if (typeof candidate.query !== 'string' || candidate.query.length > 512) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Inventory query must be a string of at most 512 characters.')
+    }
+    const filterCheck = validateInventoryFilters(candidate.filters)
+    if (!filterCheck.valid) return err(ErrorCode.VALIDATION_FAILED, filterCheck.message)
+    if (!Array.isArray(candidate.columns) || candidate.columns.length === 0 || candidate.columns.length > MAX_INVENTORY_COLUMNS || !candidate.columns.every(isInventoryColumn)) {
+      return err(ErrorCode.VALIDATION_FAILED, `Choose between 1 and ${MAX_INVENTORY_COLUMNS} valid inventory columns.`)
+    }
+    const columns = [...new Set(candidate.columns as InventoryColumn[])]
+    const sortColumn = isInventoryColumn(candidate.sortColumn) ? candidate.sortColumn : columns[0] ?? DEFAULT_INVENTORY_COLUMNS[0]
+    const sortDirection: InventorySortDirection = candidate.sortDirection === 'desc' ? 'desc' : 'asc'
+    const request: InventoryTableRequest = {
+      query: candidate.query.trim(),
+      filters: filterCheck.filters,
+      columns,
+      sortColumn,
+      sortDirection,
+      offset: typeof candidate.offset === 'number' ? candidate.offset : 0,
+      limit: typeof candidate.limit === 'number' ? candidate.limit : 50,
+    }
+
+    const project = this.currentProject
+    let nodes: ManifestNode[]
+    if (!request.query) {
+      nodes = hasInventoryFilters(filterCheck.filters)
+        ? filterInventoryNodes(project, filterCheck.filters)
+        : [...project.nodes]
+    } else {
+      const nodeMap = new Map(project.nodes.map(node => [node.id, node]))
+      const eligibleNodes = hasInventoryFilters(filterCheck.filters)
+        ? filterInventoryNodes(project, filterCheck.filters)
+        : project.nodes
+      const queryAll = (): ManifestNode[] => {
+        if (!this.search.hasExactNodeSet(project.path!, nodeMap.keys())) {
+          throw new Error('Search index node set does not match the current project')
+        }
+        return this.search.queryAll(
+          project.path!,
+          request.query,
+          hasInventoryFilters(filterCheck.filters) ? eligibleNodes.map(node => node.id) : undefined,
+        ).flatMap(hit => {
+          const node = nodeMap.get(hit.nodeId)
+          return node ? [node] : []
+        })
+      }
+      try {
+        nodes = queryAll()
+      } catch (error) {
+        const rebuilt = this.rebuildSearchIndex(project, 'rebuild')
+        if (!rebuilt.ok) return rebuilt
+        try {
+          nodes = queryAll()
+        } catch (retryError) {
+          const message = retryError instanceof Error ? retryError.message : String(retryError)
+          return err(ErrorCode.SQLITE_CAPABILITY, `Inventory search is unavailable: ${message}`)
+        }
+      }
+    }
+
+    const rowColumns = columns.includes(sortColumn) ? columns : [...columns, sortColumn]
+    const rows = sortInventoryRows(buildInventoryRows(project, nodes, rowColumns), sortColumn, sortDirection)
+    return ok({ request, rows, propertyKeys: inventoryPropertyKeys(project) })
   }
 
   // ─── Snapshots / history ───────────────────────────────────────────────────

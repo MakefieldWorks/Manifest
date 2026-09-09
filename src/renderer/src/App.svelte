@@ -15,6 +15,7 @@
   import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
   import type { BatchPropertyUpdateRequest } from '../../shared/batch-properties'
   import { hasInventoryFilters, hasPropertyPredicate, type InventoryFilters } from '../../shared/inventory-filters'
+  import { DEFAULT_INVENTORY_COLUMNS, type InventoryColumn, type InventorySortDirection } from '../../shared/inventory-table'
   import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
   import { flattenTree } from './lib/tree-rows'
   import { isTextEditing } from './lib/edit-focus'
@@ -26,6 +27,7 @@
   import BatchSelectionPane from './components/BatchSelectionPane.svelte'
   import BatchPropertyDialog from './components/BatchPropertyDialog.svelte'
   import InventoryFilterPanel from './components/InventoryFilterPanel.svelte'
+  import InventoryTable from './components/InventoryTable.svelte'
   import TemplateManager from './components/TemplateManager.svelte'
   import ImportDialog from './components/ImportDialog.svelte'
   import RecoveryDialog from './components/RecoveryDialog.svelte'
@@ -128,6 +130,10 @@
   let searchResults: SearchResult[] = $state([])
   let searchFilters: InventoryFilters = $state({})
   let inventoryFiltersOpen = $state(false)
+  let inventoryViewMode: 'tree' | 'table' = $state('tree')
+  let inventoryColumns = $state<InventoryColumn[]>([...DEFAULT_INVENTORY_COLUMNS])
+  let inventorySortColumn = $state<InventoryColumn>('name')
+  let inventorySortDirection = $state<InventorySortDirection>('asc')
   let searchTotal: number = $state(0)
   let searchHasMore: boolean = $state(false)
   let searchResultIndex: number = $state(0)
@@ -2063,7 +2069,7 @@
 
       <!-- ── Left pane: tree + search ──────────────────────────────────── -->
       <div
-        style="width: {treeWidth}px"
+        style="width: {inventoryViewMode === 'table' && !compareMode ? Math.max(treeWidth, 520) : treeWidth}px"
         class="shrink-0 flex flex-col bg-stone-50 overflow-hidden"
       >
 
@@ -2109,6 +2115,27 @@
               onclick={() => { inventoryFiltersOpen = !inventoryFiltersOpen }}
               data-testid="inventory-filter-toggle"
             >Filter{inventoryFilterCount ? ` ${inventoryFilterCount}` : ''}</button>
+            <div class="flex rounded-lg border border-stone-200 bg-white p-0.5" aria-label="Inventory view">
+              <button
+                type="button"
+                class="rounded px-1.5 py-1 text-[10px] font-medium"
+                class:bg-stone-800={inventoryViewMode === 'tree'}
+                class:text-white={inventoryViewMode === 'tree'}
+                class:text-stone-500={inventoryViewMode !== 'tree'}
+                onclick={() => { inventoryViewMode = 'tree' }}
+                data-testid="inventory-view-tree"
+              >Tree</button>
+              <button
+                type="button"
+                class="rounded px-1.5 py-1 text-[10px] font-medium"
+                class:bg-stone-800={inventoryViewMode === 'table'}
+                class:text-white={inventoryViewMode === 'table'}
+                class:text-stone-500={inventoryViewMode !== 'table'}
+                disabled={compareMode}
+                onclick={() => { inventoryViewMode = 'table' }}
+                data-testid="inventory-view-table"
+              >Table</button>
+            </div>
           </div>
           {#if inventoryFiltersOpen && project && !compareMode}
             <InventoryFilterPanel
@@ -2145,8 +2172,21 @@
           {/if}
         </div>
 
-        <!-- Tree -->
+        <!-- Inventory tree/table -->
         <div class="flex-1 flex flex-col overflow-hidden" data-testid="tree">
+          {#if inventoryViewMode === 'table' && !compareMode && project}
+            <InventoryTable
+              {project}
+              query={searchQuery}
+              filters={searchFilters}
+              {selectedId}
+              bind:columns={inventoryColumns}
+              bind:sortColumn={inventorySortColumn}
+              bind:sortDirection={inventorySortDirection}
+              onSelect={(id) => setSelection(id)}
+              onMessage={showToast}
+            />
+          {:else}
           {#if searchActive && !searching && searchResults.length === 0}
             <div class="flex-1 p-3 text-sm text-stone-400" data-testid="search-no-results">No matching nodes</div>
           {:else}
@@ -2193,8 +2233,10 @@
             </div>
           {/if}
 
+          {/if}
+
             <!-- Inline add-child input — rendered below the tree, always visible -->
-            {#if addingChildTo}
+            {#if addingChildTo && inventoryViewMode === 'tree'}
               <div class="border-t border-stone-200 px-3 py-2 flex flex-col gap-1 bg-stone-50 shrink-0">
                 <input
                   type="text"

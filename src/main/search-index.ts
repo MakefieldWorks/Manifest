@@ -143,6 +143,30 @@ export class SearchIndexService {
     }
   }
 
+  queryAll(
+    projectPath: string,
+    query: string,
+    scopeNodeIds?: Iterable<string>,
+  ): SearchIndexHit[] {
+    const db = this.requireDatabase(projectPath)
+    const trimmed = query.trim()
+    if (!trimmed) return []
+    const scopeIds = scopeNodeIds ? [...new Set(scopeNodeIds)] : null
+    if (scopeIds?.length === 0) return []
+    if (scopeIds) this.replaceSearchScope(db, scopeIds)
+    try {
+      return this.queryPreparedPage(
+        db,
+        trimmed,
+        0,
+        Math.max(1, scopeIds?.length ?? this.indexedNodeIds.size),
+        scopeIds !== null,
+      ).hits
+    } finally {
+      if (scopeIds) this.clearSearchScope(db)
+    }
+  }
+
   private queryPreparedPage(
     db: Database.Database,
     trimmed: string,

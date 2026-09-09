@@ -393,6 +393,28 @@ function registerIpcHandlers(): void {
       projectManager.planNetboxImport(path, options)
   )
 
+  ipcMain.handle(IPC.INVENTORY_TABLE_QUERY, (_, request: unknown) =>
+    projectManager.inventoryTable(request)
+  )
+
+  ipcMain.handle(IPC.INVENTORY_EXPORT_CSV, async (_, request: unknown) => {
+    const built = projectManager.buildInventoryCsv(request)
+    if (!built.ok) return built
+    try {
+      const result = await dialog.showSaveDialog({
+        title: 'Export inventory',
+        defaultPath: built.data.suggestedName,
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      })
+      if (result.canceled || !result.filePath) return ok({ savedPath: null, rowCount: built.data.rowCount })
+      await writeFile(result.filePath, built.data.content, 'utf8')
+      return ok({ savedPath: result.filePath, rowCount: built.data.rowCount })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return err(ErrorCode.REPORT_WRITE_FAILED, `Failed to write inventory export: ${msg}`)
+    }
+  })
+
   ipcMain.handle(
     IPC.IMPORT_NETBOX_APPLY,
     (_, { path, options }: { path: string; options: NetboxImportOptions }) =>
