@@ -244,7 +244,7 @@ export interface ManifestAPI {
     exportCsv(request: InventoryExportRequest): Promise<Result<{ savedPath: string | null; rowCount: number }>>
   }
   snapshot: {
-    create(name: string): Promise<Result<Snapshot>>
+    create(name: string, description?: string | null): Promise<Result<Snapshot>>
     list(): Promise<Result<Snapshot[]>>
     compare(a: string, b: string): Promise<Result<DiffEntry[]>>
     /** Full compare: returns merged tree with per-node diffs embedded. */

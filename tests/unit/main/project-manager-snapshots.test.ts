@@ -44,16 +44,41 @@ afterEach(async () => {
 describe('snapshot workflow', () => {
   it('creates and lists named snapshots in the git-backed project', async () => {
     manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Rack A')
-    const created = await manager.snapshotCreate('initial-setup')
+    const created = await manager.snapshotCreate('initial-setup', '  Known-good rack configuration.  ')
     expect(created.ok).toBe(true)
     if (!created.ok) return
     expect(created.data.name).toBe('initial-setup')
+    expect(created.data.note).toBe('Known-good rack configuration.')
 
     const listed = await manager.snapshotList()
     expect(listed.ok).toBe(true)
     if (!listed.ok) return
     expect(listed.data.some((snapshot) => snapshot.name === 'initial-setup')).toBe(true)
     expect(listed.data.find((snapshot) => snapshot.name === 'initial-setup')?.message).toBe('initial-setup')
+    expect(listed.data.find((snapshot) => snapshot.name === 'initial-setup')?.note).toBe('Known-good rack configuration.')
+
+    const timeline = await manager.snapshotTimeline()
+    expect(timeline.ok).toBe(true)
+    if (!timeline.ok) return
+    expect(timeline.data.events.find((event) => event.snapshotId === 'initial-setup')?.note)
+      .toBe('Known-good rack configuration.')
+
+    const history = JSON.parse(readFileSync(join(projectDir, '.manifest', 'history.json'), 'utf8'))
+    expect(history.snapshots['initial-setup'].note).toBe('Known-good rack configuration.')
+  })
+
+  it('rejects invalid snapshot descriptions before creating a snapshot', async () => {
+    const nonText = await manager.snapshotCreate('invalid-description', { text: 'nope' })
+    expect(nonText.ok).toBe(false)
+    if (!nonText.ok) expect(nonText.error.code).toBe('VALIDATION_FAILED')
+
+    const tooLong = await manager.snapshotCreate('description-too-long', 'x'.repeat(2001))
+    expect(tooLong.ok).toBe(false)
+    if (!tooLong.ok) expect(tooLong.error.message).toContain('2,000')
+
+    const listed = await manager.snapshotList()
+    expect(listed.ok).toBe(true)
+    if (listed.ok) expect(listed.data).toEqual([])
   })
 
   it('rejects duplicate snapshot names', async () => {
@@ -537,4 +562,3 @@ describe('per-node history index integration', () => {
     }
   })
 })
-

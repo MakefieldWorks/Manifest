@@ -24,6 +24,7 @@ Manifest is a local-first desktop app for managing structured, hierarchical proj
 | [UNDO_REDO.md](UNDO_REDO.md) | Project editing history, text undo, and snapshot/session boundaries |
 | [INVENTORY_FILTERS.md](INVENTORY_FILTERS.md) | Structured inventory filters, matching semantics, and paging behavior |
 | [INVENTORY_TABLE.md](INVENTORY_TABLE.md) | Tabular inventory, sorting, columns, selection, and CSV export |
+| [SNAPSHOT_CONTEXT.md](SNAPSHOT_CONTEXT.md) | Optional snapshot descriptions and where that context appears |
 
 ---
 
@@ -35,6 +36,9 @@ verification.
 
 Inventory views now provide complete paged search, structured filters, a sortable
 table, configurable property columns, and CSV export over the same result set.
+
+Snapshots can carry optional immutable descriptions through the timeline,
+comparison, node history, and exported reports.
 
 ---
 

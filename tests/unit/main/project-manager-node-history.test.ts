@@ -121,7 +121,7 @@ describe('nodeHistory IPC', () => {
     manager.nodeCreate(rootId, 'Server')
     const server = manager.getCurrent()!.nodes.find(n => n.name === 'Server')!
 
-    await manager.snapshotCreate('s1')
+    await manager.snapshotCreate('s1', 'Initial server state')
     // s2: unchanged — should NOT appear in history
     await manager.snapshotCreate('s2')
     // s3: rename — should appear
@@ -136,6 +136,7 @@ describe('nodeHistory IPC', () => {
       ['snapshot', 's1', 'Server'],
       ['snapshot', 's3', 'Server Alpha'],
     ])
+    expect(result.data.entries[0]?.note).toBe('Initial server state')
   })
 
   it('records deletion as a presence=absent entry', async () => {

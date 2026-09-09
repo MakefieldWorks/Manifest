@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   validateSnapshotName,
+  validateSnapshotDescription,
   validateNodeName,
   validatePropertyKey,
   validatePropertyValue,
@@ -49,6 +50,20 @@ describe('validateSnapshotName', () => {
     const result = validateSnapshotName('')
     expect(result.valid).toBe(false)
     expect(result.message).toBeTruthy()
+  })
+})
+
+describe('validateSnapshotDescription', () => {
+  it('accepts an omitted, empty, or 2,000-character description', () => {
+    expect(validateSnapshotDescription(undefined).valid).toBe(true)
+    expect(validateSnapshotDescription(null).valid).toBe(true)
+    expect(validateSnapshotDescription('').valid).toBe(true)
+    expect(validateSnapshotDescription('x'.repeat(2000)).valid).toBe(true)
+  })
+
+  it('rejects non-text and overlong descriptions', () => {
+    expect(validateSnapshotDescription({ text: 'invalid' }).valid).toBe(false)
+    expect(validateSnapshotDescription('x'.repeat(2001)).valid).toBe(false)
   })
 })
 

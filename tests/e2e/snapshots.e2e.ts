@@ -59,8 +59,9 @@ async function openSnapshotsPanel(page: Page): Promise<void> {
   await expect(page.getByTestId('snapshots-panel')).toBeVisible()
 }
 
-async function createSnapshot(page: Page, name: string): Promise<void> {
+async function createSnapshot(page: Page, name: string, description?: string): Promise<void> {
   await page.getByTestId('snapshot-name-input').fill(name)
+  if (description) await page.getByTestId('snapshot-description-input').fill(description)
   await page.getByTestId('create-snapshot-btn').click()
   await expect(page.getByTestId('snapshot-row').filter({ hasText: name })).toBeVisible()
 }
@@ -84,9 +85,10 @@ test('creates, compares, and reverts snapshots from the renderer surface', async
   await expect(appPage.getByText('Current State', { exact: true })).toHaveCount(0)
   await expect(treeRow(appPage, projectName)).toBeVisible()
 
-  await createSnapshot(appPage, 'baseline')
+  await createSnapshot(appPage, 'baseline', 'Known-good empty lab before rack installation')
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Current project matches baseline')
   await expect(appPage.getByTestId('snapshot-timeline-event').filter({ hasText: 'Saved snapshot "baseline"' })).toBeVisible()
+  await expect(appPage.getByText('Known-good empty lab before rack installation')).toBeVisible()
 
   await appPage.getByRole('button', { name: 'Close snapshots' }).click()
   await expect(appPage.getByTestId('snapshots-panel')).toHaveCount(0)
@@ -95,11 +97,13 @@ test('creates, compares, and reverts snapshots from the renderer surface', async
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Unsnapshotted changes')
 
   await openSnapshotsPanel(appPage)
-  await createSnapshot(appPage, 'with-rack')
+  await createSnapshot(appPage, 'with-rack', 'Rack A installed and ready for review')
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Current project matches with-rack')
   await compareSnapshots(appPage, 'baseline', 'with-rack')
 
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Comparing baseline -> with-rack')
+  await expect(appPage.getByText('From: Known-good empty lab before rack installation')).toBeVisible()
+  await expect(appPage.getByText('To: Rack A installed and ready for review')).toBeVisible()
   await expect(appPage.getByTestId('snapshot-timeline')).toHaveCount(0)
   await expect(appPage.getByTestId('snapshot-name-input')).toHaveCount(0)
   await expect(appPage.getByTestId('compare-from-select')).toHaveCount(0)

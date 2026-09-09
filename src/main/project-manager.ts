@@ -96,6 +96,7 @@ import {
   validatePropertyKey,
   validatePropertyValue,
   validateSnapshotName,
+  validateSnapshotDescription,
   validateTemplate,
   validateTemplateId,
   validateTypedPropertyValue,
@@ -1514,19 +1515,28 @@ export class ProjectManager {
 
   // ─── Snapshots / history ───────────────────────────────────────────────────
 
-  async snapshotCreate(name: string): Promise<Result<Snapshot>> {
-    return this.withHistoryOperation(() => this.performSnapshotCreate(name))
+  async snapshotCreate(name: unknown, description: unknown = null): Promise<Result<Snapshot>> {
+    return this.withHistoryOperation(() => this.performSnapshotCreate(name, description))
   }
 
-  private async performSnapshotCreate(name: string): Promise<Result<Snapshot>> {
+  private async performSnapshotCreate(name: unknown, description: unknown): Promise<Result<Snapshot>> {
     if (!this.currentProject) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    }
+
+    if (typeof name !== 'string') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Snapshot name must be text')
     }
 
     const validation = validateSnapshotName(name)
     if (!validation.valid) {
       return err(ErrorCode.VALIDATION_FAILED, validation.message ?? 'Invalid snapshot name')
     }
+    const descriptionValidation = validateSnapshotDescription(description)
+    if (!descriptionValidation.valid) {
+      return err(ErrorCode.VALIDATION_FAILED, descriptionValidation.message ?? 'Invalid snapshot description')
+    }
+    const note = typeof description === 'string' ? description.trim() || null : null
 
     const flushResult = await this.flushPendingAutosave()
     if (!flushResult.ok) {
@@ -1541,12 +1551,13 @@ export class ProjectManager {
         type: 'snapshot',
         createdAt: snapshot.createdAt,
         snapshotId: snapshot.id,
+        note,
       }
       const snapshotMeta = {
         id: snapshot.id,
         basedOnSnapshotId: history.currentBaseSnapshotId,
         createdAfterRevertEventId: history.pendingRevertEventId,
-        note: null,
+        note,
       }
       history.snapshots[snapshot.id] = snapshotMeta
       history.events.push(event)
@@ -1747,6 +1758,7 @@ export class ProjectManager {
           entryId: snapshotId,
           createdAt: event.createdAt,
           snapshotName: snapshotId,
+          note: event.note ?? null,
           order: order++,
           ...newState,
         })
@@ -1927,13 +1939,14 @@ export class ProjectManager {
         // The current-project side has no Snapshot record; label it and leave
         // date/hash blank (it's the live working copy, not a committed snapshot).
         if (isCurrentRef(name)) {
-          return { name: CURRENT_PROJECT_LABEL, date: '', hash: '' }
+          return { name: CURRENT_PROJECT_LABEL, date: '', hash: '', note: null }
         }
         const s = snaps.find(x => x.name === name)
         return {
           name,
           date: s ? s.createdAt.slice(0, 16).replace('T', ' ') : '',
           hash: s ? s.commitHash.slice(0, 7) : '',
+          note: s?.note ?? null,
         }
       }
 

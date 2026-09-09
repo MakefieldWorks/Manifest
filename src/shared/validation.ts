@@ -62,6 +62,19 @@ export function validateSnapshotName(name: string): ValidationResult {
   return { valid: true }
 }
 
+export const MAX_SNAPSHOT_DESCRIPTION_LENGTH = 2000
+
+export function validateSnapshotDescription(description: unknown): ValidationResult {
+  if (description === undefined || description === null) return { valid: true }
+  if (typeof description !== 'string') {
+    return { valid: false, message: 'Snapshot description must be text' }
+  }
+  if (description.length > MAX_SNAPSHOT_DESCRIPTION_LENGTH) {
+    return { valid: false, message: 'Snapshot descriptions cannot exceed 2,000 characters' }
+  }
+  return { valid: true }
+}
+
 export function validateNodeName(name: string): ValidationResult {
   if (!name || name.trim().length === 0) {
     return { valid: false, message: 'Node name cannot be empty' }

@@ -1477,10 +1477,10 @@
     return nodeId
   }
 
-  async function handleSnapshotCreate(name: string) {
+  async function handleSnapshotCreate(name: string, description: string | null) {
     snapshotCreating = true
     snapshotError = null
-    const result = await window.api.snapshot.create(name)
+    const result = await window.api.snapshot.create(name, description)
     snapshotCreating = false
 
     if (result.ok) {
