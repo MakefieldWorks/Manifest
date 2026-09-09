@@ -90,6 +90,13 @@ const api: ManifestAPI = {
       ipcRenderer.invoke(IPC.SEARCH_QUERY, { query, offset, limit, filters }),
   },
 
+  inventory: {
+    query: (request) =>
+      ipcRenderer.invoke(IPC.INVENTORY_TABLE_QUERY, request),
+    exportCsv: (request) =>
+      ipcRenderer.invoke(IPC.INVENTORY_EXPORT_CSV, request),
+  },
+
   snapshot: {
     create: (name) =>
       ipcRenderer.invoke(IPC.SNAPSHOT_CREATE, { name }),

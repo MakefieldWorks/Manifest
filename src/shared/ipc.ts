@@ -39,6 +39,7 @@ import type { DesktopChromeInfo } from './desktop-chrome'
 import type { AppearancePreference } from './theme'
 import type { BatchPropertyUpdateRequest, BatchPropertyUpdateResult } from './batch-properties'
 import type { InventoryFilters } from './inventory-filters'
+import type { InventoryExportRequest, InventoryTablePage, InventoryTableRequest } from './inventory-table'
 
 // Channel name constants — use these everywhere, never raw strings.
 export const IPC = {
@@ -72,6 +73,8 @@ export const IPC = {
   IMPORT_NETBOX_PLAN:    'import:netbox:plan',
   IMPORT_NETBOX_APPLY:   'import:netbox:apply',
   SEARCH_QUERY:        'search:query',
+  INVENTORY_TABLE_QUERY: 'inventory:tableQuery',
+  INVENTORY_EXPORT_CSV: 'inventory:exportCsv',
   SNAPSHOT_CREATE:     'snapshot:create',
   SNAPSHOT_LIST:       'snapshot:list',
   SNAPSHOT_COMPARE:      'snapshot:compare',
@@ -235,6 +238,10 @@ export interface ManifestAPI {
       limit?: number,
       filters?: InventoryFilters,
     ): Promise<Result<SearchResultPage>>
+  }
+  inventory: {
+    query(request: InventoryTableRequest): Promise<Result<InventoryTablePage>>
+    exportCsv(request: InventoryExportRequest): Promise<Result<{ savedPath: string | null; rowCount: number }>>
   }
   snapshot: {
     create(name: string): Promise<Result<Snapshot>>

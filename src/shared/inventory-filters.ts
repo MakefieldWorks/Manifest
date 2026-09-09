@@ -17,7 +17,7 @@ export type InventoryFilterValidation =
   | { valid: false; message: string }
 
 const MAX_FILTER_ID_LENGTH = 200
-const MAX_PROPERTY_KEY_LENGTH = 64
+export const MAX_PROPERTY_KEY_LENGTH = 64
 const MAX_PROPERTY_VALUE_LENGTH = 512
 
 export function hasPropertyPredicate(filters: InventoryFilters): boolean {
