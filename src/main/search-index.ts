@@ -3,8 +3,17 @@ import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import type { ManifestNode, Project } from '../shared/types'
 
-const SEARCH_RESULT_LIMIT = 50
-const MAX_SEARCH_RESULT_LIMIT = 200
+export const SEARCH_RESULT_LIMIT = 50
+export const MAX_SEARCH_RESULT_LIMIT = 200
+
+export function normalizeSearchPage(offset = 0, limit = SEARCH_RESULT_LIMIT): { offset: number; limit: number } {
+  return {
+    offset: Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0,
+    limit: Number.isFinite(limit)
+      ? Math.max(1, Math.min(MAX_SEARCH_RESULT_LIMIT, Math.floor(limit)))
+      : SEARCH_RESULT_LIMIT,
+  }
+}
 
 interface SearchRow {
   nodeId: string
@@ -117,40 +126,58 @@ export class SearchIndexService {
     query: string,
     offset = 0,
     limit = SEARCH_RESULT_LIMIT,
+    scopeNodeIds?: Iterable<string>,
   ): SearchIndexPage {
     const db = this.requireDatabase(projectPath)
     const trimmed = query.trim()
-    const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0
-    const safeLimit = Number.isFinite(limit)
-      ? Math.max(1, Math.min(MAX_SEARCH_RESULT_LIMIT, Math.floor(limit)))
-      : SEARCH_RESULT_LIMIT
+    const { offset: safeOffset, limit: safeLimit } = normalizeSearchPage(offset, limit)
     if (!trimmed) return { hits: [], total: 0, offset: safeOffset, hasMore: false }
+    const scopeIds = scopeNodeIds ? [...new Set(scopeNodeIds)] : null
+    if (scopeIds?.length === 0) return { hits: [], total: 0, offset: safeOffset, hasMore: false }
+    if (scopeIds) this.replaceSearchScope(db, scopeIds)
 
+    try {
+      return this.queryPreparedPage(db, trimmed, safeOffset, safeLimit, scopeIds !== null)
+    } finally {
+      if (scopeIds) this.clearSearchScope(db)
+    }
+  }
+
+  private queryPreparedPage(
+    db: Database.Database,
+    trimmed: string,
+    safeOffset: number,
+    safeLimit: number,
+    scoped: boolean,
+  ): SearchIndexPage {
     const queryTokens = tokenize(trimmed)
     const ftsQuery = buildFtsQuery(queryTokens)
     const pattern = `%${escapeLike(trimmed.toLowerCase())}%`
+    const scopeJoin = scoped ? 'INNER JOIN search_scope ON search_scope.node_id = node_search.node_id' : ''
     const matchCte = ftsQuery ? `
       WITH ranked AS (
         SELECT
-          node_id AS nodeId,
-          node_name AS nodeName,
-          properties_text AS propertiesText,
+          node_search.node_id AS nodeId,
+          node_search.node_name AS nodeName,
+          node_search.properties_text AS propertiesText,
           bm25(node_search) AS rank
         FROM node_search
+        ${scopeJoin}
         WHERE node_search MATCH ?
       ),
       fallback AS (
         SELECT
-          node_id AS nodeId,
-          node_name AS nodeName,
-          properties_text AS propertiesText,
+          node_search.node_id AS nodeId,
+          node_search.node_name AS nodeName,
+          node_search.properties_text AS propertiesText,
           1000.0 AS rank
         FROM node_search
+        ${scopeJoin}
         WHERE (
-          lower(node_name) LIKE ? ESCAPE '\\'
-          OR lower(properties_text) LIKE ? ESCAPE '\\'
+          lower(node_search.node_name) LIKE ? ESCAPE '\\'
+          OR lower(node_search.properties_text) LIKE ? ESCAPE '\\'
         )
-        AND node_id NOT IN (SELECT nodeId FROM ranked)
+        AND node_search.node_id NOT IN (SELECT nodeId FROM ranked)
       ),
       combined AS (
         SELECT * FROM ranked
@@ -160,14 +187,15 @@ export class SearchIndexService {
     ` : `
       WITH combined AS (
         SELECT
-          node_id AS nodeId,
-          node_name AS nodeName,
-          properties_text AS propertiesText,
+          node_search.node_id AS nodeId,
+          node_search.node_name AS nodeName,
+          node_search.properties_text AS propertiesText,
           1000.0 AS rank
         FROM node_search
+        ${scopeJoin}
         WHERE (
-          lower(node_name) LIKE ? ESCAPE '\\'
-          OR lower(properties_text) LIKE ? ESCAPE '\\'
+          lower(node_search.node_name) LIKE ? ESCAPE '\\'
+          OR lower(node_search.properties_text) LIKE ? ESCAPE '\\'
         )
       )
     `
@@ -183,16 +211,16 @@ export class SearchIndexService {
       LIMIT ? OFFSET ?
     `).all(...matchParams, safeLimit, safeOffset) as SearchRow[]
     const pageHits = pageRows.map((row) => {
-        const matchField = detectMatchField(row.nodeName, row.propertiesText, trimmed, queryTokens)
-        return {
-          nodeId: row.nodeId,
-          nodeName: row.nodeName,
-          matchField,
-          snippet: matchField === 'name'
-            ? row.nodeName
-            : extractSnippet(row.propertiesText, trimmed),
-        }
-      })
+      const matchField = detectMatchField(row.nodeName, row.propertiesText, trimmed, queryTokens)
+      return {
+        nodeId: row.nodeId,
+        nodeName: row.nodeName,
+        matchField,
+        snippet: matchField === 'name'
+          ? row.nodeName
+          : extractSnippet(row.propertiesText, trimmed),
+      }
+    })
 
     return {
       hits: pageHits,
@@ -200,6 +228,24 @@ export class SearchIndexService {
       offset: safeOffset,
       hasMore: safeOffset + pageHits.length < total,
     }
+  }
+
+  private replaceSearchScope(db: Database.Database, nodeIds: string[]): void {
+    db.exec('CREATE TEMP TABLE IF NOT EXISTS search_scope (node_id TEXT PRIMARY KEY)')
+    const replace = db.transaction((ids: string[]) => {
+      db.prepare('DELETE FROM search_scope').run()
+      const batchSize = 500
+      for (let start = 0; start < ids.length; start += batchSize) {
+        const batch = ids.slice(start, start + batchSize)
+        const values = batch.map(() => '(?)').join(', ')
+        db.prepare(`INSERT INTO search_scope (node_id) VALUES ${values}`).run(...batch)
+      }
+    })
+    replace(nodeIds)
+  }
+
+  private clearSearchScope(db: Database.Database): void {
+    db.prepare('DELETE FROM search_scope').run()
   }
 
   private withFreshDatabase(projectPath: string, seed: (db: Database.Database) => void): void {

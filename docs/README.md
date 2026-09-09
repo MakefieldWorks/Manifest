@@ -22,6 +22,7 @@ Manifest is a local-first desktop app for managing structured, hierarchical proj
 | [TODOS.md](TODOS.md) | Active and deferred product/engineering work |
 | [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md) | Pilot-readiness dogfood checklist and import decision gate |
 | [UNDO_REDO.md](UNDO_REDO.md) | Project editing history, text undo, and snapshot/session boundaries |
+| [INVENTORY_FILTERS.md](INVENTORY_FILTERS.md) | Structured inventory filters, matching semantics, and paging behavior |
 
 ---
 
@@ -31,8 +32,8 @@ The core v1 surface is implemented: project lifecycle, hierarchy editing, search
 named snapshots, semantic compare, restore, E2E coverage, and packaging
 verification.
 
-The next phase is pilot readiness: dogfood the packaged app with representative
-data, then use those notes to scope the CSV/JSON import MVP.
+Current product work is expanding inventory views: complete paged search and
+structured filters are in place, with table presentation and export next.
 
 ---
 

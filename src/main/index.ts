@@ -403,8 +403,12 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC.SEARCH_QUERY,
-    (_, { query, offset, limit }: { query: string; offset?: number; limit?: number }) =>
-      projectManager.searchNodesPage(query, offset, limit)
+    (_, { query, offset, limit, filters }: {
+      query: string
+      offset?: number
+      limit?: number
+      filters?: unknown
+    }) => projectManager.searchNodesPage(query, offset, limit, filters)
   )
 
   // ── Git ──────────────────────────────────────────────────────────────────

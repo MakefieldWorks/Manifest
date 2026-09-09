@@ -38,6 +38,7 @@ import type { MenuCommandId, MenuCommandState } from './menu-commands'
 import type { DesktopChromeInfo } from './desktop-chrome'
 import type { AppearancePreference } from './theme'
 import type { BatchPropertyUpdateRequest, BatchPropertyUpdateResult } from './batch-properties'
+import type { InventoryFilters } from './inventory-filters'
 
 // Channel name constants — use these everywhere, never raw strings.
 export const IPC = {
@@ -228,7 +229,12 @@ export interface ManifestAPI {
     ): Promise<Result<{ project: Project; summary: NetboxImportResult }>>
   }
   search: {
-    query(query: string, offset?: number, limit?: number): Promise<Result<SearchResultPage>>
+    query(
+      query: string,
+      offset?: number,
+      limit?: number,
+      filters?: InventoryFilters,
+    ): Promise<Result<SearchResultPage>>
   }
   snapshot: {
     create(name: string): Promise<Result<Snapshot>>

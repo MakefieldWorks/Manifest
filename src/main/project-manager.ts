@@ -30,6 +30,13 @@ import {
   type BatchPropertyUpdateRequest,
   type BatchPropertyUpdateResult,
 } from '../shared/batch-properties'
+import {
+  filterInventoryNodes,
+  hasInventoryFilters,
+  hasPropertyPredicate,
+  inventoryFilterSnippet,
+  validateInventoryFilters,
+} from '../shared/inventory-filters'
 import type {
   Project,
   RecoveryPointApplyRequest,
@@ -99,7 +106,7 @@ import {
 import type { MergedTree } from '../shared/merged-tree'
 import type { GitService } from './git-service'
 import type { Logger } from './logger'
-import { SearchIndexService } from './search-index'
+import { normalizeSearchPage, SearchIndexService } from './search-index'
 import { HistoryIndexService } from './history-index'
 import { findProjectDocument, PROJECT_DOCUMENT_FILE } from './project-launcher'
 
@@ -1262,32 +1269,67 @@ export class ProjectManager {
     return page.ok ? ok(page.data.results) : page
   }
 
-  searchNodesPage(query: string, offset = 0, limit = 50): Result<SearchResultPage> {
-    const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0
+  searchNodesPage(
+    query: string,
+    offset = 0,
+    limit = 50,
+    rawFilters: unknown = {},
+  ): Result<SearchResultPage> {
+    const { offset: safeOffset, limit: safeLimit } = normalizeSearchPage(offset, limit)
     if (!this.currentProject) return ok({ results: [], total: 0, offset: safeOffset, hasMore: false })
+    const filterCheck = validateInventoryFilters(rawFilters)
+    if (!filterCheck.valid) return err(ErrorCode.VALIDATION_FAILED, filterCheck.message)
+    const filters = filterCheck.filters
 
     const q = query.trim().toLowerCase()
-    if (!q) return ok({ results: [], total: 0, offset: safeOffset, hasMore: false })
+    const filtersActive = hasInventoryFilters(filters)
+    if (!q && !filtersActive) return ok({ results: [], total: 0, offset: safeOffset, hasMore: false })
 
     const nodeMap = new Map(this.currentProject.nodes.map(n => [n.id, n]))
     const project = this.currentProject
+    const eligibleNodes = filtersActive ? filterInventoryNodes(project, filters) : project.nodes
+
+    const mapNode = (
+      node: ManifestNode,
+      matchField: SearchResult['matchField'],
+      snippet: string,
+    ): SearchResult => {
+      const parent = node.parentId ? nodeMap.get(node.parentId) : null
+      return {
+        nodeId: node.id,
+        nodeName: node.name,
+        parentName: parent?.name ?? null,
+        matchField,
+        snippet: snippet || node.name,
+      }
+    }
+
+    if (!q) {
+      const pageNodes = eligibleNodes.slice(safeOffset, safeOffset + safeLimit)
+      const matchField = (hasPropertyPredicate(filters) || filters.missingRequired) ? 'property' : 'filter'
+      return ok({
+        results: pageNodes.map(node => mapNode(node, matchField, inventoryFilterSnippet(project, node, filters))),
+        total: eligibleNodes.length,
+        offset: safeOffset,
+        hasMore: safeOffset + pageNodes.length < eligibleNodes.length,
+      })
+    }
 
     const queryCurrentIndex = (): SearchResultPage => {
       if (!this.search.hasExactNodeSet(project.path!, nodeMap.keys())) {
         throw new Error('Search index node set does not match the current project')
       }
-      const page = this.search.queryPage(project.path!, q, safeOffset, limit)
+      const page = this.search.queryPage(
+        project.path!,
+        q,
+        safeOffset,
+        safeLimit,
+        filtersActive ? eligibleNodes.map(node => node.id) : undefined,
+      )
       const results = page.hits.map(hit => {
         const node = nodeMap.get(hit.nodeId)
         if (!node) throw new Error(`Search index returned unknown node: ${hit.nodeId}`)
-        const parent = node.parentId ? nodeMap.get(node.parentId) : null
-        return {
-          nodeId: node.id,
-          nodeName: node.name,
-          parentName: parent?.name ?? null,
-          matchField: hit.matchField,
-          snippet: hit.snippet || node.name,
-        }
+        return mapNode(node, hit.matchField, hit.snippet)
       })
       return { results, total: page.total, offset: page.offset, hasMore: page.hasMore }
     }

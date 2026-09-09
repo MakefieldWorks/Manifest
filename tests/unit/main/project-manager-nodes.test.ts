@@ -441,6 +441,60 @@ describe('searchNodes', () => {
     expect(result.data).toEqual({ results: [], total: 0, offset: 0, hasMore: false })
   })
 
+  it('combines structured filters with text search and supports filter-only results', () => {
+    expect(manager.templateCreate('device', {
+      label: 'Device',
+      fields: {
+        serial: { type: 'string', required: true },
+        firmware: { type: 'version' },
+      },
+    }).ok).toBe(true)
+    expect(manager.nodeCreate('root-id', 'Rack A').ok).toBe(true)
+    const rack = manager.getCurrent()!.nodes.find(node => node.name === 'Rack A')!
+    expect(manager.nodeCreate(rack.id, 'Device A', 'device').ok).toBe(true)
+    expect(manager.nodeCreate(rack.id, 'Device B', 'device').ok).toBe(true)
+    const deviceA = manager.getCurrent()!.nodes.find(node => node.name === 'Device A')!
+    const deviceB = manager.getCurrent()!.nodes.find(node => node.name === 'Device B')!
+    expect(manager.nodeUpdate(deviceA.id, { properties: { firmware: 'v3.2' } }).ok).toBe(true)
+    expect(manager.nodeUpdate(deviceB.id, { properties: { serial: 'SN-2', firmware: 'v2.0' } }).ok).toBe(true)
+
+    const missing = manager.searchNodesPage('', 0, 50, { missingRequired: true })
+    expect(missing.ok).toBe(true)
+    if (!missing.ok) return
+    expect(missing.data.total).toBe(1)
+    expect(missing.data.offset).toBe(0)
+    expect(missing.data.hasMore).toBe(false)
+    expect(missing.data.results[0]).toMatchObject({
+      nodeId: deviceA.id,
+      matchField: 'property',
+      snippet: 'Missing: serial',
+    })
+
+    const templatePage = manager.searchNodesPage('', 0, 1, { templateId: 'device' })
+    expect(templatePage.ok).toBe(true)
+    if (!templatePage.ok) return
+    expect(templatePage.data).toMatchObject({ total: 2, offset: 0, hasMore: true })
+    expect(templatePage.data.results[0]?.matchField).toBe('filter')
+
+    const combined = manager.searchNodesPage('Device', 0, 50, {
+      subtreeId: rack.id,
+      templateId: 'device',
+      propertyKey: 'firmware',
+      propertyOperator: 'contains',
+      propertyValue: '2.',
+    })
+    expect(combined.ok).toBe(true)
+    if (!combined.ok) return
+    expect(combined.data.total).toBe(1)
+    expect(combined.data.results[0]?.nodeId).toBe(deviceB.id)
+
+    const invalid = manager.searchNodesPage('', 0, 50, {
+      propertyKey: 'x'.repeat(65),
+      propertyValue: 'value',
+    })
+    expect(invalid.ok).toBe(false)
+  })
+
   it('returns empty array for no match', () => {
     const result = manager.searchNodes('xyzzy-no-match')
     expect(result.ok).toBe(true)

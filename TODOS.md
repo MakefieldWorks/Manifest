@@ -2,6 +2,7 @@
 
 ## Completed
 
+- Structured inventory filters for subtree, template, property equals/contains, and missing required values, composable with complete paged text search. **Implemented:** 2026-09-08
 - Truthful inventory search totals and incremental loading beyond the initial 50 matches, with stable paging and visible loaded-versus-total status. **Implemented:** 2026-09-08
 - Multi-select and atomic batch property editing with mixed-value handling, an exact affected-node preview, validation across the full selection, and one-step Undo/Redo. **Implemented:** 2026-09-08
 - Duplicate nodes/subtrees beside their source with name validation, shared templates, remapped internal references, and one-step Undo/Redo. **Implemented:** 2026-09-08

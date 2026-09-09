@@ -31,13 +31,12 @@ The core idea is simple. Your project lives as a readable `Manifest.manifestproj
 - Duplicate a node and its descendants with a name preview, fresh IDs, and remapped internal references. Use the tree context menu, Project menu, or Cmd/Ctrl+D.
 - Select multiple visible nodes with Cmd/Ctrl-click or Shift-click, then set, add, or clear one property with a mixed-value preview and one-step Undo/Redo.
 - Undo and redo project edits, template changes, and imports during the current session; text fields keep native text undo. See [Undo/Redo behavior](docs/UNDO_REDO.md).
-- Search names and properties in the tree with an exact total for the current project, incremental result loading, Enter/Shift+Enter cycling, and Escape to clear. Typing while the tree is focused feeds the same visible search.
+- Search names and properties in the tree with an exact total, incremental loading, and structured filters for subtree, template, property value, and missing required fields. See [Inventory filters](docs/INVENTORY_FILTERS.md).
 - Edit node properties in the detail pane, with optional typed-property templates (string, number, boolean, date, version, enum, and node-to-node `reference` fields) — typing lives in project-level templates while values stay clean JSON primitives.
 - Import existing structured data from CSV into the hierarchy.
 - Autosave project changes back to disk.
 - Create named snapshots and restore prior states.
 - Compare snapshots, or compare the current project against a snapshot, with a merged diff/tree view; export the diff as a Markdown or CSV report.
-- Search node names and property values.
 - Follow the system appearance or choose a fixed appearance plus any built-in light and dark
   scheme independently from Settings.
 

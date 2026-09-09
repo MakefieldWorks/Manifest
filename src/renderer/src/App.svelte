@@ -14,6 +14,7 @@
   import { computeSubtreeSummaries, templatesForNode } from '../../shared/merged-tree'
   import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
   import type { BatchPropertyUpdateRequest } from '../../shared/batch-properties'
+  import { hasInventoryFilters, hasPropertyPredicate, type InventoryFilters } from '../../shared/inventory-filters'
   import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
   import { flattenTree } from './lib/tree-rows'
   import { isTextEditing } from './lib/edit-focus'
@@ -24,6 +25,7 @@
   import DuplicateDialog from './components/DuplicateDialog.svelte'
   import BatchSelectionPane from './components/BatchSelectionPane.svelte'
   import BatchPropertyDialog from './components/BatchPropertyDialog.svelte'
+  import InventoryFilterPanel from './components/InventoryFilterPanel.svelte'
   import TemplateManager from './components/TemplateManager.svelte'
   import ImportDialog from './components/ImportDialog.svelte'
   import RecoveryDialog from './components/RecoveryDialog.svelte'
@@ -124,6 +126,8 @@
   let expandedIds: Set<string>   = $state(new Set())
   let searchQuery: string        = $state('')
   let searchResults: SearchResult[] = $state([])
+  let searchFilters: InventoryFilters = $state({})
+  let inventoryFiltersOpen = $state(false)
   let searchTotal: number = $state(0)
   let searchHasMore: boolean = $state(false)
   let searchResultIndex: number = $state(0)
@@ -132,7 +136,14 @@
   let selectedScrollAlign: 'auto' | 'center' = $state('auto')
   let searchInputEl: HTMLInputElement | null = $state(null)
 
-  const searchActive = $derived(searchQuery.trim().length > 0)
+  const inventoryFiltersActive = $derived(hasInventoryFilters(searchFilters))
+  const inventoryFilterCount = $derived([
+    searchFilters.subtreeId,
+    searchFilters.templateId,
+    hasPropertyPredicate(searchFilters),
+    searchFilters.missingRequired,
+  ].filter(Boolean).length)
+  const searchActive = $derived(searchQuery.trim().length > 0 || inventoryFiltersActive)
   const searchMatchSet = $derived(new Set(searchResults.map(r => r.nodeId)))
   const searchResultMap = $derived(new Map(searchResults.map(r => [r.nodeId, r])))
   const searchIncludeIds = $derived.by(() => {
@@ -1256,7 +1267,7 @@
   function runSearch(query: string): void {
     if (searchTimer) clearTimeout(searchTimer)
     const requestId = ++searchRequestId
-    if (!query.trim()) {
+    if (!query.trim() && !hasInventoryFilters(searchFilters)) {
       searchResults = []
       searchTotal = 0
       searchHasMore = false
@@ -1271,9 +1282,15 @@
     searchTotal = 0
     searchHasMore = false
     searchResultIndex = 0
+    const filters = { ...searchFilters }
+    const filterSignature = JSON.stringify(filters)
     searchTimer = setTimeout(async () => {
-      const result = await window.api.search.query(query, 0, searchPageSize)
-      if (requestId !== searchRequestId || query !== searchQuery) return
+      const result = await window.api.search.query(query, 0, searchPageSize, filters)
+      if (
+        requestId !== searchRequestId ||
+        query !== searchQuery ||
+        filterSignature !== JSON.stringify(searchFilters)
+      ) return
       searching = false
       if (result.ok) {
         searchResults = result.data.results
@@ -1292,10 +1309,16 @@
     const requestId = searchRequestId
     const offset = searchResults.length
     const expectedTotal = searchTotal
+    const filters = { ...searchFilters }
+    const filterSignature = JSON.stringify(filters)
     searchLoadingMore = true
     try {
-      const result = await window.api.search.query(query, offset, searchPageSize)
-      if (requestId !== searchRequestId || query !== searchQuery) return
+      const result = await window.api.search.query(query, offset, searchPageSize, filters)
+      if (
+        requestId !== searchRequestId ||
+        query !== searchQuery ||
+        filterSignature !== JSON.stringify(searchFilters)
+      ) return
       if (!result.ok) {
         showToast(result.error.message)
         return
@@ -1322,9 +1345,14 @@
     runSearch(searchQuery)
   }
 
+  function handleInventoryFiltersChange(filters: InventoryFilters): void {
+    searchFilters = filters
+    runSearch(searchQuery)
+  }
+
   function handleSearchKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (!searchQuery) return
+      if (!searchActive) return
       e.preventDefault()
       clearSearch()
       searchInputEl?.focus()
@@ -1348,6 +1376,8 @@
     if (searchTimer) clearTimeout(searchTimer)
     searchRequestId++
     searchQuery = ''
+    searchFilters = {}
+    inventoryFiltersOpen = false
     searchResults = []
     searchTotal = 0
     searchHasMore = false
@@ -2039,40 +2069,64 @@
 
         <!-- Search bar -->
         <div class="px-3 py-2 border-b border-stone-200">
-          <div class="relative">
-            <input
-              bind:this={searchInputEl}
-              type="text"
-              value={searchQuery}
-              oninput={handleSearchInput}
-              onkeydown={handleSearchKeydown}
-              placeholder="Search nodes…"
-              class="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-8 py-1.5
-                     text-sm text-stone-700 placeholder-stone-300 focus:outline-none
-                     focus:ring-1 focus:ring-stone-400 selectable"
-              data-testid="search-input"
-            />
-            <svg class="absolute left-2.5 top-2 w-3.5 h-3.5 text-stone-400" fill="none" viewBox="0 0 16 16">
-              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            {#if searchQuery}
-              <button
-                class="absolute right-2.5 top-1.5 text-stone-400 hover:text-stone-600 text-xs"
-                onclick={clearSearch}
-                aria-label="Clear search"
-              >✕</button>
-            {/if}
+          <div class="flex gap-1.5">
+            <div class="relative min-w-0 flex-1">
+              <input
+                bind:this={searchInputEl}
+                type="text"
+                value={searchQuery}
+                oninput={handleSearchInput}
+                onkeydown={handleSearchKeydown}
+                placeholder="Search nodes…"
+                class="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-8 py-1.5
+                       text-sm text-stone-700 placeholder-stone-300 focus:outline-none
+                       focus:ring-1 focus:ring-stone-400 selectable"
+                data-testid="search-input"
+              />
+              <svg class="absolute left-2.5 top-2 w-3.5 h-3.5 text-stone-400" fill="none" viewBox="0 0 16 16">
+                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              {#if searchQuery}
+                <button
+                  class="absolute right-2.5 top-1.5 text-stone-400 hover:text-stone-600 text-xs"
+                  onclick={() => { searchQuery = ''; runSearch('') }}
+                  aria-label="Clear search text"
+                >✕</button>
+              {/if}
+            </div>
+            <button
+              type="button"
+              class="rounded-lg border px-2 py-1.5 text-xs font-medium"
+              class:border-stone-700={inventoryFiltersOpen || inventoryFiltersActive}
+              class:bg-stone-800={inventoryFiltersOpen || inventoryFiltersActive}
+              class:text-white={inventoryFiltersOpen || inventoryFiltersActive}
+              class:border-stone-200={!inventoryFiltersOpen && !inventoryFiltersActive}
+              class:bg-white={!inventoryFiltersOpen && !inventoryFiltersActive}
+              class:text-stone-600={!inventoryFiltersOpen && !inventoryFiltersActive}
+              disabled={compareMode}
+              aria-expanded={inventoryFiltersOpen}
+              onclick={() => { inventoryFiltersOpen = !inventoryFiltersOpen }}
+              data-testid="inventory-filter-toggle"
+            >Filter{inventoryFilterCount ? ` ${inventoryFilterCount}` : ''}</button>
           </div>
-          {#if searchQuery.trim()}
+          {#if inventoryFiltersOpen && project && !compareMode}
+            <InventoryFilterPanel
+              {project}
+              {selectedId}
+              filters={searchFilters}
+              onChange={handleInventoryFiltersChange}
+            />
+          {/if}
+          {#if searchActive}
             <div class="mt-2 flex items-center justify-between gap-2">
               <p class="truncate text-xs text-stone-500">
                 {#if searching}
                   Searching…
                 {:else if searchResults.length === 0}
-                  No results for "{searchQuery}"
+                  {searchQuery.trim() ? `No results for "${searchQuery}"` : 'No nodes match these filters'}
                 {:else}
-                  Result {searchResultIndex + 1} of {searchTotal} for "{searchQuery}"
+                  Result {searchResultIndex + 1} of {searchTotal}{searchQuery.trim() ? ` for "${searchQuery}"` : ''}
                   {#if searchResults.length < searchTotal} · {searchResults.length} loaded{/if}
                 {/if}
               </p>
