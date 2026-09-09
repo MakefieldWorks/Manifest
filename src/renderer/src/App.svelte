@@ -1291,17 +1291,29 @@
     const query = searchQuery
     const requestId = searchRequestId
     const offset = searchResults.length
+    const expectedTotal = searchTotal
     searchLoadingMore = true
-    const result = await window.api.search.query(query, offset, searchPageSize)
-    if (requestId !== searchRequestId || query !== searchQuery) return
-    searchLoadingMore = false
-    if (!result.ok || result.data.offset !== offset) return
-    searchResults = [...searchResults, ...result.data.results]
-    searchTotal = result.data.total
-    searchHasMore = result.data.hasMore
-    if (selectFirstNew && result.data.results.length > 0) {
-      await tick()
-      revealSearchResult(offset)
+    try {
+      const result = await window.api.search.query(query, offset, searchPageSize)
+      if (requestId !== searchRequestId || query !== searchQuery) return
+      if (!result.ok) {
+        showToast(result.error.message)
+        return
+      }
+      if (result.data.offset !== offset || result.data.total !== expectedTotal) {
+        showToast('Search results changed and were refreshed.')
+        runSearch(query)
+        return
+      }
+      searchResults = [...searchResults, ...result.data.results]
+      searchTotal = result.data.total
+      searchHasMore = result.data.hasMore
+      if (selectFirstNew && result.data.results.length > 0) {
+        await tick()
+        revealSearchResult(offset)
+      }
+    } finally {
+      if (requestId === searchRequestId) searchLoadingMore = false
     }
   }
 

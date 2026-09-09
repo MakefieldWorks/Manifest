@@ -1272,24 +1272,28 @@ export class ProjectManager {
     const nodeMap = new Map(this.currentProject.nodes.map(n => [n.id, n]))
     const project = this.currentProject
 
-    try {
-      const page = this.search.queryPage(project.path!, q, offset, limit)
-      const results = page.hits
-        .reduce<SearchResult[]>((acc, hit) => {
-          const node = nodeMap.get(hit.nodeId)
-          if (!node) return acc
-          const parent = node.parentId ? nodeMap.get(node.parentId) : null
-          acc.push({
-            nodeId: node.id,
-            nodeName: node.name,
-            parentName: parent?.name ?? null,
-            matchField: hit.matchField,
-            snippet: hit.snippet || node.name,
-          })
-          return acc
-        }, [])
+    const queryCurrentIndex = (): SearchResultPage => {
+      if (!this.search.hasExactNodeSet(project.path!, nodeMap.keys())) {
+        throw new Error('Search index node set does not match the current project')
+      }
+      const page = this.search.queryPage(project.path!, q, safeOffset, limit)
+      const results = page.hits.map(hit => {
+        const node = nodeMap.get(hit.nodeId)
+        if (!node) throw new Error(`Search index returned unknown node: ${hit.nodeId}`)
+        const parent = node.parentId ? nodeMap.get(node.parentId) : null
+        return {
+          nodeId: node.id,
+          nodeName: node.name,
+          parentName: parent?.name ?? null,
+          matchField: hit.matchField,
+          snippet: hit.snippet || node.name,
+        }
+      })
+      return { results, total: page.total, offset: page.offset, hasMore: page.hasMore }
+    }
 
-      return ok({ results, total: page.total, offset: page.offset, hasMore: page.hasMore })
+    try {
+      return ok(queryCurrentIndex())
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.warn('search query failed; attempting index rebuild', {
@@ -1306,23 +1310,7 @@ export class ProjectManager {
       }
 
       try {
-        const page = this.search.queryPage(project.path!, q, offset, limit)
-        const retried = page.hits
-          .reduce<SearchResult[]>((acc, hit) => {
-            const node = nodeMap.get(hit.nodeId)
-            if (!node) return acc
-            const parent = node.parentId ? nodeMap.get(node.parentId) : null
-            acc.push({
-              nodeId: node.id,
-              nodeName: node.name,
-              parentName: parent?.name ?? null,
-              matchField: hit.matchField,
-              snippet: hit.snippet || node.name,
-            })
-            return acc
-          }, [])
-
-        return ok({ results: retried, total: page.total, offset: page.offset, hasMore: page.hasMore })
+        return ok(queryCurrentIndex())
       } catch (retryError: unknown) {
         const retryMsg = retryError instanceof Error ? retryError.message : String(retryError)
         this.logger.error('search query failed after rebuild', { path: project.path, error: retryMsg })

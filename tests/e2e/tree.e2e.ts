@@ -258,4 +258,13 @@ test('search reports and incrementally loads more than 50 matches', async ({
   await appPage.getByTestId('search-load-more').click()
   await expect(appPage.getByTestId('search-load-more')).toHaveCount(0)
   await expect(appPage.getByText('Result 1 of 55', { exact: false })).not.toContainText('loaded')
+
+  await search.press('Escape')
+  await search.fill('Inventory Device')
+  await expect(appPage.getByText('Result 1 of 55', { exact: false })).toBeVisible()
+  for (let index = 1; index < 50; index++) await search.press('Enter')
+  await expect(appPage.getByText('Result 50 of 55', { exact: false })).toBeVisible()
+  await search.press('Enter')
+  await expect(appPage.getByText('Result 51 of 55', { exact: false })).toBeVisible()
+  await expect(appPage.getByTestId('search-load-more')).toHaveCount(0)
 })

@@ -13,6 +13,10 @@ interface SearchRow {
   rank: number
 }
 
+interface SearchCountRow {
+  total: number
+}
+
 export interface SearchIndexHit {
   nodeId: string
   nodeName: string
@@ -31,6 +35,7 @@ export class SearchIndexService {
   private db: Database.Database | null = null
   private dbPath: string | null = null
   private projectPath: string | null = null
+  private indexedNodeIds = new Set<string>()
 
   rebuild(project: Project): void {
     if (!project.path) {
@@ -52,6 +57,7 @@ export class SearchIndexService {
 
       rebuildAll(project.nodes)
     })
+    this.indexedNodeIds = new Set(project.nodes.map(node => node.id))
   }
 
   close(): void {
@@ -61,6 +67,7 @@ export class SearchIndexService {
     this.db = null
     this.dbPath = null
     this.projectPath = null
+    this.indexedNodeIds.clear()
   }
 
   upsertNode(projectPath: string, node: ManifestNode): void {
@@ -73,6 +80,7 @@ export class SearchIndexService {
     })
 
     upsert(node)
+    this.indexedNodeIds.add(node.id)
   }
 
   deleteNodes(projectPath: string, nodeIds: string[]): void {
@@ -87,6 +95,17 @@ export class SearchIndexService {
     })
 
     deleteAll(nodeIds)
+    for (const nodeId of nodeIds) this.indexedNodeIds.delete(nodeId)
+  }
+
+  hasExactNodeSet(projectPath: string, nodeIds: Iterable<string>): boolean {
+    this.requireDatabase(projectPath)
+    const expected = new Set(nodeIds)
+    if (expected.size !== this.indexedNodeIds.size) return false
+    for (const nodeId of expected) {
+      if (!this.indexedNodeIds.has(nodeId)) return false
+    }
+    return true
   }
 
   query(projectPath: string, query: string, limit = SEARCH_RESULT_LIMIT): SearchIndexHit[] {
@@ -107,12 +126,11 @@ export class SearchIndexService {
       : SEARCH_RESULT_LIMIT
     if (!trimmed) return { hits: [], total: 0, offset: safeOffset, hasMore: false }
 
-    const hits = new Map<string, SearchRow>()
     const queryTokens = tokenize(trimmed)
     const ftsQuery = buildFtsQuery(queryTokens)
-
-    if (ftsQuery) {
-      const ranked = db.prepare<[string], SearchRow>(`
+    const pattern = `%${escapeLike(trimmed.toLowerCase())}%`
+    const matchCte = ftsQuery ? `
+      WITH ranked AS (
         SELECT
           node_id AS nodeId,
           node_name AS nodeName,
@@ -120,39 +138,51 @@ export class SearchIndexService {
           bm25(node_search) AS rank
         FROM node_search
         WHERE node_search MATCH ?
-        ORDER BY rank
-      `).all(ftsQuery)
-
-      for (const row of ranked) {
-        hits.set(row.nodeId, row)
-      }
-    }
-
-    const pattern = `%${escapeLike(trimmed.toLowerCase())}%`
-    const fallback = db.prepare<[string, string], Omit<SearchRow, 'rank'>>(`
-      SELECT
-        node_id AS nodeId,
-        node_name AS nodeName,
-        properties_text AS propertiesText
-      FROM node_search
-      WHERE (
-        lower(node_name) LIKE ? ESCAPE '\\'
-        OR lower(properties_text) LIKE ? ESCAPE '\\'
+      ),
+      fallback AS (
+        SELECT
+          node_id AS nodeId,
+          node_name AS nodeName,
+          properties_text AS propertiesText,
+          1000.0 AS rank
+        FROM node_search
+        WHERE (
+          lower(node_name) LIKE ? ESCAPE '\\'
+          OR lower(properties_text) LIKE ? ESCAPE '\\'
+        )
+        AND node_id NOT IN (SELECT nodeId FROM ranked)
+      ),
+      combined AS (
+        SELECT * FROM ranked
+        UNION ALL
+        SELECT * FROM fallback
       )
-    `).all(pattern, pattern)
-
-    for (const row of fallback) {
-      if (!hits.has(row.nodeId)) {
-        hits.set(row.nodeId, { ...row, rank: 1000 })
-      }
-    }
-
-    const ordered = Array.from(hits.values())
-      .sort((a, b) => a.rank - b.rank || a.nodeName.localeCompare(b.nodeName) || a.nodeId.localeCompare(b.nodeId))
-    const total = ordered.length
-    const pageRows = ordered.slice(safeOffset, safeOffset + safeLimit)
-    const pageHits = pageRows
-      .map((row) => {
+    ` : `
+      WITH combined AS (
+        SELECT
+          node_id AS nodeId,
+          node_name AS nodeName,
+          properties_text AS propertiesText,
+          1000.0 AS rank
+        FROM node_search
+        WHERE (
+          lower(node_name) LIKE ? ESCAPE '\\'
+          OR lower(properties_text) LIKE ? ESCAPE '\\'
+        )
+      )
+    `
+    const matchParams = ftsQuery ? [ftsQuery, pattern, pattern] : [pattern, pattern]
+    const countRow = db.prepare(`${matchCte} SELECT COUNT(*) AS total FROM combined`)
+      .get(...matchParams) as SearchCountRow
+    const total = countRow.total
+    const pageRows = db.prepare(`
+      ${matchCte}
+      SELECT nodeId, nodeName, propertiesText, rank
+      FROM combined
+      ORDER BY rank, nodeName COLLATE NOCASE, nodeId
+      LIMIT ? OFFSET ?
+    `).all(...matchParams, safeLimit, safeOffset) as SearchRow[]
+    const pageHits = pageRows.map((row) => {
         const matchField = detectMatchField(row.nodeName, row.propertiesText, trimmed, queryTokens)
         return {
           nodeId: row.nodeId,
