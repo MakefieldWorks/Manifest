@@ -36,12 +36,13 @@
     error: string | null
     /** Node id currently selected in the tree — highlights the matching diff row. */
     highlightedNodeId?: string | null
+    scopeCandidate?: { id: string; name: string } | null
     /** Called when the user clicks a diff row — App selects the node in the tree. */
     onDiffNodeSelect?: (nodeId: string) => void
     onClose: () => void
     onRefresh: () => Promise<void>
     onCreate: (name: string, description: string | null) => Promise<boolean>
-    onCompare: (from: string, to: string) => Promise<void>
+    onCompare: (from: string, to: string, scopeNodeId: string | null) => Promise<void>
     onExitCompare: () => void
     onRestore: (name: string) => Promise<void>
     onApplyRecovery: (id: string) => Promise<void>
@@ -64,6 +65,7 @@
     recoveringId,
     error,
     highlightedNodeId = null,
+    scopeCandidate = null,
     onDiffNodeSelect,
     onClose,
     onRefresh,
@@ -80,7 +82,12 @@
   let snapshotDescription = $state('')
   let compareFrom = $state('')
   let compareTo = $state('')
+  let compareSelectedSubtree = $state(false)
   let reportBusy = $state(false)
+
+  $effect(() => {
+    if (!scopeCandidate) compareSelectedSubtree = false
+  })
 
   async function runReport(fn: (() => Promise<void> | undefined) | undefined) {
     if (!fn || reportBusy) return
@@ -313,7 +320,11 @@
 
   async function submitCompare() {
     if (!compareFrom || !compareTo || compareFrom === compareTo || comparing) return
-    await onCompare(compareFrom, compareTo)
+    await onCompare(
+      compareFrom,
+      compareTo,
+      compareSelectedSubtree && scopeCandidate ? scopeCandidate.id : null,
+    )
   }
 
   function snapshotTagClass(name: string): string {
@@ -450,6 +461,12 @@
           Comparing {snapshotRefLabel(mergedTree.fromSnapshot)} → {snapshotRefLabel(mergedTree.toSnapshot)}
         </h2>
         <p class="text-xs text-stone-400">{totalChanges} {totalChanges === 1 ? 'change' : 'changes'}</p>
+        {#if mergedTree.scope}
+          <p class="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700"
+             data-testid="compare-scope-label">
+            Scope: {mergedTree.scope.path}
+          </p>
+        {/if}
         {#each compareDescriptions as description (description.label)}
           <p class="mt-0.5 max-w-96 line-clamp-2 text-[10px] text-stone-500" title={description.note}>
             {description.label}: {description.note}
@@ -979,6 +996,24 @@
             </select>
           </label>
         </div>
+        <label
+          class="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600"
+          class:opacity-50={!scopeCandidate}
+        >
+          <input
+            type="checkbox"
+            bind:checked={compareSelectedSubtree}
+            disabled={!scopeCandidate}
+            class="h-3.5 w-3.5 accent-stone-700"
+            data-testid="compare-scope-checkbox"
+          />
+          <span class="min-w-0">
+            <span class="font-medium">Selected subtree</span>
+            <span class="ml-1 truncate text-stone-400">
+              {scopeCandidate ? scopeCandidate.name : 'Select a node below the project root'}
+            </span>
+          </span>
+        </label>
         <button
           onclick={submitCompare}
           disabled={snapshots.length < 1 || !compareFrom || !compareTo || compareFrom === compareTo || comparing}

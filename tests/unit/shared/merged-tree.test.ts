@@ -135,6 +135,16 @@ describe('buildMergedTree', () => {
     const result = buildMergedTree(from, to, [], 'v1', 'v2')
     expect(result.fromSnapshot).toBe('v1')
     expect(result.toSnapshot).toBe('v2')
+    expect(result.scope).toBeNull()
+  })
+
+  it('carries resolved comparison scope metadata', () => {
+    const nodes = [n('root', null, 0), n('rack', 'root', 0)]
+    const from = makeProject(nodes)
+    const to = makeProject(nodes)
+    const scope = { nodeId: 'rack', name: 'rack', path: 'root / rack' }
+    const result = buildMergedTree(from, to, [], 'v1', 'v2', { scope })
+    expect(result.scope).toEqual(scope)
   })
 
   // ── Pure add ────────────────────────────────────────────────────────────────

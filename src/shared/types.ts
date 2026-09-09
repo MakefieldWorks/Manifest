@@ -311,6 +311,12 @@ export interface Snapshot {
   note: string | null
 }
 
+export interface ComparisonScope {
+  nodeId: string
+  name: string
+  path: string
+}
+
 export type TimelineEventType = 'snapshot' | 'revert' | 'recover'
 
 export interface SnapshotTimelineEvent {

@@ -446,8 +446,8 @@ function registerIpcHandlers(): void {
   // Main builds the content authoritatively (ProjectManager.buildReport) and owns
   // the save dialog + file write — the renderer never touches the filesystem.
 
-  ipcMain.handle(IPC.REPORT_EXPORT, async (_, { from, to, format }: { from: string; to: string; format: ReportFormat }) => {
-    const built = await projectManager.buildReport(from, to, format)
+  ipcMain.handle(IPC.REPORT_EXPORT, async (_, { from, to, format, scopeNodeId }: { from: string; to: string; format: ReportFormat; scopeNodeId?: unknown }) => {
+    const built = await projectManager.buildReport(from, to, format, scopeNodeId)
     if (!built.ok) return built
     // showSaveDialog AND writeFile are both inside the try so a dialog or write
     // rejection resolves to a Result, never throwing across the IPC boundary.
@@ -466,8 +466,8 @@ function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC.REPORT_BUILD, (_, { from, to, format }: { from: string; to: string; format: ReportFormat }) =>
-    projectManager.buildReport(from, to, format)
+  ipcMain.handle(IPC.REPORT_BUILD, (_, { from, to, format, scopeNodeId }: { from: string; to: string; format: ReportFormat; scopeNodeId?: unknown }) =>
+    projectManager.buildReport(from, to, format, scopeNodeId)
   )
 
   // ── Dialog helpers ───────────────────────────────────────────────────────
@@ -554,12 +554,12 @@ function registerIpcHandlers(): void {
     projectManager.snapshotList()
   )
 
-  ipcMain.handle(IPC.SNAPSHOT_COMPARE, (_, { a, b }: { a: string; b: string }) =>
-    projectManager.snapshotCompare(a, b)
+  ipcMain.handle(IPC.SNAPSHOT_COMPARE, (_, { a, b, scopeNodeId }: { a: string; b: string; scopeNodeId?: unknown }) =>
+    projectManager.snapshotCompare(a, b, scopeNodeId)
   )
 
-  ipcMain.handle(IPC.SNAPSHOT_LOAD_COMPARE, (_, { a, b }: { a: string; b: string }) =>
-    projectManager.snapshotLoadCompare(a, b)
+  ipcMain.handle(IPC.SNAPSHOT_LOAD_COMPARE, (_, { a, b, scopeNodeId }: { a: string; b: string; scopeNodeId?: unknown }) =>
+    projectManager.snapshotLoadCompare(a, b, scopeNodeId)
   )
 
   ipcMain.handle(IPC.SNAPSHOT_REVERT, (_, request: { name: string; note?: string | null }) =>

@@ -53,6 +53,7 @@ import {
 } from '../shared/inventory-table'
 import type {
   Project,
+  ComparisonScope,
   RecoveryPointApplyRequest,
   RecoveryPointApplyResult,
   ManifestNode,
@@ -106,6 +107,11 @@ import {
   templateLabel,
 } from '../shared/validation'
 import { diffProjects, diffTemplates } from '../shared/diff-engine'
+import {
+  filterDiffsToComparisonScope,
+  filterTemplateDiffsToComparisonScope,
+  resolveComparisonScope,
+} from '../shared/comparison-scope'
 import { isCurrentRef, CURRENT_PROJECT_LABEL } from '../shared/snapshot-ref'
 import { buildMergedTree } from '../shared/merged-tree'
 import { parseCsv, serializeCsv, CsvParseError } from '../shared/csv'
@@ -123,6 +129,14 @@ import type { GitService } from './git-service'
 import type { Logger } from './logger'
 import { normalizeSearchPage, SearchIndexService } from './search-index'
 import { HistoryIndexService } from './history-index'
+
+interface LoadedComparison {
+  projectA: Project
+  projectB: Project
+  diffs: DiffEntry[]
+  templateDiffs: ReturnType<typeof diffTemplates>
+  scope: ComparisonScope | null
+}
 import { findProjectDocument, PROJECT_DOCUMENT_FILE } from './project-launcher'
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  // 50 MB
@@ -1823,17 +1837,18 @@ export class ProjectManager {
     return ok({ entries, backfillStatus: this.getHistoryIndexStatus() })
   }
 
-  async snapshotCompare(a: string, b: string): Promise<Result<DiffEntry[]>> {
+  async snapshotCompare(a: string, b: string, scopeNodeId: unknown = null): Promise<Result<DiffEntry[]>> {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
     try {
-      const loaded = await this.loadAndDiff(a, b)
+      const loaded = await this.loadAndDiff(a, b, scopeNodeId)
       if (!loaded.ok) return loaded as Result<DiffEntry[]>
       this.logger.info('snapshot compare complete', {
         path: this.currentProject.path,
         from: a,
         to: b,
+        scopeNodeId: loaded.data.scope?.nodeId ?? null,
         diffCount: loaded.data.diffs.length,
       })
       return ok(loaded.data.diffs)
@@ -1844,19 +1859,20 @@ export class ProjectManager {
     }
   }
 
-  async snapshotLoadCompare(a: string, b: string): Promise<Result<MergedTree>> {
+  async snapshotLoadCompare(a: string, b: string, scopeNodeId: unknown = null): Promise<Result<MergedTree>> {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
     try {
-      const loaded = await this.loadAndDiff(a, b)
+      const loaded = await this.loadAndDiff(a, b, scopeNodeId)
       if (!loaded.ok) return loaded as Result<MergedTree>
-      const { projectA, projectB, diffs } = loaded.data
-      const merged = buildMergedTree(projectA, projectB, diffs, a, b)
+      const { projectA, projectB, diffs, templateDiffs, scope } = loaded.data
+      const merged = buildMergedTree(projectA, projectB, diffs, a, b, { scope, templateChanges: templateDiffs })
       this.logger.info('snapshot loadCompare complete', {
         path: this.currentProject.path,
         from: a,
         to: b,
+        scopeNodeId: scope?.nodeId ?? null,
         nodeCount: merged.nodes.length,
       })
       return ok(merged)
@@ -1879,24 +1895,58 @@ export class ProjectManager {
     return this.parseManifestJson(raw)
   }
 
-  /** Shared inner logic: resolve both refs (snapshot or current project) and diff them. */
-  private async loadAndDiff(a: string, b: string): Promise<Result<{ projectA: Project; projectB: Project; diffs: DiffEntry[] }>> {
+  /** Shared inner logic: resolve both refs, diff them, and apply an optional subtree scope. */
+  private async loadAndDiff(a: string, b: string, scopeNodeId: unknown = null): Promise<Result<LoadedComparison>> {
+    if (scopeNodeId !== null && scopeNodeId !== undefined && (
+      typeof scopeNodeId !== 'string' || scopeNodeId.length === 0
+    )) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Comparison scope must be a valid node ID')
+    }
+    const requestedScopeId = typeof scopeNodeId === 'string' ? scopeNodeId : null
+
     // Comparing a ref against itself is an empty diff by definition. The renderer
     // already blocks it, but guard here too (defense-in-depth for direct callers)
     // and skip the redundant resolve/git-read.
+    let projectA: Project
+    let projectB: Project
     if (a === b) {
       const only = await this.resolveCompareProject(a)
-      if (!only.ok) return only as Result<{ projectA: Project; projectB: Project; diffs: DiffEntry[] }>
-      return ok({ projectA: only.data, projectB: only.data, diffs: [] })
+      if (!only.ok) return only as Result<LoadedComparison>
+      projectA = only.data
+      projectB = only.data
+    } else {
+      const [resolvedA, resolvedB] = await Promise.all([
+        this.resolveCompareProject(a),
+        this.resolveCompareProject(b),
+      ])
+      if (!resolvedA.ok) return resolvedA as Result<LoadedComparison>
+      if (!resolvedB.ok) return resolvedB as Result<LoadedComparison>
+      projectA = resolvedA.data
+      projectB = resolvedB.data
     }
-    const [projectA, projectB] = await Promise.all([
-      this.resolveCompareProject(a),
-      this.resolveCompareProject(b),
-    ])
-    if (!projectA.ok) return projectA as Result<{ projectA: Project; projectB: Project; diffs: DiffEntry[] }>
-    if (!projectB.ok) return projectB as Result<{ projectA: Project; projectB: Project; diffs: DiffEntry[] }>
-    const diffs = diffProjects(projectA.data, projectB.data)
-    return ok({ projectA: projectA.data, projectB: projectB.data, diffs })
+
+    const allDiffs = a === b ? [] : diffProjects(projectA, projectB)
+    const allTemplateDiffs = a === b ? [] : diffTemplates(projectA, projectB)
+    if (!requestedScopeId) {
+      return ok({ projectA, projectB, diffs: allDiffs, templateDiffs: allTemplateDiffs, scope: null })
+    }
+
+    const resolvedScope = resolveComparisonScope(projectA, projectB, requestedScopeId)
+    if (!resolvedScope) {
+      return err(ErrorCode.VALIDATION_FAILED, 'The selected comparison scope does not exist in either project state')
+    }
+    return ok({
+      projectA,
+      projectB,
+      diffs: filterDiffsToComparisonScope(allDiffs, resolvedScope.nodeIds),
+      templateDiffs: filterTemplateDiffsToComparisonScope(
+        allTemplateDiffs,
+        projectA,
+        projectB,
+        resolvedScope.nodeIds,
+      ),
+      scope: resolvedScope.scope,
+    })
   }
 
   /** Resolve a node id to its full display path ("A / B / Name") within a project. */
@@ -1927,15 +1977,15 @@ export class ProjectManager {
     from: string,
     to: string,
     format: ReportFormat,
+    scopeNodeId: unknown = null,
   ): Promise<Result<{ content: string; suggestedName: string }>> {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
     try {
-      const loaded = await this.loadAndDiff(from, to)
+      const loaded = await this.loadAndDiff(from, to, scopeNodeId)
       if (!loaded.ok) return loaded as Result<{ content: string; suggestedName: string }>
-      const { projectA, projectB, diffs } = loaded.data
-      const templateDiffs = diffTemplates(projectA, projectB)
+      const { projectA, projectB, diffs, templateDiffs, scope } = loaded.data
 
       // loadAndDiff returns no Snapshot records, so resolve metadata separately
       // for the report header (date + short commit hash).
@@ -1961,6 +2011,7 @@ export class ProjectManager {
         from: meta(from),
         to: meta(to),
         generatedAt: new Date().toISOString(),
+        scope,
         oldPathById: this.buildPathResolver(projectA),
         templateLabelOld: (v) => (v ? templateLabel(projectA.templates?.[String(v)], String(v)) : '(none)'),
         templateLabelNew: (v) => (v ? templateLabel(projectB.templates?.[String(v)], String(v)) : '(none)'),
@@ -1978,7 +2029,8 @@ export class ProjectManager {
       // tolerable, not a correctness concern.
       const fileToken = (ref: string) => (isCurrentRef(ref) ? 'current-project' : safe(ref))
       const ext = format === 'csv' ? 'csv' : 'md'
-      const suggestedName = `${safe(ctx.projectName)}-changes-${fileToken(from)}-to-${fileToken(to)}.${ext}`
+      const scopeToken = scope ? `-${safe(scope.name)}` : ''
+      const suggestedName = `${safe(ctx.projectName)}-changes-${fileToken(from)}-to-${fileToken(to)}${scopeToken}.${ext}`
       return ok({ content, suggestedName })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)

@@ -689,6 +689,7 @@
         ],
         "fromSnapshot": "v1",
         "toSnapshot": "@current",
+        "scope": null,
         "fromTemplates": {
           "instrument": {
             "label": "Instrument",

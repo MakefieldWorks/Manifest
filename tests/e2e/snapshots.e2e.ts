@@ -102,13 +102,17 @@ test('creates, compares, and reverts snapshots from the renderer surface', async
 
   await addChildNode(appPage, projectName, 'Rack A')
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Unsnapshotted changes')
+  await treeRow(appPage, 'Rack A').click()
 
   await openSnapshotsPanel(appPage)
   await createSnapshot(appPage, 'with-rack', 'Rack A installed and ready for review')
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Current project matches with-rack')
+  await expect(appPage.getByTestId('compare-scope-checkbox')).toBeEnabled()
+  await appPage.getByTestId('compare-scope-checkbox').check()
   await compareSnapshots(appPage, 'baseline', 'with-rack')
 
   await expect(appPage.getByTestId('project-mode-badge')).toHaveText('Comparing baseline -> with-rack')
+  await expect(appPage.getByTestId('compare-scope-label')).toContainText(`${projectName} / Rack A`)
   await expect(appPage.getByText('From: Known-good empty lab before rack installation')).toBeVisible()
   await expect(appPage.getByText('To: Rack A installed and ready for review')).toBeVisible()
   await expect(appPage.getByTestId('snapshot-timeline')).toHaveCount(0)
