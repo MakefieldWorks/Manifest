@@ -39,7 +39,7 @@
 
   // Segment the name for highlight only when this row is a name match.
   const nameSegments = $derived(
-    matched && matchDetail?.matchField !== 'property' && matchQuery
+    matched && matchDetail?.matchField === 'name' && matchQuery
       ? splitHighlight(row.node.name, matchQuery)
       : null
   )

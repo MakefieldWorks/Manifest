@@ -12,6 +12,10 @@
   }
 
   let { project, selectedId, filters, onChange }: Props = $props()
+  let propertyKeyDraft = $state('')
+  let propertyValueDraft = $state('')
+  let syncedPropertyKey = $state('')
+  let syncedPropertyValue = $state('')
 
   const selectedNode = $derived(project.nodes.find(node => node.id === selectedId) ?? null)
   const subtreeNode = $derived(project.nodes.find(node => node.id === filters.subtreeId) ?? null)
@@ -20,11 +24,41 @@
     const keys = new Set<string>()
     for (const node of project.nodes) for (const key of Object.keys(node.properties)) keys.add(key)
     for (const template of Object.values(project.templates ?? {})) for (const key of Object.keys(template.fields)) keys.add(key)
-    return [...keys].sort((a, b) => a.localeCompare(b))
+    return [...keys].sort((a, b) => a.localeCompare(b)).slice(0, 200)
+  })
+
+  $effect(() => {
+    const nextKey = filters.propertyKey ?? ''
+    const nextValue = filters.propertyValue ?? ''
+    if (nextKey !== syncedPropertyKey) {
+      syncedPropertyKey = nextKey
+      propertyKeyDraft = nextKey
+    }
+    if (nextValue !== syncedPropertyValue) {
+      syncedPropertyValue = nextValue
+      propertyValueDraft = nextValue
+    }
   })
 
   function update(patch: Partial<InventoryFilters>): void {
     onChange({ ...filters, ...patch })
+  }
+
+  function updatePropertyKey(value: string): void {
+    propertyKeyDraft = value
+    syncedPropertyKey = value
+    const changedKey = value.trim() !== filters.propertyKey?.trim()
+    if (changedKey) {
+      propertyValueDraft = ''
+      syncedPropertyValue = ''
+    }
+    onChange({ ...filters, propertyKey: value, propertyValue: changedKey ? '' : propertyValueDraft })
+  }
+
+  function updatePropertyValue(value: string): void {
+    propertyValueDraft = value
+    syncedPropertyValue = value
+    update({ propertyValue: value })
   }
 </script>
 
@@ -42,11 +76,21 @@
   <div>
     <p class="text-[10px] text-stone-500">Scope</p>
     <div class="mt-1 flex items-center gap-1.5">
-      <span class="min-w-0 flex-1 truncate text-xs text-stone-700" title={subtreeNode?.name ?? 'Entire project'}>
-        {subtreeNode ? subtreeNode.name : 'Entire project'}
+      <span
+        class="min-w-0 flex-1 truncate text-xs"
+        class:text-red-600={Boolean(filters.subtreeId && !subtreeNode)}
+        class:text-stone-700={!filters.subtreeId || Boolean(subtreeNode)}
+        title={filters.subtreeId ? subtreeNode?.name ?? 'Selected scope unavailable' : 'Entire project'}
+      >
+        {filters.subtreeId ? subtreeNode?.name ?? 'Selected scope unavailable' : 'Entire project'}
       </span>
       {#if filters.subtreeId}
-        <button type="button" class="text-[10px] text-stone-500 hover:text-stone-800" onclick={() => update({ subtreeId: null })}>Entire project</button>
+        <button
+          type="button"
+          class="text-[10px] text-stone-500 hover:text-stone-800"
+          onclick={() => update({ subtreeId: null })}
+          data-testid="inventory-filter-clear-scope"
+        >{subtreeNode ? 'Entire project' : 'Clear scope'}</button>
       {:else}
         <button
           type="button"
@@ -80,8 +124,8 @@
       <input
         list="inventory-property-keys"
         class="mt-1 w-full rounded border border-stone-200 px-2 py-1.5 text-xs text-stone-700"
-        value={filters.propertyKey ?? ''}
-        oninput={(event) => update({ propertyKey: (event.currentTarget as HTMLInputElement).value })}
+        bind:value={propertyKeyDraft}
+        oninput={(event) => updatePropertyKey((event.currentTarget as HTMLInputElement).value)}
         placeholder="Property key"
         data-testid="inventory-filter-property-key"
       />
@@ -108,8 +152,8 @@
       Value
       <input
         class="mt-1 w-full rounded border border-stone-200 px-2 py-1.5 text-xs text-stone-700"
-        value={filters.propertyValue ?? ''}
-        oninput={(event) => update({ propertyValue: (event.currentTarget as HTMLInputElement).value })}
+        bind:value={propertyValueDraft}
+        oninput={(event) => updatePropertyValue((event.currentTarget as HTMLInputElement).value)}
         placeholder="Value"
         data-testid="inventory-filter-property-value"
       />

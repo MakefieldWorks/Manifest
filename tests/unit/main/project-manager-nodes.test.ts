@@ -462,7 +462,19 @@ describe('searchNodes', () => {
     expect(missing.ok).toBe(true)
     if (!missing.ok) return
     expect(missing.data.total).toBe(1)
-    expect(missing.data.results[0]).toMatchObject({ nodeId: deviceA.id, snippet: 'Missing: serial' })
+    expect(missing.data.offset).toBe(0)
+    expect(missing.data.hasMore).toBe(false)
+    expect(missing.data.results[0]).toMatchObject({
+      nodeId: deviceA.id,
+      matchField: 'property',
+      snippet: 'Missing: serial',
+    })
+
+    const templatePage = manager.searchNodesPage('', 0, 1, { templateId: 'device' })
+    expect(templatePage.ok).toBe(true)
+    if (!templatePage.ok) return
+    expect(templatePage.data).toMatchObject({ total: 2, offset: 0, hasMore: true })
+    expect(templatePage.data.results[0]?.matchField).toBe('filter')
 
     const combined = manager.searchNodesPage('Device', 0, 50, {
       subtreeId: rack.id,
@@ -475,6 +487,12 @@ describe('searchNodes', () => {
     if (!combined.ok) return
     expect(combined.data.total).toBe(1)
     expect(combined.data.results[0]?.nodeId).toBe(deviceB.id)
+
+    const invalid = manager.searchNodesPage('', 0, 50, {
+      propertyKey: 'x'.repeat(65),
+      propertyValue: 'value',
+    })
+    expect(invalid.ok).toBe(false)
   })
 
   it('returns empty array for no match', () => {

@@ -33,8 +33,9 @@ import {
 import {
   filterInventoryNodes,
   hasInventoryFilters,
+  hasPropertyPredicate,
   inventoryFilterSnippet,
-  type InventoryFilters,
+  validateInventoryFilters,
 } from '../shared/inventory-filters'
 import type {
   Project,
@@ -1272,10 +1273,13 @@ export class ProjectManager {
     query: string,
     offset = 0,
     limit = 50,
-    filters: InventoryFilters = {},
+    rawFilters: unknown = {},
   ): Result<SearchResultPage> {
     const { offset: safeOffset, limit: safeLimit } = normalizeSearchPage(offset, limit)
     if (!this.currentProject) return ok({ results: [], total: 0, offset: safeOffset, hasMore: false })
+    const filterCheck = validateInventoryFilters(rawFilters)
+    if (!filterCheck.valid) return err(ErrorCode.VALIDATION_FAILED, filterCheck.message)
+    const filters = filterCheck.filters
 
     const q = query.trim().toLowerCase()
     const filtersActive = hasInventoryFilters(filters)
@@ -1302,7 +1306,7 @@ export class ProjectManager {
 
     if (!q) {
       const pageNodes = eligibleNodes.slice(safeOffset, safeOffset + safeLimit)
-      const matchField = filters.propertyKey?.trim() || filters.missingRequired ? 'property' : 'filter'
+      const matchField = (hasPropertyPredicate(filters) || filters.missingRequired) ? 'property' : 'filter'
       return ok({
         results: pageNodes.map(node => mapNode(node, matchField, inventoryFilterSnippet(project, node, filters))),
         total: eligibleNodes.length,

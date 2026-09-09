@@ -12,13 +12,64 @@ export interface InventoryFilters {
   missingRequired?: boolean
 }
 
+export type InventoryFilterValidation =
+  | { valid: true; filters: InventoryFilters }
+  | { valid: false; message: string }
+
+const MAX_FILTER_ID_LENGTH = 200
+const MAX_PROPERTY_KEY_LENGTH = 64
+const MAX_PROPERTY_VALUE_LENGTH = 512
+
+export function hasPropertyPredicate(filters: InventoryFilters): boolean {
+  return Boolean(filters.propertyKey?.trim() && filters.propertyValue?.trim())
+}
+
 export function hasInventoryFilters(filters: InventoryFilters): boolean {
   return Boolean(
     filters.subtreeId ||
     filters.templateId ||
-    filters.propertyKey?.trim() ||
+    hasPropertyPredicate(filters) ||
     filters.missingRequired
   )
+}
+
+export function validateInventoryFilters(input: unknown): InventoryFilterValidation {
+  if (input === undefined) return { valid: true, filters: {} }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { valid: false, message: 'Inventory filters must be an object.' }
+  }
+  const candidate = input as Record<string, unknown>
+  const fields: Array<[keyof InventoryFilters, number]> = [
+    ['subtreeId', MAX_FILTER_ID_LENGTH],
+    ['templateId', MAX_FILTER_ID_LENGTH],
+    ['propertyKey', MAX_PROPERTY_KEY_LENGTH],
+    ['propertyValue', MAX_PROPERTY_VALUE_LENGTH],
+  ]
+  for (const [field, maximum] of fields) {
+    const value = candidate[field]
+    if (value !== undefined && value !== null && typeof value !== 'string') {
+      return { valid: false, message: `${field} must be text.` }
+    }
+    if (typeof value === 'string' && value.length > maximum) {
+      return { valid: false, message: `${field} cannot exceed ${maximum} characters.` }
+    }
+  }
+  if (candidate.missingRequired !== undefined && typeof candidate.missingRequired !== 'boolean') {
+    return { valid: false, message: 'missingRequired must be true or false.' }
+  }
+
+  const filters: InventoryFilters = {}
+  const subtreeId = stringValue(candidate.subtreeId)
+  const templateId = stringValue(candidate.templateId)
+  const propertyKey = stringValue(candidate.propertyKey)
+  const propertyValue = stringValue(candidate.propertyValue, false)
+  if (subtreeId) filters.subtreeId = subtreeId
+  if (templateId) filters.templateId = templateId
+  if (propertyKey) filters.propertyKey = propertyKey
+  if (propertyValue !== undefined) filters.propertyValue = propertyValue
+  filters.propertyOperator = candidate.propertyOperator === 'contains' ? 'contains' : 'equals'
+  if (candidate.missingRequired === true) filters.missingRequired = true
+  return { valid: true, filters }
 }
 
 export function filterInventoryNodes(project: Project, filters: InventoryFilters): ManifestNode[] {
@@ -29,8 +80,9 @@ export function filterInventoryNodes(project: Project, filters: InventoryFilters
       ? collectSubtreeIds(project.nodes, filters.subtreeId)
       : new Set<string>()
     : null
-  const propertyKey = filters.propertyKey?.trim() ?? ''
-  const propertyValue = filters.propertyValue?.trim().toLocaleLowerCase() ?? ''
+  const propertyActive = hasPropertyPredicate(filters)
+  const propertyKey = propertyActive ? filters.propertyKey!.trim() : ''
+  const propertyValue = propertyActive ? filters.propertyValue!.trim().toLocaleLowerCase() : ''
   const propertyOperator = filters.propertyOperator ?? 'equals'
 
   return project.nodes.filter(node => {
@@ -54,7 +106,7 @@ export function inventoryFilterSnippet(
   node: ManifestNode,
   filters: InventoryFilters,
 ): string {
-  const propertyKey = filters.propertyKey?.trim()
+  const propertyKey = hasPropertyPredicate(filters) ? filters.propertyKey!.trim() : ''
   if (propertyKey && node.properties[propertyKey] !== undefined) {
     const value = node.properties[propertyKey]
     return `${propertyKey}: ${value === null ? 'null' : String(value)}`
@@ -82,4 +134,10 @@ export function missingRequiredKeys(project: Project, node: ManifestNode): strin
 
 function isMissing(value: ManifestNode['properties'][string] | undefined): boolean {
   return value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
+}
+
+function stringValue(value: unknown, trim = true): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = trim ? value.trim() : value
+  return normalized || undefined
 }

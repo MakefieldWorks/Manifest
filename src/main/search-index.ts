@@ -136,10 +136,24 @@ export class SearchIndexService {
     if (scopeIds?.length === 0) return { hits: [], total: 0, offset: safeOffset, hasMore: false }
     if (scopeIds) this.replaceSearchScope(db, scopeIds)
 
+    try {
+      return this.queryPreparedPage(db, trimmed, safeOffset, safeLimit, scopeIds !== null)
+    } finally {
+      if (scopeIds) this.clearSearchScope(db)
+    }
+  }
+
+  private queryPreparedPage(
+    db: Database.Database,
+    trimmed: string,
+    safeOffset: number,
+    safeLimit: number,
+    scoped: boolean,
+  ): SearchIndexPage {
     const queryTokens = tokenize(trimmed)
     const ftsQuery = buildFtsQuery(queryTokens)
     const pattern = `%${escapeLike(trimmed.toLowerCase())}%`
-    const scopeJoin = scopeIds ? 'INNER JOIN search_scope ON search_scope.node_id = node_search.node_id' : ''
+    const scopeJoin = scoped ? 'INNER JOIN search_scope ON search_scope.node_id = node_search.node_id' : ''
     const matchCte = ftsQuery ? `
       WITH ranked AS (
         SELECT
@@ -197,16 +211,16 @@ export class SearchIndexService {
       LIMIT ? OFFSET ?
     `).all(...matchParams, safeLimit, safeOffset) as SearchRow[]
     const pageHits = pageRows.map((row) => {
-        const matchField = detectMatchField(row.nodeName, row.propertiesText, trimmed, queryTokens)
-        return {
-          nodeId: row.nodeId,
-          nodeName: row.nodeName,
-          matchField,
-          snippet: matchField === 'name'
-            ? row.nodeName
-            : extractSnippet(row.propertiesText, trimmed),
-        }
-      })
+      const matchField = detectMatchField(row.nodeName, row.propertiesText, trimmed, queryTokens)
+      return {
+        nodeId: row.nodeId,
+        nodeName: row.nodeName,
+        matchField,
+        snippet: matchField === 'name'
+          ? row.nodeName
+          : extractSnippet(row.propertiesText, trimmed),
+      }
+    })
 
     return {
       hits: pageHits,
@@ -220,10 +234,18 @@ export class SearchIndexService {
     db.exec('CREATE TEMP TABLE IF NOT EXISTS search_scope (node_id TEXT PRIMARY KEY)')
     const replace = db.transaction((ids: string[]) => {
       db.prepare('DELETE FROM search_scope').run()
-      const insert = db.prepare<[string]>('INSERT INTO search_scope (node_id) VALUES (?)')
-      for (const nodeId of ids) insert.run(nodeId)
+      const batchSize = 500
+      for (let start = 0; start < ids.length; start += batchSize) {
+        const batch = ids.slice(start, start + batchSize)
+        const values = batch.map(() => '(?)').join(', ')
+        db.prepare(`INSERT INTO search_scope (node_id) VALUES ${values}`).run(...batch)
+      }
     })
     replace(nodeIds)
+  }
+
+  private clearSearchScope(db: Database.Database): void {
+    db.prepare('DELETE FROM search_scope').run()
   }
 
   private withFreshDatabase(projectPath: string, seed: (db: Database.Database) => void): void {

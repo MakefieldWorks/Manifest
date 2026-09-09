@@ -14,7 +14,7 @@
   import { computeSubtreeSummaries, templatesForNode } from '../../shared/merged-tree'
   import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
   import type { BatchPropertyUpdateRequest } from '../../shared/batch-properties'
-  import { hasInventoryFilters, type InventoryFilters } from '../../shared/inventory-filters'
+  import { hasInventoryFilters, hasPropertyPredicate, type InventoryFilters } from '../../shared/inventory-filters'
   import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
   import { flattenTree } from './lib/tree-rows'
   import { isTextEditing } from './lib/edit-focus'
@@ -140,7 +140,7 @@
   const inventoryFilterCount = $derived([
     searchFilters.subtreeId,
     searchFilters.templateId,
-    searchFilters.propertyKey?.trim(),
+    hasPropertyPredicate(searchFilters),
     searchFilters.missingRequired,
   ].filter(Boolean).length)
   const searchActive = $derived(searchQuery.trim().length > 0 || inventoryFiltersActive)
@@ -1283,9 +1283,14 @@
     searchHasMore = false
     searchResultIndex = 0
     const filters = { ...searchFilters }
+    const filterSignature = JSON.stringify(filters)
     searchTimer = setTimeout(async () => {
       const result = await window.api.search.query(query, 0, searchPageSize, filters)
-      if (requestId !== searchRequestId || query !== searchQuery) return
+      if (
+        requestId !== searchRequestId ||
+        query !== searchQuery ||
+        filterSignature !== JSON.stringify(searchFilters)
+      ) return
       searching = false
       if (result.ok) {
         searchResults = result.data.results
@@ -1305,10 +1310,15 @@
     const offset = searchResults.length
     const expectedTotal = searchTotal
     const filters = { ...searchFilters }
+    const filterSignature = JSON.stringify(filters)
     searchLoadingMore = true
     try {
       const result = await window.api.search.query(query, offset, searchPageSize, filters)
-      if (requestId !== searchRequestId || query !== searchQuery) return
+      if (
+        requestId !== searchRequestId ||
+        query !== searchQuery ||
+        filterSignature !== JSON.stringify(searchFilters)
+      ) return
       if (!result.ok) {
         showToast(result.error.message)
         return
