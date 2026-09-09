@@ -1612,7 +1612,9 @@ export class ProjectManager {
 
     try {
       const history = this.readSnapshotHistory()
-      const snapshots = await this.git.listSnapshots(this.currentProject.path)
+      const snapshots = this.withSnapshotMetadata(
+        await this.git.listSnapshots(this.currentProject.path),
+      )
       const recordedSnapshotIds = new Set(
         history.events
           .filter(event => event.type === 'snapshot')
@@ -1626,6 +1628,7 @@ export class ProjectManager {
           type: 'snapshot',
           createdAt: snapshot.createdAt,
           snapshotId: snapshot.id,
+          note: snapshot.note,
         }))
       // Recorded events keep their push order (the order they actually happened).
       // Sorting them by createdAt would shuffle revert/recover events relative to
@@ -1695,7 +1698,9 @@ export class ProjectManager {
     // though their rows exist in history.db.
     let allEvents: SnapshotTimelineEvent[] = persistedHistory.events
     try {
-      const allSnapshots = await this.git.listSnapshots(projectPath)
+      const allSnapshots = this.withSnapshotMetadata(
+        await this.git.listSnapshots(projectPath),
+      )
       const recordedSnapshotIds = new Set(
         persistedHistory.events
           .filter(e => e.type === 'snapshot')
@@ -1710,6 +1715,7 @@ export class ProjectManager {
           type: 'snapshot',
           createdAt: s.createdAt,
           snapshotId: s.id,
+          note: s.note,
         }))
       allEvents = [...synthetic, ...persistedHistory.events]
     } catch (e: unknown) {

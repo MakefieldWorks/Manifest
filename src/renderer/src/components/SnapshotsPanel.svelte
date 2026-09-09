@@ -40,7 +40,7 @@
     onDiffNodeSelect?: (nodeId: string) => void
     onClose: () => void
     onRefresh: () => Promise<void>
-    onCreate: (name: string, description: string | null) => Promise<void>
+    onCreate: (name: string, description: string | null) => Promise<boolean>
     onCompare: (from: string, to: string) => Promise<void>
     onExitCompare: () => void
     onRestore: (name: string) => Promise<void>
@@ -305,7 +305,8 @@
   async function submitCreate() {
     const trimmed = snapshotName.trim()
     if (!trimmed || creating) return
-    await onCreate(trimmed, snapshotDescription.trim() || null)
+    const created = await onCreate(trimmed, snapshotDescription.trim() || null)
+    if (!created) return
     snapshotName = ''
     snapshotDescription = ''
   }
@@ -450,7 +451,7 @@
         </h2>
         <p class="text-xs text-stone-400">{totalChanges} {totalChanges === 1 ? 'change' : 'changes'}</p>
         {#each compareDescriptions as description (description.label)}
-          <p class="mt-0.5 max-w-96 truncate text-[10px] text-stone-500" title={description.note}>
+          <p class="mt-0.5 max-w-96 line-clamp-2 text-[10px] text-stone-500" title={description.note}>
             {description.label}: {description.note}
           </p>
         {/each}

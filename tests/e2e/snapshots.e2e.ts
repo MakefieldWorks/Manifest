@@ -90,6 +90,13 @@ test('creates, compares, and reverts snapshots from the renderer surface', async
   await expect(appPage.getByTestId('snapshot-timeline-event').filter({ hasText: 'Saved snapshot "baseline"' })).toBeVisible()
   await expect(appPage.getByText('Known-good empty lab before rack installation')).toBeVisible()
 
+  await appPage.getByTestId('snapshot-name-input').fill('baseline')
+  await appPage.getByTestId('snapshot-description-input').fill('Preserve this text after a failed save')
+  await appPage.getByTestId('create-snapshot-btn').click()
+  await expect(appPage.getByTestId('snapshot-error')).toContainText('already exists')
+  await expect(appPage.getByTestId('snapshot-name-input')).toHaveValue('baseline')
+  await expect(appPage.getByTestId('snapshot-description-input')).toHaveValue('Preserve this text after a failed save')
+
   await appPage.getByRole('button', { name: 'Close snapshots' }).click()
   await expect(appPage.getByTestId('snapshots-panel')).toHaveCount(0)
 

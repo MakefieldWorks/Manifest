@@ -1477,7 +1477,7 @@
     return nodeId
   }
 
-  async function handleSnapshotCreate(name: string, description: string | null) {
+  async function handleSnapshotCreate(name: string, description: string | null): Promise<boolean> {
     snapshotCreating = true
     snapshotError = null
     const result = await window.api.snapshot.create(name, description)
@@ -1488,8 +1488,10 @@
       workingCopyDirty = false
       await refreshSnapshots()
       showToast(`Snapshot "${result.data.name}" created`)
+      return true
     } else {
       snapshotError = result.error.message
+      return false
     }
   }
 

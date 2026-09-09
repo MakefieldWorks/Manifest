@@ -91,6 +91,22 @@ describe('snapshot workflow', () => {
     expect(second.error.code).toBe('VALIDATION_FAILED')
   })
 
+  it('carries snapshot metadata into timeline events synthesized for missing event records', async () => {
+    const created = await manager.snapshotCreate('metadata-only', 'Retained historical context')
+    expect(created.ok).toBe(true)
+
+    const historyPath = join(projectDir, '.manifest', 'history.json')
+    const history = JSON.parse(readFileSync(historyPath, 'utf8'))
+    history.events = []
+    writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf8')
+
+    const timeline = await manager.snapshotTimeline()
+    expect(timeline.ok).toBe(true)
+    if (!timeline.ok) return
+    expect(timeline.data.events).toHaveLength(1)
+    expect(timeline.data.events[0].note).toBe('Retained historical context')
+  })
+
   it('compares two snapshots with semantic diffs', async () => {
     const rootId = manager.getCurrent()!.nodes.find((node) => node.parentId === null)!.id
     manager.nodeCreate(rootId, 'Rack A')

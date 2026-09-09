@@ -111,6 +111,10 @@ function joinedImpactLabels(values: string[]): string {
   return values.join(' | ')
 }
 
+function csvContext(value: string | null): string {
+  return value?.replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim() ?? ''
+}
+
 // Neutralize Markdown-significant content in an interpolated value so a node name
 // or property value (which may contain newlines or markup — validateNodeName only
 // rejects slashes, and property values are free-form) can't corrupt the report
@@ -267,7 +271,7 @@ export function formatDiffReportCsv(
   ctx: ReportContext,
 ): string {
   const rows: string[][] = [CSV_HEADER]
-  const context = [ctx.from.note ?? '', ctx.to.note ?? '']
+  const context = [csvContext(ctx.from.note), csvContext(ctx.to.note)]
 
   if (templateDiffs.length > 0) {
     const n = templateDiffs.length

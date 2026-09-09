@@ -232,7 +232,15 @@
             </ul>
 
             {#if entry.note}
-              <p class="mt-2 rounded border border-amber-100 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">
+              <p
+                class="mt-2 rounded border px-2 py-1 text-[10px]"
+                class:border-sky-100={entry.type === 'snapshot'}
+                class:bg-sky-50={entry.type === 'snapshot'}
+                class:text-sky-800={entry.type === 'snapshot'}
+                class:border-amber-100={entry.type !== 'snapshot'}
+                class:bg-amber-50={entry.type !== 'snapshot'}
+                class:text-amber-800={entry.type !== 'snapshot'}
+              >
                 {entry.note}
               </p>
             {/if}

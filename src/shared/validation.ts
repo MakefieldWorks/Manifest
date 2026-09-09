@@ -69,7 +69,7 @@ export function validateSnapshotDescription(description: unknown): ValidationRes
   if (typeof description !== 'string') {
     return { valid: false, message: 'Snapshot description must be text' }
   }
-  if (description.length > MAX_SNAPSHOT_DESCRIPTION_LENGTH) {
+  if (description.trim().length > MAX_SNAPSHOT_DESCRIPTION_LENGTH) {
     return { valid: false, message: 'Snapshot descriptions cannot exceed 2,000 characters' }
   }
   return { valid: true }

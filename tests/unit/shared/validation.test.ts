@@ -59,6 +59,7 @@ describe('validateSnapshotDescription', () => {
     expect(validateSnapshotDescription(null).valid).toBe(true)
     expect(validateSnapshotDescription('').valid).toBe(true)
     expect(validateSnapshotDescription('x'.repeat(2000)).valid).toBe(true)
+    expect(validateSnapshotDescription(` ${'x'.repeat(2000)} `).valid).toBe(true)
   })
 
   it('rejects non-text and overlong descriptions', () => {

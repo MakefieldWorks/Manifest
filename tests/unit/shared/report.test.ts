@@ -310,6 +310,17 @@ describe('formatDiffReportCsv', () => {
     ])
   })
 
+  it('collapses line breaks in repeated CSV description context', () => {
+    const multiline = {
+      ...ctx,
+      from: { ...ctx.from, note: 'Run 42\nPassed\twith  evidence' },
+    }
+    const rows = parseCsv(formatDiffReportCsv([
+      entry({ changeType: 'added', severity: 'High' }),
+    ], [], multiline))
+    expect(rows[1][9]).toBe('Run 42 Passed with evidence')
+  })
+
   it('neutralizes a formula-injection node name', () => {
     const csv = formatDiffReportCsv([
       entry({ changeType: 'added', context: { nodeName: '=cmd()', parentName: null, path: ['Lab'] } }),
