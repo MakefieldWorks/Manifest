@@ -273,7 +273,7 @@ export function formatDiffReportCsv(
   ctx: ReportContext,
 ): string {
   const rows: string[][] = [CSV_HEADER]
-  const context = [csvContext(ctx.from.note), csvContext(ctx.to.note), ctx.scope?.path ?? '']
+  const context = [csvContext(ctx.from.note), csvContext(ctx.to.note), csvContext(ctx.scope?.path ?? null)]
 
   if (templateDiffs.length > 0) {
     const n = templateDiffs.length

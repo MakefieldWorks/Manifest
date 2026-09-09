@@ -4,6 +4,7 @@ import {
   filterTemplateDiffsToComparisonScope,
   resolveComparisonScope,
 } from '../../../src/shared/comparison-scope'
+import { diffProjects } from '../../../src/shared/diff-engine'
 import type { DiffEntry, Project, TemplateDiffEntry } from '../../../src/shared/types'
 
 const TS = '2026-01-01T00:00:00.000Z'
@@ -72,5 +73,31 @@ describe('comparison scope', () => {
   it('returns null when the selected node exists on neither side', () => {
     const empty = project([node('root', 'Lab', null)])
     expect(resolveComparisonScope(empty, empty, 'missing')).toBeNull()
+  })
+
+  it('keeps order-only changes inside the scope and drops unrelated reorderings', () => {
+    const before = project([
+      node('root', 'Lab', null),
+      { ...node('rack', 'Rack A', 'root'), order: 0 },
+      { ...node('outside-a', 'Outside A', 'root'), order: 1 },
+      { ...node('outside-b', 'Outside B', 'root'), order: 2 },
+      { ...node('inside-a', 'Inside A', 'rack'), order: 0 },
+      { ...node('inside-b', 'Inside B', 'rack'), order: 1 },
+    ])
+    const after = project([
+      node('root', 'Lab', null),
+      { ...node('rack', 'Rack A', 'root'), order: 0 },
+      { ...node('outside-a', 'Outside A', 'root'), order: 2 },
+      { ...node('outside-b', 'Outside B', 'root'), order: 1 },
+      { ...node('inside-a', 'Inside A', 'rack'), order: 1 },
+      { ...node('inside-b', 'Inside B', 'rack'), order: 0 },
+    ])
+    const scope = resolveComparisonScope(before, after, 'rack')!
+
+    const scoped = filterDiffsToComparisonScope(diffProjects(before, after), scope.nodeIds)
+    expect(scoped.map(diff => [diff.nodeId, diff.changeType])).toEqual([
+      ['inside-a', 'order-changed'],
+      ['inside-b', 'order-changed'],
+    ])
   })
 })

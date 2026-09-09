@@ -1,23 +1,5 @@
 import type { ComparisonScope, DiffEntry, Project, TemplateDiffEntry } from './types'
-import { collectSubtreeIds } from './subtree'
-
-function pathFor(project: Project, nodeId: string): string | null {
-  const byId = new Map(project.nodes.map(node => [node.id, node]))
-  const node = byId.get(nodeId)
-  if (!node) return null
-  const names = [node.name]
-  const visited = new Set([node.id])
-  let parentId = node.parentId
-  while (parentId !== null) {
-    if (visited.has(parentId)) break
-    visited.add(parentId)
-    const parent = byId.get(parentId)
-    if (!parent) break
-    names.unshift(parent.name)
-    parentId = parent.parentId
-  }
-  return names.join(' / ')
-}
+import { buildNodePathResolver, collectSubtreeIds } from './subtree'
 
 export interface ComparisonScopeResult {
   scope: ComparisonScope
@@ -38,7 +20,7 @@ export function resolveComparisonScope(
     scope: {
       nodeId,
       name: displayNode.name,
-      path: pathFor(toNode ? to : from, nodeId) ?? displayNode.name,
+      path: buildNodePathResolver((toNode ? to : from).nodes)(nodeId) ?? displayNode.name,
     },
     nodeIds: new Set([
       ...collectSubtreeIds(from.nodes, nodeId),

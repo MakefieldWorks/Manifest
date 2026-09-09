@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, renameSync, statSyn
 import { join } from 'path'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
-import { collectSubtreeIds } from '../shared/subtree'
+import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
 import {
   planBatchPropertyUpdate,
   type BatchPropertyUpdateRequest,
@@ -1949,24 +1949,6 @@ export class ProjectManager {
     })
   }
 
-  /** Resolve a node id to its full display path ("A / B / Name") within a project. */
-  private buildPathResolver(project: Project): (id: string) => string | null {
-    const byId = new Map(project.nodes.map(n => [n.id, n]))
-    return (id: string) => {
-      const node = byId.get(id)
-      if (!node) return null
-      const names = [node.name]
-      let pid = node.parentId
-      while (pid !== null) {
-        const parent = byId.get(pid)
-        if (!parent) break
-        names.unshift(parent.name)
-        pid = parent.parentId
-      }
-      return names.join(' / ')
-    }
-  }
-
   /**
    * Build a shareable diff report (Markdown or CSV) between two snapshots.
    * Re-runs the authoritative diff via loadAndDiff (renderer never decides
@@ -2012,7 +1994,7 @@ export class ProjectManager {
         to: meta(to),
         generatedAt: new Date().toISOString(),
         scope,
-        oldPathById: this.buildPathResolver(projectA),
+        oldPathById: buildNodePathResolver(projectA.nodes),
         templateLabelOld: (v) => (v ? templateLabel(projectA.templates?.[String(v)], String(v)) : '(none)'),
         templateLabelNew: (v) => (v ? templateLabel(projectB.templates?.[String(v)], String(v)) : '(none)'),
       }
@@ -2029,7 +2011,7 @@ export class ProjectManager {
       // tolerable, not a correctness concern.
       const fileToken = (ref: string) => (isCurrentRef(ref) ? 'current-project' : safe(ref))
       const ext = format === 'csv' ? 'csv' : 'md'
-      const scopeToken = scope ? `-${safe(scope.name)}` : ''
+      const scopeToken = scope ? `-${safe(scope.name)}-${safe(scope.nodeId)}` : ''
       const suggestedName = `${safe(ctx.projectName)}-changes-${fileToken(from)}-to-${fileToken(to)}${scopeToken}.${ext}`
       return ok({ content, suggestedName })
     } catch (e: unknown) {

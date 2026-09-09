@@ -1535,6 +1535,8 @@
         selectedIds = new Set([scopedSelectionId])
         selectionRecency = [scopedSelectionId]
         selectionAnchorId = scopedSelectionId
+        const scopeAncestors = getAncestorIds(scopedSelectionId, result.data.nodes)
+        compareExpanded = new Set([...compareExpanded, ...scopeAncestors, scopedSelectionId])
       }
       clearSearch()  // search is a browse-mode aid; don't carry it into compare
 

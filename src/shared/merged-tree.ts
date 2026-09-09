@@ -167,7 +167,7 @@ export function buildMergedTree(
     if (nodesB.has(nodeA.id)) continue // still alive — handled in step 1
     const nodeDiffs = diffsByNodeId.get(nodeA.id) ?? []
     merged.push(makeGhost(nodeA, 'removed', nodesB, nodeDiffs))
-    summary.removed++
+    if (nodeDiffs.some(diff => diff.changeType === 'removed')) summary.removed++
   }
 
   const templateChanges = options.templateChanges ?? diffTemplates(from, to)

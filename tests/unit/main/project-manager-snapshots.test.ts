@@ -165,7 +165,7 @@ describe('snapshot workflow', () => {
     expect(report.data.content).toContain('**Scope:** Snapshot Project / Rack A')
     expect(report.data.content).toContain('Server A')
     expect(report.data.content).not.toContain('Server B')
-    expect(report.data.suggestedName).toContain('-Rack_A.md')
+    expect(report.data.suggestedName).toContain(`-Rack_A-${rackA.id}.md`)
 
     const invalid = await manager.snapshotLoadCompare('scope-before', 'scope-after', 'missing-node')
     expect(invalid.ok).toBe(false)

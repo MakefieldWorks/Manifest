@@ -340,6 +340,17 @@ describe('formatDiffReportCsv', () => {
     expect(rows[1][11]).toBe('Lab / Rack A')
   })
 
+  it('normalizes line breaks in the CSV scope path', () => {
+    const scoped = {
+      ...ctx,
+      scope: { nodeId: 'rack-a', name: 'Rack A', path: 'Lab / Room 1\n/ Rack A' },
+    }
+    const rows = parseCsv(formatDiffReportCsv([
+      entry({ changeType: 'added', severity: 'High' }),
+    ], [], scoped))
+    expect(rows[1][11]).toBe('Lab / Room 1 / Rack A')
+  })
+
   it('neutralizes a formula-injection node name', () => {
     const csv = formatDiffReportCsv([
       entry({ changeType: 'added', context: { nodeName: '=cmd()', parentName: null, path: ['Lab'] } }),

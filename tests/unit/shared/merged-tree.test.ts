@@ -147,6 +147,26 @@ describe('buildMergedTree', () => {
     expect(result.scope).toEqual(scope)
   })
 
+  it('keeps the full tree for context while summarizing only scoped diffs', () => {
+    const fromNodes = [
+      n('root', null, 0),
+      n('rack', 'root', 0),
+      n('inside', 'rack', 0),
+      n('outside', 'root', 1),
+    ]
+    const toNodes = [n('root', null, 0), n('rack', 'root', 0)]
+    const from = makeProject(fromNodes)
+    const to = makeProject(toNodes)
+    const scopedDiffs = diffProjects(from, to).filter(diff => diff.nodeId === 'inside')
+    const result = buildMergedTree(from, to, scopedDiffs, 'v1', 'v2', {
+      scope: { nodeId: 'rack', name: 'rack', path: 'root / rack' },
+    })
+
+    expect(findGhost(result, 'outside')).toBeDefined()
+    expect(findGhost(result, 'outside')?.diffs).toEqual([])
+    expect(result.summary.removed).toBe(1)
+  })
+
   // ── Pure add ────────────────────────────────────────────────────────────────
 
   it('pure add: new node has status added', () => {
