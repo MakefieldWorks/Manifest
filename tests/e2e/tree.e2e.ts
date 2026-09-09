@@ -220,3 +220,51 @@ test('search box filters the tree and cycles matching nodes', async ({
   await expect(search).toHaveValue('s')
   await expect(appPage.getByTestId('detail-pane')).toContainText('Shelf')
 })
+
+test('search reports and incrementally loads more than 50 matches', async ({
+  appPage,
+  electronApp,
+  workspaceDir,
+}) => {
+  await appPage.getByTestId('create-project-btn').click()
+  await appPage.getByTestId('project-name-input').fill('Large Search Lab')
+
+  await electronApp.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+  }, workspaceDir)
+
+  await appPage.getByTestId('choose-folder-btn').click()
+  await appPage.getByTestId('create-btn').click()
+  await expect(appPage.getByTestId('project-view')).toBeVisible()
+
+  await appPage.evaluate(async () => {
+    const current = await window.api.project.getCurrent()
+    if (!current.ok) throw new Error(current.error.message)
+    const root = current.data.nodes.find(node => node.parentId === null)
+    if (!root) throw new Error('Project root missing')
+    for (let index = 1; index <= 55; index++) {
+      const created = await window.api.node.create(root.id, `Inventory Device ${String(index).padStart(2, '0')}`)
+      if (!created.ok) throw new Error(created.error.message)
+    }
+  })
+  await appPage.reload()
+  await expect(appPage.getByTestId('project-view')).toBeVisible()
+
+  const search = appPage.getByTestId('search-input')
+  await search.fill('Inventory Device')
+  await expect(appPage.getByText('Result 1 of 55', { exact: false })).toBeVisible()
+  await expect(appPage.getByTestId('search-load-more')).toContainText('50 of 55')
+
+  await appPage.getByTestId('search-load-more').click()
+  await expect(appPage.getByTestId('search-load-more')).toHaveCount(0)
+  await expect(appPage.getByText('Result 1 of 55', { exact: false })).not.toContainText('loaded')
+
+  await search.press('Escape')
+  await search.fill('Inventory Device')
+  await expect(appPage.getByText('Result 1 of 55', { exact: false })).toBeVisible()
+  for (let index = 1; index < 50; index++) await search.press('Enter')
+  await expect(appPage.getByText('Result 50 of 55', { exact: false })).toBeVisible()
+  await search.press('Enter')
+  await expect(appPage.getByText('Result 51 of 55', { exact: false })).toBeVisible()
+  await expect(appPage.getByTestId('search-load-more')).toHaveCount(0)
+})

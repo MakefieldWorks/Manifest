@@ -13,7 +13,7 @@ import type {
   NodeTemplate,
   Snapshot,
   DiffEntry,
-  SearchResult,
+  SearchResultPage,
   GitStatus,
   Result,
   NodeHistory,
@@ -228,7 +228,7 @@ export interface ManifestAPI {
     ): Promise<Result<{ project: Project; summary: NetboxImportResult }>>
   }
   search: {
-    query(query: string): Promise<Result<SearchResult[]>>
+    query(query: string, offset?: number, limit?: number): Promise<Result<SearchResultPage>>
   }
   snapshot: {
     create(name: string): Promise<Result<Snapshot>>

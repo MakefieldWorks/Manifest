@@ -86,8 +86,8 @@ const api: ManifestAPI = {
   },
 
   search: {
-    query: (query) =>
-      ipcRenderer.invoke(IPC.SEARCH_QUERY, { query }),
+    query: (query, offset, limit) =>
+      ipcRenderer.invoke(IPC.SEARCH_QUERY, { query, offset, limit }),
   },
 
   snapshot: {

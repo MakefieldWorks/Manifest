@@ -7,6 +7,7 @@ import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
+import { SearchIndexService } from '../../../src/main/search-index'
 import type { Project } from '../../../src/shared/types'
 
 // Minimal logger stub — writes nothing, throws nothing.
@@ -25,12 +26,13 @@ const noopGit = {
   run: async () => ({ stdout: '', stderr: '' }),
 }
 
-function makeManager(): ProjectManager {
-  return new ProjectManager(noopGit as any, noopLogger as any)
+function makeManager(search?: SearchIndexService): ProjectManager {
+  return new ProjectManager(noopGit as any, noopLogger as any, search)
 }
 
 let tmpDir: string
 let manager: ProjectManager
+let search: SearchIndexService
 let project: Project
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,7 +69,8 @@ beforeEach(async () => {
   mkdirSync(tmpDir, { recursive: true })
   writeFixture(tmpDir, makeManifest())
 
-  manager = makeManager()
+  search = new SearchIndexService()
+  manager = makeManager(search)
   const result = await manager.openProject(tmpDir)
   expect(result.ok).toBe(true)
   project = (result as any).data
@@ -380,6 +383,62 @@ describe('searchNodes', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.data.some(r => r.nodeName === 'Oscilloscope')).toBe(true)
+  })
+
+  it('pages through every match with an exact total, stable boundaries, and bounded page sizes', () => {
+    for (let index = 1; index <= 205; index++) {
+      expect(manager.nodeCreate('root-id', `Inventory Device ${String(index).padStart(2, '0')}`).ok).toBe(true)
+    }
+
+    const first = manager.searchNodesPage('Inventory Device', 0, 50)
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    expect(first.data.total).toBe(205)
+    expect(first.data.results).toHaveLength(50)
+    expect(first.data.offset).toBe(0)
+    expect(first.data.hasMore).toBe(true)
+
+    const pages = [first]
+    for (const offset of [50, 100, 150, 200]) {
+      const page = manager.searchNodesPage('Inventory Device', offset, 50)
+      expect(page.ok).toBe(true)
+      if (page.ok) pages.push(page)
+    }
+    expect(pages[4]?.data.results).toHaveLength(5)
+    expect(pages[4]?.data.hasMore).toBe(false)
+
+    const allIds = pages.flatMap(page => page.data.results.map(result => result.nodeId))
+    expect(new Set(allIds).size).toBe(205)
+
+    const bounded = manager.searchNodesPage('Inventory Device', -10, 500)
+    expect(bounded.ok).toBe(true)
+    if (!bounded.ok) return
+    expect(bounded.data.offset).toBe(0)
+    expect(bounded.data.results).toHaveLength(200)
+    expect(bounded.data.hasMore).toBe(true)
+
+    const nonFinite = manager.searchNodesPage('Inventory Device', Number.NaN, Number.POSITIVE_INFINITY)
+    expect(nonFinite.ok).toBe(true)
+    if (!nonFinite.ok) return
+    expect(nonFinite.data.offset).toBe(0)
+    expect(nonFinite.data.results).toHaveLength(50)
+  })
+
+  it('rebuilds before counting when the search index contains a stale node', () => {
+    search.upsertNode(tmpDir, {
+      id: 'stale-node',
+      parentId: 'root-id',
+      name: 'Stale Inventory Device',
+      order: 99,
+      properties: {},
+      created: '2026-01-01T00:00:00.000Z',
+      modified: '2026-01-01T00:00:00.000Z',
+    })
+
+    const result = manager.searchNodesPage('Stale Inventory Device')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.data).toEqual({ results: [], total: 0, offset: 0, hasMore: false })
   })
 
   it('returns empty array for no match', () => {
