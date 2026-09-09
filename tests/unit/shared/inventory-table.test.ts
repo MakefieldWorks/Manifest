@@ -36,4 +36,10 @@ describe('inventory table', () => {
     expect(isInventoryColumn('property:serial')).toBe(true)
     expect(isInventoryColumn('property:')).toBe(false)
   })
+
+  it('keeps the node ID tie-break stable in both sort directions', () => {
+    const rows = buildInventoryRows(project, project.nodes.slice(2), ['template'])
+    expect(sortInventoryRows(rows, 'template', 'asc').map(row => row.nodeId)).toEqual(['a', 'b'])
+    expect(sortInventoryRows(rows, 'template', 'desc').map(row => row.nodeId)).toEqual(['a', 'b'])
+  })
 })

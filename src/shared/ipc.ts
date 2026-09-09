@@ -39,7 +39,7 @@ import type { DesktopChromeInfo } from './desktop-chrome'
 import type { AppearancePreference } from './theme'
 import type { BatchPropertyUpdateRequest, BatchPropertyUpdateResult } from './batch-properties'
 import type { InventoryFilters } from './inventory-filters'
-import type { InventoryTablePage, InventoryTableRequest } from './inventory-table'
+import type { InventoryExportRequest, InventoryTablePage, InventoryTableRequest } from './inventory-table'
 
 // Channel name constants — use these everywhere, never raw strings.
 export const IPC = {
@@ -241,7 +241,7 @@ export interface ManifestAPI {
   }
   inventory: {
     query(request: InventoryTableRequest): Promise<Result<InventoryTablePage>>
-    exportCsv(request: InventoryTableRequest): Promise<Result<{ savedPath: string | null; rowCount: number }>>
+    exportCsv(request: InventoryExportRequest): Promise<Result<{ savedPath: string | null; rowCount: number }>>
   }
   snapshot: {
     create(name: string): Promise<Result<Snapshot>>

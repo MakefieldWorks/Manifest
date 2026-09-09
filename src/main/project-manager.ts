@@ -40,6 +40,7 @@ import {
 import {
   buildInventoryRows,
   DEFAULT_INVENTORY_COLUMNS,
+  inventoryColumnLabel,
   inventoryPropertyKeys,
   isInventoryColumn,
   MAX_INVENTORY_COLUMNS,
@@ -128,13 +129,6 @@ const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / 1024 / 1024
 const IMPORT_ISSUE_CAP = 100                   // max skipped/warning issues surfaced
 const AUTOSAVE_DEBOUNCE_MS = 2500              // 2.5 seconds
 const MAX_RECOVERY_POINTS = 10                 // cap stored auto-saved recovery points
-
-function inventoryColumnLabel(column: InventoryColumn): string {
-  if (column === 'name') return 'Name'
-  if (column === 'path') return 'Path'
-  if (column === 'template') return 'Template'
-  return column.slice(9)
-}
 
 
 export interface HistoryBackfillStatus {
@@ -1386,7 +1380,10 @@ export class ProjectManager {
     if (!prepared.ok) return prepared
     const { request, rows, propertyKeys } = prepared.data
     const { offset, limit } = normalizeSearchPage(request.offset, request.limit)
-    const pageRows = rows.slice(offset, offset + limit)
+    const pageRows = rows.slice(offset, offset + limit).map(row => ({
+      nodeId: row.nodeId,
+      values: Object.fromEntries(request.columns.map(column => [column, row.values[column] ?? ''])),
+    }))
     return ok({
       rows: pageRows,
       total: rows.length,
@@ -1394,6 +1391,12 @@ export class ProjectManager {
       hasMore: offset + pageRows.length < rows.length,
       propertyKeys,
     })
+  }
+
+  prepareInventoryCsv(rawRequest: unknown): Result<{ suggestedName: string }> {
+    const normalized = this.normalizeInventoryTableRequest(rawRequest)
+    if (!normalized.ok) return normalized
+    return ok({ suggestedName: this.inventoryCsvSuggestedName() })
   }
 
   buildInventoryCsv(rawRequest: unknown): Result<{ content: string; suggestedName: string; rowCount: number }> {
@@ -1405,8 +1408,7 @@ export class ProjectManager {
       headers,
       ...rows.map(row => request.columns.map(column => row.values[column] ?? '')),
     ])
-    const projectName = this.currentProject?.name.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'manifest'
-    return ok({ content, suggestedName: `${projectName}-inventory.csv`, rowCount: rows.length })
+    return ok({ content, suggestedName: this.inventoryCsvSuggestedName(), rowCount: rows.length })
   }
 
   private prepareInventoryTable(rawRequest: unknown): Result<{
@@ -1414,33 +1416,12 @@ export class ProjectManager {
     rows: InventoryTableRow[]
     propertyKeys: string[]
   }> {
-    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is open.')
-    if (!rawRequest || typeof rawRequest !== 'object' || Array.isArray(rawRequest)) {
-      return err(ErrorCode.VALIDATION_FAILED, 'Inventory table request must be an object.')
-    }
-    const candidate = rawRequest as Record<string, unknown>
-    if (typeof candidate.query !== 'string' || candidate.query.length > 512) {
-      return err(ErrorCode.VALIDATION_FAILED, 'Inventory query must be a string of at most 512 characters.')
-    }
-    const filterCheck = validateInventoryFilters(candidate.filters)
-    if (!filterCheck.valid) return err(ErrorCode.VALIDATION_FAILED, filterCheck.message)
-    if (!Array.isArray(candidate.columns) || candidate.columns.length === 0 || candidate.columns.length > MAX_INVENTORY_COLUMNS || !candidate.columns.every(isInventoryColumn)) {
-      return err(ErrorCode.VALIDATION_FAILED, `Choose between 1 and ${MAX_INVENTORY_COLUMNS} valid inventory columns.`)
-    }
-    const columns = [...new Set(candidate.columns as InventoryColumn[])]
-    const sortColumn = isInventoryColumn(candidate.sortColumn) ? candidate.sortColumn : columns[0] ?? DEFAULT_INVENTORY_COLUMNS[0]
-    const sortDirection: InventorySortDirection = candidate.sortDirection === 'desc' ? 'desc' : 'asc'
-    const request: InventoryTableRequest = {
-      query: candidate.query.trim(),
-      filters: filterCheck.filters,
-      columns,
-      sortColumn,
-      sortDirection,
-      offset: typeof candidate.offset === 'number' ? candidate.offset : 0,
-      limit: typeof candidate.limit === 'number' ? candidate.limit : 50,
-    }
+    const normalized = this.normalizeInventoryTableRequest(rawRequest)
+    if (!normalized.ok) return normalized
+    const request = normalized.data
+    const filterCheck = { filters: request.filters }
+    const project = this.currentProject!
 
-    const project = this.currentProject
     let nodes: ManifestNode[]
     if (!request.query) {
       nodes = hasInventoryFilters(filterCheck.filters)
@@ -1478,9 +1459,57 @@ export class ProjectManager {
       }
     }
 
-    const rowColumns = columns.includes(sortColumn) ? columns : [...columns, sortColumn]
-    const rows = sortInventoryRows(buildInventoryRows(project, nodes, rowColumns), sortColumn, sortDirection)
+    const rowColumns = request.columns.includes(request.sortColumn)
+      ? request.columns
+      : [...request.columns, request.sortColumn]
+    const rows = sortInventoryRows(buildInventoryRows(project, nodes, rowColumns), request.sortColumn, request.sortDirection)
     return ok({ request, rows, propertyKeys: inventoryPropertyKeys(project) })
+  }
+
+  private normalizeInventoryTableRequest(rawRequest: unknown): Result<InventoryTableRequest> {
+    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is open.')
+    if (!rawRequest || typeof rawRequest !== 'object' || Array.isArray(rawRequest)) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Inventory table request must be an object.')
+    }
+    const candidate = rawRequest as Record<string, unknown>
+    if (typeof candidate.query !== 'string' || candidate.query.length > 512) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Inventory query must be a string of at most 512 characters.')
+    }
+    const filterCheck = validateInventoryFilters(candidate.filters)
+    if (!filterCheck.valid) return err(ErrorCode.VALIDATION_FAILED, filterCheck.message)
+    if (!Array.isArray(candidate.columns) || !candidate.columns.every(isInventoryColumn)) {
+      return err(ErrorCode.VALIDATION_FAILED, `Choose between 1 and ${MAX_INVENTORY_COLUMNS} valid inventory columns.`)
+    }
+    const columns = [...new Set(candidate.columns as InventoryColumn[])]
+    if (columns.length === 0 || columns.length > MAX_INVENTORY_COLUMNS) {
+      return err(ErrorCode.VALIDATION_FAILED, `Choose between 1 and ${MAX_INVENTORY_COLUMNS} valid inventory columns.`)
+    }
+    if (candidate.sortColumn !== undefined && !isInventoryColumn(candidate.sortColumn)) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Inventory sort column is invalid.')
+    }
+    if (candidate.sortDirection !== undefined && candidate.sortDirection !== 'asc' && candidate.sortDirection !== 'desc') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Inventory sort direction must be asc or desc.')
+    }
+    const sortColumn = candidate.sortColumn as InventoryColumn | undefined ?? columns[0] ?? DEFAULT_INVENTORY_COLUMNS[0]
+    const sortDirection: InventorySortDirection = candidate.sortDirection === 'desc' ? 'desc' : 'asc'
+    const request: InventoryTableRequest = {
+      query: candidate.query.trim(),
+      filters: filterCheck.filters,
+      columns,
+      sortColumn,
+      sortDirection,
+      offset: typeof candidate.offset === 'number' ? candidate.offset : 0,
+      limit: typeof candidate.limit === 'number' ? candidate.limit : 50,
+    }
+
+    return ok(request)
+  }
+
+  private inventoryCsvSuggestedName(): string {
+    const projectName = this.currentProject?.name.trim()
+      .replace(/[^\p{L}\p{N}]+/gu, '-')
+      .replace(/^-|-$/g, '') || 'manifest'
+    return `${projectName}-inventory.csv`
   }
 
   // ─── Snapshots / history ───────────────────────────────────────────────────

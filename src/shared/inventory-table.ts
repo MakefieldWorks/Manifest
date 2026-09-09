@@ -1,5 +1,6 @@
 import type { ManifestNode, NodeTemplate, Project } from './types'
 import type { InventoryFilters } from './inventory-filters'
+import { MAX_PROPERTY_KEY_LENGTH } from './inventory-filters'
 
 export type InventoryColumn = 'name' | 'path' | 'template' | `property:${string}`
 export type InventorySortDirection = 'asc' | 'desc'
@@ -13,6 +14,8 @@ export interface InventoryTableRequest {
   offset?: number
   limit?: number
 }
+
+export type InventoryExportRequest = Omit<InventoryTableRequest, 'offset' | 'limit'>
 
 export interface InventoryTableRow {
   nodeId: string
@@ -29,10 +32,22 @@ export interface InventoryTablePage {
 
 export const DEFAULT_INVENTORY_COLUMNS: InventoryColumn[] = ['name', 'path', 'template']
 export const MAX_INVENTORY_COLUMNS = 12
+export const INVENTORY_PROPERTY_PREFIX = 'property:'
+const INVENTORY_SORT_LOCALE = 'en'
 
 export function isInventoryColumn(value: unknown): value is InventoryColumn {
   if (value === 'name' || value === 'path' || value === 'template') return true
-  return typeof value === 'string' && value.startsWith('property:') && value.slice(9).trim().length > 0 && value.length <= 73
+  return typeof value === 'string'
+    && value.startsWith(INVENTORY_PROPERTY_PREFIX)
+    && value.slice(INVENTORY_PROPERTY_PREFIX.length).trim().length > 0
+    && value.length <= INVENTORY_PROPERTY_PREFIX.length + MAX_PROPERTY_KEY_LENGTH
+}
+
+export function inventoryColumnLabel(column: InventoryColumn): string {
+  if (column === 'name') return 'Name'
+  if (column === 'path') return 'Path'
+  if (column === 'template') return 'Template'
+  return column.slice(INVENTORY_PROPERTY_PREFIX.length)
 }
 
 export function inventoryPropertyKeys(project: Project): string[] {
@@ -82,8 +97,10 @@ export function sortInventoryRows(
 ): InventoryTableRow[] {
   const multiplier = direction === 'desc' ? -1 : 1
   return [...rows].sort((a, b) => {
-    const compared = (a.values[column] ?? '').localeCompare(b.values[column] ?? '', undefined, { numeric: true, sensitivity: 'base' })
-    return compared !== 0 ? compared * multiplier : a.nodeId.localeCompare(b.nodeId) * multiplier
+    const compared = (a.values[column] ?? '').localeCompare(b.values[column] ?? '', INVENTORY_SORT_LOCALE, { numeric: true, sensitivity: 'base' })
+    return compared !== 0
+      ? compared * multiplier
+      : a.nodeId.localeCompare(b.nodeId, INVENTORY_SORT_LOCALE, { sensitivity: 'base' })
   })
 }
 
@@ -96,7 +113,7 @@ function inventoryCellValue(
   if (column === 'name') return node.name
   if (column === 'path') return path
   if (column === 'template') return node.templateId ? templates?.[node.templateId]?.label ?? node.templateId : ''
-  const value = node.properties[column.slice(9)]
+  const value = node.properties[column.slice(INVENTORY_PROPERTY_PREFIX.length)]
   if (value === null || value === undefined) return ''
   return typeof value === 'string' ? value : String(value)
 }

@@ -67,6 +67,18 @@ test('table view sorts, selects columns, preserves node identity, and exports th
   expect(csv).toContain('Device 2')
   expect(csv).not.toContain('Device 10')
 
+  await electronApp.evaluate(({ dialog }) => {
+    dialog.showSaveDialog = async () => ({ canceled: true, filePath: undefined })
+  })
+  const cancelled = await appPage.evaluate(() => window.api.inventory.exportCsv({
+    query: '',
+    filters: {},
+    columns: ['name'],
+    sortColumn: 'name',
+    sortDirection: 'asc',
+  }))
+  expect(cancelled).toEqual({ ok: true, data: { savedPath: null, rowCount: 0 } })
+
   await appPage.getByTestId('inventory-view-tree').click()
   await expect(appPage.locator('[data-testid="tree-node"]', { hasText: 'Device 3' })).toBeVisible()
   await expect(appPage.getByTestId('detail-pane')).toContainText('Device 3')

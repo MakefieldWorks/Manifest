@@ -620,6 +620,21 @@ describe('inventory table and export', () => {
     expect(first.data.rows[0].values.name).toBe('Device 2')
     expect(first.data.propertyKeys).toContain('firmware')
 
+    const hiddenSort = manager.inventoryTable({
+      ...request,
+      query: '',
+      columns: ['name'],
+      sortColumn: 'property:firmware',
+      limit: 50,
+    })
+    expect(hiddenSort.ok).toBe(true)
+    if (hiddenSort.ok) {
+      expect(hiddenSort.data.rows.map(row => row.values)).toEqual([
+        { name: 'Device 10' },
+        { name: 'Device 2' },
+      ])
+    }
+
     const exported = manager.buildInventoryCsv(request)
     expect(exported.ok).toBe(true)
     if (!exported.ok) return
@@ -633,5 +648,38 @@ describe('inventory table and export', () => {
       .toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
     expect(manager.inventoryTable({ query: '', filters: {}, columns: ['property:'], sortColumn: 'name' }))
       .toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
+    expect(manager.inventoryTable({ query: '', filters: {}, columns: ['name'], sortColumn: 'property:' }))
+      .toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
+    expect(manager.inventoryTable({ query: '', filters: {}, columns: ['name'], sortColumn: 'name', sortDirection: 'sideways' }))
+      .toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
+  })
+
+  it('exports every match beyond the renderer and search page limits', async () => {
+    await manager.flushAndClose()
+    const manyNodes = Array.from({ length: 205 }, (_, index) => ({
+      id: `bulk-${index}`,
+      parentId: 'root-id',
+      name: `Bulk Device ${index + 1}`,
+      order: index,
+      properties: { serial: `SN-${index + 1}` },
+      created: '2026-01-01T00:00:00.000Z',
+      modified: '2026-01-01T00:00:00.000Z',
+    }))
+    writeFixture(tmpDir, makeManifest({ nodes: [...makeManifest().nodes, ...manyNodes] }))
+    search = new SearchIndexService()
+    manager = makeManager(search)
+    expect((await manager.openProject(tmpDir)).ok).toBe(true)
+
+    const exported = manager.buildInventoryCsv({
+      query: 'Bulk Device',
+      filters: {},
+      columns: ['name'],
+      sortColumn: 'name',
+      sortDirection: 'asc',
+    })
+    expect(exported.ok).toBe(true)
+    if (!exported.ok) return
+    expect(exported.data.rowCount).toBe(205)
+    expect(exported.data.content).toContain('Bulk Device 205')
   })
 })

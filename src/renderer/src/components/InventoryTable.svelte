@@ -6,8 +6,11 @@
   import type { InventoryFilters } from '../../../shared/inventory-filters'
   import {
     DEFAULT_INVENTORY_COLUMNS,
+    INVENTORY_PROPERTY_PREFIX,
     MAX_INVENTORY_COLUMNS,
+    inventoryColumnLabel,
     type InventoryColumn,
+    type InventoryExportRequest,
     type InventorySortDirection,
     type InventoryTableRequest,
     type InventoryTableRow,
@@ -50,7 +53,11 @@
   })
 
   function request(offset = 0): InventoryTableRequest {
-    return { query, filters: { ...filters }, columns: [...columns], sortColumn, sortDirection, offset, limit: pageSize }
+    return { ...exportRequest(), offset, limit: pageSize }
+  }
+
+  function exportRequest(): InventoryExportRequest {
+    return { query, filters: { ...filters }, columns: [...columns], sortColumn, sortDirection }
   }
 
   async function loadPage(append: boolean): Promise<void> {
@@ -85,7 +92,7 @@
 
   function addPropertyColumn(): void {
     if (!propertyToAdd) return
-    const column = `property:${propertyToAdd}` as InventoryColumn
+    const column = `${INVENTORY_PROPERTY_PREFIX}${propertyToAdd}` as InventoryColumn
     if (!columns.includes(column)) columns = [...columns, column]
     propertyToAdd = ''
   }
@@ -100,7 +107,7 @@
     if (exporting) return
     exporting = true
     try {
-      const result = await window.api.inventory.exportCsv(request(0)).catch((error: unknown) => ({
+      const result = await window.api.inventory.exportCsv(exportRequest()).catch((error: unknown) => ({
         ok: false as const,
         error: { code: 'INVENTORY_EXPORT_FAILED', message: error instanceof Error ? error.message : String(error) },
       }))
@@ -111,12 +118,6 @@
     }
   }
 
-  function label(column: InventoryColumn): string {
-    if (column === 'name') return 'Name'
-    if (column === 'path') return 'Path'
-    if (column === 'template') return 'Template'
-    return column.slice(9)
-  }
 </script>
 
 <div class="flex h-full flex-col overflow-hidden bg-white" data-testid="inventory-table">
@@ -133,7 +134,7 @@
         data-testid="inventory-column-picker"
       >
         <option value="">Add property column…</option>
-        {#each propertyKeys.filter(key => columns.length < MAX_INVENTORY_COLUMNS && !columns.includes(`property:${key}`)) as key (key)}
+        {#each propertyKeys.filter(key => columns.length < MAX_INVENTORY_COLUMNS && !columns.includes(`${INVENTORY_PROPERTY_PREFIX}${key}`)) as key (key)}
           <option value={key}>{key}</option>
         {/each}
       </select>
@@ -155,10 +156,10 @@
             <th class="border-b border-r border-stone-200 px-3 py-2 font-medium">
               <div class="flex items-center gap-1">
                 <button class="truncate hover:text-stone-900" onclick={() => sortBy(column)} data-testid={`inventory-sort-${column}`}>
-                  {label(column)}{sortColumn === column ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+                  {inventoryColumnLabel(column)}{sortColumn === column ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
                 </button>
-                {#if column.startsWith('property:')}
-                  <button class="text-stone-300 hover:text-stone-600" aria-label={`Remove ${label(column)} column`} onclick={() => removeColumn(column)}>×</button>
+                {#if column.startsWith(INVENTORY_PROPERTY_PREFIX)}
+                  <button class="text-stone-300 hover:text-stone-600" aria-label={`Remove ${inventoryColumnLabel(column)} column`} onclick={() => removeColumn(column)}>×</button>
                 {/if}
               </div>
             </th>

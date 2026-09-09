@@ -398,15 +398,17 @@ function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(IPC.INVENTORY_EXPORT_CSV, async (_, request: unknown) => {
-    const built = projectManager.buildInventoryCsv(request)
-    if (!built.ok) return built
+    const prepared = projectManager.prepareInventoryCsv(request)
+    if (!prepared.ok) return prepared
     try {
       const result = await dialog.showSaveDialog({
         title: 'Export inventory',
-        defaultPath: built.data.suggestedName,
+        defaultPath: prepared.data.suggestedName,
         filters: [{ name: 'CSV', extensions: ['csv'] }],
       })
-      if (result.canceled || !result.filePath) return ok({ savedPath: null, rowCount: built.data.rowCount })
+      if (result.canceled || !result.filePath) return ok({ savedPath: null, rowCount: 0 })
+      const built = projectManager.buildInventoryCsv(request)
+      if (!built.ok) return built
       await writeFile(result.filePath, built.data.content, 'utf8')
       return ok({ savedPath: result.filePath, rowCount: built.data.rowCount })
     } catch (e: unknown) {

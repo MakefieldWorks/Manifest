@@ -159,7 +159,7 @@ export class SearchIndexService {
         db,
         trimmed,
         0,
-        Math.max(1, scopeIds?.length ?? this.indexedNodeIds.size),
+        -1,
         scopeIds !== null,
       ).hits
     } finally {
