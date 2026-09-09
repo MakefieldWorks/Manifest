@@ -2,6 +2,7 @@
 
 ## Completed
 
+- Optional snapshot descriptions with a 2,000-character limit, preserved as immutable timeline context and shown in timeline, compare, node history, Markdown reports, and CSV exports. **Implemented:** 2026-09-09
 - Sortable inventory table with configurable property columns, complete filtered paging, shared tree selection, and CSV export of the same authoritative result set. **Implemented:** 2026-09-09
 - Structured inventory filters for subtree, template, property equals/contains, and missing required values, composable with complete paged text search. **Implemented:** 2026-09-08
 - Truthful inventory search totals and incremental loading beyond the initial 50 matches, with stable paging and visible loaded-versus-total status. **Implemented:** 2026-09-08

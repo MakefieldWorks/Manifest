@@ -20,6 +20,7 @@
   import { orderCompareDiffs, type CompareOrderMode } from '../lib/compare-diff-order'
   import { diffNodeIdCandidatesFromSelection } from '../lib/compare-highlight'
   import SnapshotDiffRowBody from './SnapshotDiffRowBody.svelte'
+  import { MAX_SNAPSHOT_DESCRIPTION_LENGTH } from '../../../shared/validation'
 
   interface Props {
     snapshots: Snapshot[]
@@ -39,7 +40,7 @@
     onDiffNodeSelect?: (nodeId: string) => void
     onClose: () => void
     onRefresh: () => Promise<void>
-    onCreate: (name: string) => Promise<void>
+    onCreate: (name: string, description: string | null) => Promise<boolean>
     onCompare: (from: string, to: string) => Promise<void>
     onExitCompare: () => void
     onRestore: (name: string) => Promise<void>
@@ -76,6 +77,7 @@
   }: Props = $props()
 
   let snapshotName = $state('')
+  let snapshotDescription = $state('')
   let compareFrom = $state('')
   let compareTo = $state('')
   let reportBusy = $state(false)
@@ -303,8 +305,10 @@
   async function submitCreate() {
     const trimmed = snapshotName.trim()
     if (!trimmed || creating) return
-    await onCreate(trimmed)
+    const created = await onCreate(trimmed, snapshotDescription.trim() || null)
+    if (!created) return
     snapshotName = ''
+    snapshotDescription = ''
   }
 
   async function submitCompare() {
@@ -336,6 +340,19 @@
       map.set(snapshot.name, snapshot)
     }
     return map
+  })
+
+  const compareDescriptions = $derived.by(() => {
+    if (!mergedTree) return []
+    return [
+      { label: 'From', ref: mergedTree.fromSnapshot },
+      { label: 'To', ref: mergedTree.toSnapshot },
+    ].flatMap(item => {
+      if (item.ref === CURRENT_PROJECT_REF) return []
+      const rawNote = snapshotsByKey.get(item.ref)?.note
+      const note = typeof rawNote === 'string' ? rawNote.trim() : ''
+      return note ? [{ label: item.label, note }] : []
+    })
   })
 
   const recoveryPointsById = $derived.by(() => {
@@ -433,6 +450,11 @@
           Comparing {snapshotRefLabel(mergedTree.fromSnapshot)} → {snapshotRefLabel(mergedTree.toSnapshot)}
         </h2>
         <p class="text-xs text-stone-400">{totalChanges} {totalChanges === 1 ? 'change' : 'changes'}</p>
+        {#each compareDescriptions as description (description.label)}
+          <p class="mt-0.5 max-w-96 line-clamp-2 text-[10px] text-stone-500" title={description.note}>
+            {description.label}: {description.note}
+          </p>
+        {/each}
       </div>
       <div class="flex items-center gap-1">
         <button
@@ -782,6 +804,25 @@
             {creating ? 'Saving…' : 'Save'}
           </button>
         </div>
+        <label class="block text-[10px] text-stone-500">
+          Description <span class="text-stone-300">optional</span>
+          <textarea
+            bind:value={snapshotDescription}
+            maxlength={MAX_SNAPSHOT_DESCRIPTION_LENGTH}
+            rows="2"
+            placeholder="Why this configuration matters, test/run ID, outcome, or evidence link"
+            class="mt-1 w-full resize-y rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs
+                   text-stone-700 placeholder-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-400 selectable"
+            data-testid="snapshot-description-input"
+            onkeydown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                void submitCreate()
+              }
+            }}
+          ></textarea>
+          <span class="mt-0.5 block text-right text-[9px] text-stone-300">{snapshotDescription.length} / {MAX_SNAPSHOT_DESCRIPTION_LENGTH}</span>
+        </label>
       </section>
 
       <section class="px-4 py-3 space-y-2" data-testid="snapshot-timeline">
@@ -830,7 +871,15 @@
                     <p class="mt-1 text-[10px] text-stone-500">{lineage}</p>
                   {/if}
                   {#if event.note}
-                    <p class="mt-1 rounded border border-amber-100 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">
+                    <p
+                      class="mt-1 rounded border px-2 py-1 text-[10px]"
+                      class:border-sky-100={event.type === 'snapshot'}
+                      class:bg-sky-50={event.type === 'snapshot'}
+                      class:text-sky-800={event.type === 'snapshot'}
+                      class:border-amber-100={event.type !== 'snapshot'}
+                      class:bg-amber-50={event.type !== 'snapshot'}
+                      class:text-amber-800={event.type !== 'snapshot'}
+                    >
                       {event.note}
                     </p>
                   {/if}

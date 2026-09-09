@@ -49,8 +49,9 @@ function createExampleNode(
 async function createExampleSnapshot(
   projectManager: ProjectManager,
   name: string,
+  description: string,
 ): Promise<Result<void>> {
-  const created = await projectManager.snapshotCreate(name)
+  const created = await projectManager.snapshotCreate(name, description)
   return created.ok ? ok(undefined) : created
 }
 
@@ -106,7 +107,11 @@ export async function openExampleProject(
   })
   if (!powerSupply.ok) return powerSupply
 
-  const baseline = await createExampleSnapshot(projectManager, 'baseline-lab')
+  const baseline = await createExampleSnapshot(
+    projectManager,
+    'baseline-lab',
+    'Known-good navigation lab configuration before the firmware update.',
+  )
   if (!baseline.ok) return baseline
 
   const upgradedController = projectManager.nodeUpdate(controller.data, {
@@ -119,7 +124,11 @@ export async function openExampleProject(
   })
   if (!telemetry.ok) return telemetry
 
-  const update = await createExampleSnapshot(projectManager, 'firmware-update')
+  const update = await createExampleSnapshot(
+    projectManager,
+    'firmware-update',
+    'Navigation controller firmware 1.4.0 under maintenance; telemetry gateway added for validation.',
+  )
   if (!update.ok) return update
 
   const project = projectManager.getCurrent()

@@ -546,8 +546,8 @@ function registerIpcHandlers(): void {
 
   // ── Snapshots ────────────────────────────────────────────────────────────
 
-  ipcMain.handle(IPC.SNAPSHOT_CREATE, (_, { name }: { name: string }) =>
-    projectManager.snapshotCreate(name)
+  ipcMain.handle(IPC.SNAPSHOT_CREATE, (_, { name, description }: { name: unknown; description?: unknown }) =>
+    projectManager.snapshotCreate(name, description)
   )
 
   ipcMain.handle(IPC.SNAPSHOT_LIST, () =>

@@ -35,8 +35,8 @@ The core idea is simple. Your project lives as a readable `Manifest.manifestproj
 - Edit node properties in the detail pane, with optional typed-property templates (string, number, boolean, date, version, enum, and node-to-node `reference` fields) — typing lives in project-level templates while values stay clean JSON primitives.
 - Import existing structured data from CSV into the hierarchy.
 - Autosave project changes back to disk.
-- Create named snapshots and restore prior states.
-- Compare snapshots, or compare the current project against a snapshot, with a merged diff/tree view; export the diff as a Markdown or CSV report.
+- Create named snapshots with optional descriptions that capture purpose, test/run IDs, outcomes, or evidence links, then restore prior states.
+- Compare snapshots, or compare the current project against a snapshot, with a merged diff/tree view; snapshot descriptions carry into the comparison and exported Markdown or CSV report.
 - Follow the system appearance or choose a fixed appearance plus any built-in light and dark
   scheme independently from Settings.
 

@@ -54,6 +54,10 @@ describe('openExampleProject', () => {
       'baseline-lab',
       'firmware-update',
     ])
+    expect(snapshots.data.find((snapshot) => snapshot.name === 'baseline-lab')?.note)
+      .toContain('Known-good navigation lab')
+    expect(snapshots.data.find((snapshot) => snapshot.name === 'firmware-update')?.note)
+      .toContain('telemetry gateway added')
 
     const reopened = await openExampleProject(manager, parentDir)
     expect(reopened.ok).toBe(true)

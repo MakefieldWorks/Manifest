@@ -98,8 +98,8 @@ const api: ManifestAPI = {
   },
 
   snapshot: {
-    create: (name) =>
-      ipcRenderer.invoke(IPC.SNAPSHOT_CREATE, { name }),
+    create: (name, description) =>
+      ipcRenderer.invoke(IPC.SNAPSHOT_CREATE, { name, description }),
     list: () =>
       ipcRenderer.invoke(IPC.SNAPSHOT_LIST, {}),
     compare: (a, b) =>

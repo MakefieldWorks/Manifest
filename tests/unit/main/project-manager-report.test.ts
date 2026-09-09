@@ -29,6 +29,18 @@ const SNAPS = [
   { id: 's-after', name: 'after', commitHash: 'beef5678abc', createdAt: '2026-01-02T11:00:00.000Z', message: '', basedOnSnapshotId: null, createdAfterRevertEventId: null, note: null },
 ]
 
+const HISTORY = {
+  version: 1,
+  currentBaseSnapshotId: 's-after',
+  pendingRevertEventId: null,
+  snapshots: {
+    's-before': { id: 's-before', basedOnSnapshotId: null, createdAfterRevertEventId: null, note: 'Known-good baseline' },
+    's-after': { id: 's-after', basedOnSnapshotId: 's-before', createdAfterRevertEventId: null, note: 'Validated upgrade' },
+  },
+  events: [],
+  recoveryPoints: [],
+}
+
 function makeGit(over: Record<string, unknown> = {}) {
   return {
     checkVersion: async () => ({ available: true, version: '2.50.0', meetsMinimum: true, minimumVersion: '2.25' }),
@@ -47,6 +59,8 @@ let manager: ProjectManager
 
 async function open(git = makeGit()): Promise<void> {
   writeFileSync(join(tmpDir, 'Manifest.manifestproject'), JSON.stringify(after, null, 2), 'utf8')
+  mkdirSync(join(tmpDir, '.manifest'), { recursive: true })
+  writeFileSync(join(tmpDir, '.manifest', 'history.json'), JSON.stringify(HISTORY, null, 2), 'utf8')
   manager = new ProjectManager(git as any, noopLogger as any)
   const r = await manager.openProject(tmpDir)
   expect(r.ok).toBe(true)
@@ -77,7 +91,9 @@ describe('buildReport', () => {
     const { content, suggestedName } = r.data
     expect(content).toContain('# Change Report: Lab')
     expect(content).toContain('**From:** before (2026-01-01 10:00 · abc1234)')
+    expect(content).toContain('**From description:** Known-good baseline')
     expect(content).toContain('**To:** after (2026-01-02 11:00 · beef567)')
+    expect(content).toContain('**To description:** Validated upgrade')
     expect(content).toContain('## Added (1)')
     expect(content).toContain('- Lab / B2')
     expect(content).toContain('## Property changes (1 node(s))')
@@ -91,9 +107,9 @@ describe('buildReport', () => {
     expect(r.ok).toBe(true)
     if (!r.ok) return
     const rows = parseCsv(r.data.content)
-    expect(rows[0]).toEqual(['path', 'node', 'change', 'severity', 'property', 'old', 'new', 'removed_descendants', 'broken_references'])
-    expect(rows).toContainEqual(['Lab', 'B2', 'added', 'High', '', '', '', '', ''])
-    expect(rows).toContainEqual(['Lab', 'B1', 'property-changed', 'Medium', 'serial', 'SN-1', 'SN-2', '', ''])
+    expect(rows[0]).toEqual(['path', 'node', 'change', 'severity', 'property', 'old', 'new', 'removed_descendants', 'broken_references', 'from_description', 'to_description'])
+    expect(rows).toContainEqual(['Lab', 'B2', 'added', 'High', '', '', '', '', '', 'Known-good baseline', 'Validated upgrade'])
+    expect(rows).toContainEqual(['Lab', 'B1', 'property-changed', 'Medium', 'serial', 'SN-1', 'SN-2', '', '', 'Known-good baseline', 'Validated upgrade'])
     expect(r.data.suggestedName).toBe('Lab-changes-before-to-after.csv')
   })
 

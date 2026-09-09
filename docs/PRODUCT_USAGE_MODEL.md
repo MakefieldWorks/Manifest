@@ -40,7 +40,9 @@ sees in the tree and detail pane during normal use.
 
 The current project is autosaved to `Manifest.manifestproject`. It can be changed freely.
 When the user creates a snapshot, Manifest records the current project state as
-an immutable checkpoint.
+an immutable checkpoint. The user may add an optional description of up to 2,000
+characters for the reason, test/run ID, outcome, or supporting evidence. That
+description is immutable context for the checkpoint.
 
 ### Immutable Snapshot Timeline
 
@@ -389,6 +391,7 @@ These are the decisions implied by the current model:
 | Should the product use "snapshot," "checkpoint," or "version"? | Use "snapshot." Avoid "version" because it implies editable or branching versions. |
 | Should compare mode allow edits? | No. Compare is read-only. |
 | Should Manifest support comparing the current project to a snapshot in v1? | Yes. Shipped: a `Current project` compare option lets the user diff their live, unsnapshotted work against any saved snapshot ("what changed since my last snapshot?") without creating a throwaway snapshot. |
+| Should snapshot creation require a note/description beyond the name? | No. Shipped: an optional immutable description appears in timeline, compare, node history, and exported reports. |
 | Should Manifest expose Git branches? | Not in v1. The product can record lineage without making users manage branches. |
 
 ## Open Product Questions
@@ -396,7 +399,6 @@ These are the decisions implied by the current model:
 These should be decided before adding heavier history features:
 
 - Should users be able to duplicate a snapshot into a separate project later?
-- Should snapshot creation require a note/description beyond the name?
 - Should Manifest expose content lineage as a separate view, or only as metadata
   inside the chronological timeline?
 

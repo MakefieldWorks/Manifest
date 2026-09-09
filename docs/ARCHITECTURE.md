@@ -121,7 +121,7 @@ this table mirrors it.
 | `import:plan` | `{ path, mapping }` | `Result<ImportPlan>` |
 | `import:apply` | `{ path, mapping }` | `Result<{ project, summary }>` |
 | `search:query` | `{ query }` | `Result<SearchResult[]>` |
-| `snapshot:create` | `{ name }` | `Result<Snapshot>` |
+| `snapshot:create` | `{ name, description? }` | `Result<Snapshot>` |
 | `snapshot:list` | `{}` | `Result<Snapshot[]>` |
 | `snapshot:compare` | `{ a, b }` | `Result<DiffEntry[]>` |
 | `snapshot:loadCompare` | `{ a, b }` | `Result<MergedTree>` |
@@ -276,8 +276,10 @@ a product UX that never exposes Git directly.
 
 - **Auto-init:** On "Create Project," Manifest runs `git init` in the project directory.
   The `.git` directory is never shown in the UI.
-- **Snapshot creation:** User clicks "Create Snapshot" and provides a name.
-  Manifest runs: `git add Manifest.manifestproject && git commit -m "<name>" && git tag "snapshot/<name>"`.
+- **Snapshot creation:** User provides a name and may add an immutable description
+  of up to 2,000 characters. Manifest stores the description in
+  `.manifest/history.json`, then runs:
+  `git add Manifest.manifestproject && git commit -m "<name>" && git tag "snapshot/<name>"`.
 - **Snapshot listing:** `git tag --list "snapshot/*" --sort=-creatordate` to enumerate.
 - **Snapshot compare:** `git show snapshot/<name1>:Manifest.manifestproject` vs
   `git show snapshot/<name2>:Manifest.manifestproject`, then run the semantic diff engine.

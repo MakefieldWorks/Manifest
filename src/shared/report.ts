@@ -17,6 +17,7 @@ export interface ReportSnapshotMeta {
   name: string
   date: string   // human-readable (caller formats)
   hash: string   // short commit hash
+  note: string | null
 }
 
 export interface ReportContext {
@@ -110,6 +111,10 @@ function joinedImpactLabels(values: string[]): string {
   return values.join(' | ')
 }
 
+function csvContext(value: string | null): string {
+  return value?.replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim() ?? ''
+}
+
 // Neutralize Markdown-significant content in an interpolated value so a node name
 // or property value (which may contain newlines or markup — validateNodeName only
 // rejects slashes, and property values are free-form) can't corrupt the report
@@ -149,7 +154,9 @@ export function formatDiffReportMarkdown(
   lines.push(`# Change Report: ${md(ctx.projectName)}`)
   lines.push('')
   lines.push(`**From:** ${md(ctx.from.name)} (${md(ctx.from.date)} · ${md(ctx.from.hash)})  `)
+  if (ctx.from.note) lines.push(`**From description:** ${md(ctx.from.note)}  `)
   lines.push(`**To:** ${md(ctx.to.name)} (${md(ctx.to.date)} · ${md(ctx.to.hash)})  `)
+  if (ctx.to.note) lines.push(`**To description:** ${md(ctx.to.note)}  `)
   lines.push(`**Generated:** ${md(ctx.generatedAt)}`)
   lines.push('')
 
@@ -250,7 +257,10 @@ export function formatDiffReportMarkdown(
 
 // ─── CSV (node changes only; one row per change, property-changes expanded) ───
 
-const CSV_HEADER = ['path', 'node', 'change', 'severity', 'property', 'old', 'new', 'removed_descendants', 'broken_references']
+const CSV_HEADER = [
+  'path', 'node', 'change', 'severity', 'property', 'old', 'new',
+  'removed_descendants', 'broken_references', 'from_description', 'to_description',
+]
 
 // CSV carries node changes only (schema detail lives in the Markdown report). But
 // it must never read as "no changes" when a schema-only diff happened — so a
@@ -261,17 +271,18 @@ export function formatDiffReportCsv(
   ctx: ReportContext,
 ): string {
   const rows: string[][] = [CSV_HEADER]
+  const context = [csvContext(ctx.from.note), csvContext(ctx.to.note)]
 
   if (templateDiffs.length > 0) {
     const n = templateDiffs.length
-    rows.push(['', '(schema changes)', 'schema-change', '', '', '', `${n} schema change${n === 1 ? '' : 's'} — see the Markdown report for detail`, '', ''])
+    rows.push(['', '(schema changes)', 'schema-change', '', '', '', `${n} schema change${n === 1 ? '' : 's'} — see the Markdown report for detail`, '', '', ...context])
   }
 
   for (const e of diffs) {
     const path = ancestorPath(e)
     const node = e.context.nodeName
     const base = (change: string, property: string, oldV: string, newV: string): string[] =>
-      [path, node, change, e.severity, property, oldV, newV, '', '']
+      [path, node, change, e.severity, property, oldV, newV, '', '', ...context]
 
     switch (e.changeType) {
       case 'added':
@@ -290,6 +301,7 @@ export function formatDiffReportCsv(
             '',
             joinedImpactLabels(impact?.descendants.map(descendantLabel) ?? []),
             joinedImpactLabels(impact?.incomingReferences.map(incomingReferenceLabel) ?? []),
+            ...context,
           ])
         }
         break

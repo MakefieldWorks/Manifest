@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, rmSync } from 'fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -121,7 +121,7 @@ describe('nodeHistory IPC', () => {
     manager.nodeCreate(rootId, 'Server')
     const server = manager.getCurrent()!.nodes.find(n => n.name === 'Server')!
 
-    await manager.snapshotCreate('s1')
+    await manager.snapshotCreate('s1', 'Initial server state')
     // s2: unchanged — should NOT appear in history
     await manager.snapshotCreate('s2')
     // s3: rename — should appear
@@ -136,6 +136,7 @@ describe('nodeHistory IPC', () => {
       ['snapshot', 's1', 'Server'],
       ['snapshot', 's3', 'Server Alpha'],
     ])
+    expect(result.data.entries[0]?.note).toBe('Initial server state')
   })
 
   it('records deletion as a presence=absent entry', async () => {
@@ -356,6 +357,23 @@ describe('nodeHistory IPC', () => {
     } finally {
       await fresh.flushAndClose()
     }
+  })
+
+  it('carries metadata notes into node history synthesized for missing snapshot events', async () => {
+    const rootId = manager.getCurrent()!.nodes.find(n => n.parentId === null)!.id
+    manager.nodeCreate(rootId, 'Metadata Node')
+    const node = manager.getCurrent()!.nodes.find(n => n.name === 'Metadata Node')!
+    await manager.snapshotCreate('metadata-snapshot', 'Evidence from run 42')
+
+    const historyPath = join(manager.getCurrent()!.path!, '.manifest', 'history.json')
+    const history = JSON.parse(readFileSync(historyPath, 'utf8'))
+    history.events = []
+    writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf8')
+
+    const result = await manager.nodeHistory(node.id)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.data.entries[0]?.note).toBe('Evidence from run 42')
   })
 
   it('returns chronologically ordered entries via the order field', async () => {
