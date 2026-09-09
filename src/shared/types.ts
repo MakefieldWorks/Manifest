@@ -407,7 +407,7 @@ export interface SearchResult {
   nodeId: string
   nodeName: string
   parentName: string | null
-  matchField: string
+  matchField: 'name' | 'property' | 'filter'
   snippet: string
 }
 

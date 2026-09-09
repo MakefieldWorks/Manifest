@@ -37,6 +37,7 @@ import {
 import type { Project, Result, NodeTemplate, ImportMapping, NetboxImportOptions } from '../shared/types'
 import type { ReportFormat } from '../shared/report'
 import type { BatchPropertyUpdateRequest } from '../shared/batch-properties'
+import type { InventoryFilters } from '../shared/inventory-filters'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -403,8 +404,12 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC.SEARCH_QUERY,
-    (_, { query, offset, limit }: { query: string; offset?: number; limit?: number }) =>
-      projectManager.searchNodesPage(query, offset, limit)
+    (_, { query, offset, limit, filters }: {
+      query: string
+      offset?: number
+      limit?: number
+      filters?: InventoryFilters
+    }) => projectManager.searchNodesPage(query, offset, limit, filters)
   )
 
   // ── Git ──────────────────────────────────────────────────────────────────
