@@ -1,5 +1,5 @@
-import type { DiffClassification, DiffEntry, TemplateDiffEntry } from '../../../shared/types'
-import { DIFF_CLASSIFICATION_LABELS } from '../../../shared/diff-format'
+import type { DiffClassification, DiffEntry, TemplateDiffEntry } from './types'
+import { DIFF_CLASSIFICATION_LABELS } from './diff-format'
 
 export interface ReviewInsight {
   id: string
@@ -47,7 +47,7 @@ function classificationBreakdown(diffs: DiffEntry[]): string {
     .join(', ')
 }
 
-function schemaSeverity(templateChanges: TemplateDiffEntry[]): DiffEntry['severity'] {
+export function schemaSeverity(templateChanges: TemplateDiffEntry[]): DiffEntry['severity'] {
   return templateChanges.some(change =>
     change.changeType === 'template-removed' ||
     change.changeType === 'field-removed'
@@ -89,7 +89,8 @@ export function filterDiffsByReviewInsight(
 
 export function buildReviewInsights(
   allDiffs: DiffEntry[],
-  templateChanges: TemplateDiffEntry[] = []
+  templateChanges: TemplateDiffEntry[] = [],
+  options: { limit?: number | null } = {},
 ): ReviewInsight[] {
   const insights: ReviewInsight[] = []
 
@@ -210,5 +211,6 @@ export function buildReviewInsights(
     })
   }
 
-  return insights.slice(0, 4)
+  const limit = options.limit === null ? null : options.limit ?? 4
+  return limit === null ? insights : insights.slice(0, limit)
 }

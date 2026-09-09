@@ -102,6 +102,7 @@ export function buildAppMenuTemplate(options: AppMenuTemplateOptions): MenuItemC
       {
         label: 'Export Report',
         submenu: [
+          commandItem('report:exportHtml', options.dispatch),
           commandItem('report:exportMarkdown', options.dispatch),
           commandItem('report:exportCsv', options.dispatch),
         ],

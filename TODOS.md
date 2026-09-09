@@ -2,6 +2,7 @@
 
 ## Completed
 
+- Self-contained HTML comparison reviews with complete prioritized findings, severity/classification context, scoped changes, snapshot descriptions, escaped user content, and offline browser/print support. **Implemented:** 2026-09-09
 - Scoped comparison for a selected room, rack, device, or other subtree, with backend-enforced node and relevant schema filtering plus scope-aware Markdown/CSV reports. **Implemented:** 2026-09-09
 - Optional snapshot descriptions with a 2,000-character limit, preserved as immutable timeline context and shown in timeline, compare, node history, Markdown reports, and CSV exports. **Implemented:** 2026-09-09
 - Sortable inventory table with configurable property columns, complete filtered paging, shared tree selection, and CSV export of the same authoritative result set. **Implemented:** 2026-09-09

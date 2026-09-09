@@ -57,6 +57,9 @@ export const MENU_COMMANDS = {
   'report:exportCsv': {
     label: 'Export CSV Report...',
   },
+  'report:exportHtml': {
+    label: 'Export HTML Review...',
+  },
   'node:addChild': {
     label: 'Add Child',
   },

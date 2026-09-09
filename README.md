@@ -36,7 +36,7 @@ The core idea is simple. Your project lives as a readable `Manifest.manifestproj
 - Import existing structured data from CSV into the hierarchy.
 - Autosave project changes back to disk.
 - Create named snapshots with optional descriptions that capture purpose, test/run IDs, outcomes, or evidence links, then restore prior states.
-- Compare snapshots, or compare the current project against a snapshot, across the whole project or one selected subtree; scope and snapshot descriptions carry into the merged diff/tree view and exported Markdown or CSV report.
+- Compare snapshots, or compare the current project against a snapshot, across the whole project or one selected subtree; scope and snapshot descriptions carry into the merged diff/tree view and exported Markdown, CSV, or self-contained HTML review.
 - Follow the system appearance or choose a fixed appearance plus any built-in light and dark
   scheme independently from Settings.
 

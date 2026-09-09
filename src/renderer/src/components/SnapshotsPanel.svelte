@@ -3,6 +3,7 @@
 <script lang="ts">
   import type { DiffEntry, RecoveryPoint, Snapshot, SnapshotTimelineEvent } from '../../../shared/types'
   import type { MergedTree } from '../../../shared/merged-tree'
+  import type { ReportFormat } from '../../../shared/report'
   import { CURRENT_PROJECT_REF, snapshotRefLabel } from '../../../shared/snapshot-ref'
   import {
     severityBadgeClass,
@@ -16,7 +17,7 @@
     filterDiffsByReviewInsight,
     focusMatchesDiff,
     type ReviewInsight,
-  } from '../lib/compare-review-insights'
+  } from '../../../shared/compare-review-insights'
   import { orderCompareDiffs, type CompareOrderMode } from '../lib/compare-diff-order'
   import { diffNodeIdCandidatesFromSelection } from '../lib/compare-highlight'
   import SnapshotDiffRowBody from './SnapshotDiffRowBody.svelte'
@@ -46,8 +47,8 @@
     onExitCompare: () => void
     onRestore: (name: string) => Promise<void>
     onApplyRecovery: (id: string) => Promise<void>
-    /** Export the current compare as a saved report (Markdown or CSV). */
-    onExportReport?: (format: 'markdown' | 'csv') => Promise<void>
+    /** Export the current compare as a saved report. */
+    onExportReport?: (format: ReportFormat) => Promise<void>
     /** Copy the current compare as Markdown to the clipboard. */
     onCopyReport?: () => Promise<void>
   }
@@ -454,26 +455,51 @@
   data-testid="snapshots-panel"
 >
   <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-stone-200 shrink-0">
+  <div class="px-4 py-3 border-b border-stone-200 shrink-0 {compareLoaded && mergedTree
+    ? 'flex flex-col items-stretch'
+    : 'flex items-center justify-between'}">
     {#if compareLoaded && mergedTree}
-      <div class="min-w-0">
-        <h2 class="truncate text-sm font-semibold text-stone-900">
-          Comparing {snapshotRefLabel(mergedTree.fromSnapshot)} → {snapshotRefLabel(mergedTree.toSnapshot)}
-        </h2>
-        <p class="text-xs text-stone-400">{totalChanges} {totalChanges === 1 ? 'change' : 'changes'}</p>
-        {#if mergedTree.scope}
-          <p class="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700"
-             data-testid="compare-scope-label">
-            Scope: {mergedTree.scope.path}
-          </p>
-        {/if}
-        {#each compareDescriptions as description (description.label)}
-          <p class="mt-0.5 max-w-96 line-clamp-2 text-[10px] text-stone-500" title={description.note}>
-            {description.label}: {description.note}
-          </p>
-        {/each}
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <h2 class="truncate text-sm font-semibold text-stone-900">
+            Comparing {snapshotRefLabel(mergedTree.fromSnapshot)} → {snapshotRefLabel(mergedTree.toSnapshot)}
+          </h2>
+          <p class="text-xs text-stone-400">{totalChanges} {totalChanges === 1 ? 'change' : 'changes'}</p>
+          {#if mergedTree.scope}
+            <p class="mt-1 inline-flex max-w-full truncate rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700"
+               data-testid="compare-scope-label">
+              Scope: {mergedTree.scope.path}
+            </p>
+          {/if}
+          {#each compareDescriptions as description (description.label)}
+            <p class="mt-0.5 max-w-96 line-clamp-2 text-[10px] text-stone-500" title={description.note}>
+              {description.label}: {description.note}
+            </p>
+          {/each}
+        </div>
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            onclick={onExitCompare}
+            class="rounded-lg border border-stone-200 px-2 py-1 text-xs text-stone-600
+                   transition-colors hover:bg-stone-50 cursor-default"
+          >Exit compare</button>
+          <button
+            onclick={onClose}
+            aria-label="Close snapshots"
+            class="rounded-lg px-2 py-1 text-stone-400 transition-colors hover:bg-stone-100
+                   hover:text-stone-700 cursor-default text-sm"
+          >✕</button>
+        </div>
       </div>
-      <div class="flex items-center gap-1">
+      <div class="mt-2 flex flex-wrap items-center justify-end gap-1">
+        <button
+          onclick={() => runReport(() => onExportReport?.('html'))}
+          disabled={reportBusy}
+          title="Export a self-contained review that opens in any browser"
+          class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700
+                 transition-colors hover:bg-violet-100 disabled:opacity-50 cursor-default"
+          data-testid="report-export-html"
+        >Export HTML</button>
         <button
           onclick={() => runReport(onCopyReport)}
           disabled={reportBusy}
@@ -496,17 +522,6 @@
                  transition-colors hover:bg-stone-50 disabled:opacity-50 cursor-default"
           data-testid="report-export-csv"
         >Export CSV</button>
-        <button
-          onclick={onExitCompare}
-          class="rounded-lg border border-stone-200 px-2 py-1 text-xs text-stone-600
-                 transition-colors hover:bg-stone-50 cursor-default"
-        >Exit compare</button>
-        <button
-          onclick={onClose}
-          aria-label="Close snapshots"
-          class="rounded-lg px-2 py-1 text-stone-400 transition-colors hover:bg-stone-100
-                 hover:text-stone-700 cursor-default text-sm"
-        >✕</button>
       </div>
     {:else}
       <div>

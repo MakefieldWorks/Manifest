@@ -78,6 +78,16 @@ describe('buildAppMenuTemplate', () => {
     expect(commands.every(item => item.enabled === false)).toBe(true)
   })
 
+  it('offers HTML, Markdown, and CSV report exports', () => {
+    const exportMenu = submenu(fileMenu(templateFor('linux'))).find(item => item.label === 'Export Report')
+    if (!exportMenu) throw new Error('Export Report menu not found')
+    expect(submenu(exportMenu).map(item => item.label)).toEqual([
+      'Export HTML Review...',
+      'Export Markdown Report...',
+      'Export CSV Report...',
+    ])
+  })
+
   it('gates reload and devtools to development menus', () => {
     const productionRoles = flatten(templateFor('linux', false)).map(item => item.role)
     const devRoles = flatten(templateFor('linux', true)).map(item => item.role)

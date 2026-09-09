@@ -35,7 +35,6 @@ import {
   type FinalSaveFailureAction,
 } from './final-save'
 import type { Project, Result, NodeTemplate, ImportMapping, NetboxImportOptions } from '../shared/types'
-import type { ReportFormat } from '../shared/report'
 import type { BatchPropertyUpdateRequest } from '../shared/batch-properties'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
@@ -446,7 +445,7 @@ function registerIpcHandlers(): void {
   // Main builds the content authoritatively (ProjectManager.buildReport) and owns
   // the save dialog + file write — the renderer never touches the filesystem.
 
-  ipcMain.handle(IPC.REPORT_EXPORT, async (_, { from, to, format, scopeNodeId }: { from: string; to: string; format: ReportFormat; scopeNodeId?: unknown }) => {
+  ipcMain.handle(IPC.REPORT_EXPORT, async (_, { from, to, format, scopeNodeId }: { from: string; to: string; format: unknown; scopeNodeId?: unknown }) => {
     const built = await projectManager.buildReport(from, to, format, scopeNodeId)
     if (!built.ok) return built
     // showSaveDialog AND writeFile are both inside the try so a dialog or write
@@ -455,7 +454,11 @@ function registerIpcHandlers(): void {
       const result = await dialog.showSaveDialog({
         title: 'Export change report',
         defaultPath: built.data.suggestedName,
-        filters: [format === 'csv' ? { name: 'CSV', extensions: ['csv'] } : { name: 'Markdown', extensions: ['md'] }],
+        filters: [format === 'csv'
+          ? { name: 'CSV', extensions: ['csv'] }
+          : format === 'html'
+            ? { name: 'HTML', extensions: ['html'] }
+            : { name: 'Markdown', extensions: ['md'] }],
       })
       if (result.canceled || !result.filePath) return ok({ savedPath: null })
       await writeFile(result.filePath, built.data.content, 'utf8')
@@ -466,7 +469,7 @@ function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC.REPORT_BUILD, (_, { from, to, format, scopeNodeId }: { from: string; to: string; format: ReportFormat; scopeNodeId?: unknown }) =>
+  ipcMain.handle(IPC.REPORT_BUILD, (_, { from, to, format, scopeNodeId }: { from: string; to: string; format: unknown; scopeNodeId?: unknown }) =>
     projectManager.buildReport(from, to, format, scopeNodeId)
   )
 

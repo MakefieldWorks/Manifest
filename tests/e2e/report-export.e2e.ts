@@ -92,6 +92,23 @@ test('exports a Markdown report of the snapshot diff', async ({ appPage, electro
   expect(md).toContain('Widget')
 })
 
+test('exports a self-contained HTML review of the snapshot diff', async ({ appPage, electronApp, workspaceDir }) => {
+  await setUpCompare(appPage, electronApp, workspaceDir, 'HTML Report Lab')
+
+  const outPath = join(workspaceDir, 'report.html')
+  await setSaveDialogPath(electronApp, outPath)
+  await appPage.getByTestId('report-export-html').click()
+  await expect(appPage.getByTestId('toast')).toContainText('Report saved')
+
+  const html = readFileSync(outPath, 'utf8')
+  expect(html).toMatch(/^<!doctype html>/)
+  expect(html).toContain('Manifest change review')
+  expect(html).toContain('HTML Report Lab')
+  expect(html).toContain('Widget')
+  expect(html).not.toMatch(/<script\b/i)
+  expect(html).not.toMatch(/<link\b/i)
+})
+
 test('a canceled save dialog is a silent no-op', async ({ appPage, electronApp, workspaceDir }) => {
   await setUpCompare(appPage, electronApp, workspaceDir, 'Cancel Report Lab')
   await setSaveDialogCanceled(electronApp)
@@ -147,6 +164,7 @@ test('report actions lock while an export is in flight', async ({ appPage, elect
   await expect(appPage.getByTestId('report-copy-md')).toBeDisabled()
   await expect(appPage.getByTestId('report-export-md')).toBeDisabled()
   await expect(appPage.getByTestId('report-export-csv')).toBeDisabled()
+  await expect(appPage.getByTestId('report-export-html')).toBeDisabled()
   await expect.poll(async () => electronApp.evaluate(() => (
     (globalThis as unknown as { __reportSaveDialogTest: { calls: number } }).__reportSaveDialogTest.calls
   ))).toBe(1)
@@ -157,6 +175,7 @@ test('report actions lock while an export is in flight', async ({ appPage, elect
   await expect(appPage.getByTestId('toast')).toContainText('Report saved')
   await expect(appPage.getByTestId('report-export-md')).toBeEnabled()
   await expect(appPage.getByTestId('report-export-csv')).toBeEnabled()
+  await expect(appPage.getByTestId('report-export-html')).toBeEnabled()
   await expect(appPage.getByTestId('report-copy-md')).toBeEnabled()
 
   const md = readFileSync(outPath, 'utf8')

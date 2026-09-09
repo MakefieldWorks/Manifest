@@ -8,10 +8,15 @@
 // must keep null / absent / empty-string distinct.
 
 import type { ComparisonScope, DiffEntry, TemplateDiffEntry } from './types'
-import { formatPath, describeTemplateChange } from './diff-format'
+import { DIFF_CLASSIFICATION_LABELS, formatChangeType, formatPath, describeTemplateChange } from './diff-format'
+import { buildReviewInsights, schemaSeverity } from './compare-review-insights'
 import { serializeCsv } from './csv'
 
-export type ReportFormat = 'markdown' | 'csv'
+export type ReportFormat = 'markdown' | 'csv' | 'html'
+
+export function isReportFormat(value: unknown): value is ReportFormat {
+  return value === 'markdown' || value === 'csv' || value === 'html'
+}
 
 export interface ReportSnapshotMeta {
   name: string
@@ -116,6 +121,10 @@ function csvContext(value: string | null): string {
   return value?.replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim() ?? ''
 }
 
+function snapshotMetaDetails(meta: ReportSnapshotMeta): string {
+  return [meta.date, meta.hash].filter(Boolean).join(' · ')
+}
+
 // Neutralize Markdown-significant content in an interpolated value so a node name
 // or property value (which may contain newlines or markup — validateNodeName only
 // rejects slashes, and property values are free-form) can't corrupt the report
@@ -154,9 +163,11 @@ export function formatDiffReportMarkdown(
   const lines: string[] = []
   lines.push(`# Change Report: ${md(ctx.projectName)}`)
   lines.push('')
-  lines.push(`**From:** ${md(ctx.from.name)} (${md(ctx.from.date)} · ${md(ctx.from.hash)})  `)
+  const fromDetails = snapshotMetaDetails(ctx.from)
+  const toDetails = snapshotMetaDetails(ctx.to)
+  lines.push(`**From:** ${md(ctx.from.name)}${fromDetails ? ` (${md(fromDetails)})` : ''}  `)
   if (ctx.from.note) lines.push(`**From description:** ${md(ctx.from.note)}  `)
-  lines.push(`**To:** ${md(ctx.to.name)} (${md(ctx.to.date)} · ${md(ctx.to.hash)})  `)
+  lines.push(`**To:** ${md(ctx.to.name)}${toDetails ? ` (${md(toDetails)})` : ''}  `)
   if (ctx.to.note) lines.push(`**To description:** ${md(ctx.to.note)}  `)
   if (ctx.scope) lines.push(`**Scope:** ${md(ctx.scope.path)}  `)
   lines.push(`**Generated:** ${md(ctx.generatedAt)}`)
@@ -255,6 +266,204 @@ export function formatDiffReportMarkdown(
   }
 
   return lines.join('\n')
+}
+
+// ─── Self-contained HTML ───────────────────────────────────────────────────
+
+function html(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+const HTML_SEVERITY_CLASSES: Record<DiffEntry['severity'], string> = {
+  High: 'severity-high',
+  Medium: 'severity-medium',
+  Low: 'severity-low',
+}
+
+const HTML_SEVERITY_BORDER_CLASSES: Record<DiffEntry['severity'], string> = {
+  High: 'severity-border-high',
+  Medium: 'severity-border-medium',
+  Low: 'severity-border-low',
+}
+
+function htmlBadges(entry: DiffEntry): string {
+  return `<span class="badge ${HTML_SEVERITY_CLASSES[entry.severity]}">${html(entry.severity)}</span>` +
+    `<span class="badge classification">${html(DIFF_CLASSIFICATION_LABELS[entry.classification])}</span>`
+}
+
+function htmlChangeItem(entry: DiffEntry, body = ''): string {
+  return `<article class="change-card"><div class="change-heading"><div>` +
+    `<h3>${html(fullPath(entry))}</h3><p>${html(formatChangeType(entry.changeType))}</p>` +
+    (entry.severityReason ? `<p class="severity-reason">${html(entry.severityReason)}</p>` : '') + `</div>` +
+    `<div class="badges">${htmlBadges(entry)}</div></div>${body}</article>`
+}
+
+function htmlSection(title: string, items: string[]): string {
+  if (items.length === 0) return ''
+  return `<section><div class="section-heading"><h2>${html(title)}</h2><span>${items.length}</span></div>` +
+    `<div class="change-list">${items.join('')}</div></section>`
+}
+
+function htmlValueDelta(oldValue: string, newValue: string): string {
+  return `<span class="old-value">${html(oldValue || '—')}</span><span class="arrow">→</span>` +
+    `<span class="new-value">${html(newValue || '—')}</span>`
+}
+
+export function formatDiffReportHtml(
+  diffs: DiffEntry[],
+  templateDiffs: TemplateDiffEntry[],
+  ctx: ReportContext,
+): string {
+  const counts = {
+    Added: byType(diffs, 'added').length,
+    Removed: byType(diffs, 'removed').length,
+    Renamed: byType(diffs, 'renamed').length,
+    Moved: byType(diffs, 'moved').length,
+    'Property changes': byType(diffs, 'property-changed').length,
+    'Template changes': byType(diffs, 'template-changed').length,
+    'Order changes': byType(diffs, 'order-changed').length,
+    'Schema changes': templateDiffs.length,
+  }
+  const insights = buildReviewInsights(diffs, templateDiffs, { limit: null })
+  const findings = insights.length === 0 ? '' : `<section><div class="section-heading"><h2>Review findings</h2><span>${insights.length}</span></div>` +
+    `<div class="finding-list">${insights.map(insight => {
+      return `<article class="finding ${HTML_SEVERITY_BORDER_CLASSES[insight.severity]}"><div class="badges">` +
+        `<span class="badge ${HTML_SEVERITY_CLASSES[insight.severity]}">${html(insight.severity)}</span>` +
+        `<span class="badge classification">${html(DIFF_CLASSIFICATION_LABELS[insight.classification])}</span></div>` +
+        `<h3>${html(insight.label)}</h3><p>${html(insight.detail)}</p></article>`
+    }).join('')}</div></section>`
+
+  const added = byType(diffs, 'added').map(entry => htmlChangeItem(entry))
+  const removed = byType(diffs, 'removed').map(entry => {
+    const impact = removalImpact(entry)
+    const details = impact ? `<div class="impact">` +
+      (impact.descendants.length > 0
+        ? `<p><strong>Descendants also removed:</strong> ${html(impact.descendants.map(descendantLabel).join(', '))}</p>`
+        : '') +
+      (impact.incomingReferences.length > 0
+        ? `<p><strong>Incoming references broken:</strong> ${html(impact.incomingReferences.map(incomingReferenceLabel).join(', '))}</p>`
+        : '') + `</div>` : ''
+    return htmlChangeItem(entry, details)
+  })
+  const renamed = byType(diffs, 'renamed').map(entry => htmlChangeItem(
+    entry,
+    `<div class="delta">${htmlValueDelta(String(entry.oldValue ?? ''), String(entry.newValue ?? ''))}</div>`,
+  ))
+  const moved = byType(diffs, 'moved').map(entry => htmlChangeItem(
+    entry,
+    `<div class="delta">${htmlValueDelta(ctx.oldPathById(entry.nodeId) ?? entry.context.nodeName, fullPath(entry))}</div>`,
+  ))
+  const propertyChanges = byType(diffs, 'property-changed').map(entry => {
+    const rows = diffPropertyMaps(propsOf(entry.oldValue), propsOf(entry.newValue), entry.context.propertyValueLabels)
+      .map(change => `<div class="property-row"><strong>${html(change.key)}</strong>` +
+        `<span class="property-kind">${html(change.kind)}</span><span class="delta">${htmlValueDelta(change.old, change.new)}</span></div>`)
+      .join('')
+    return htmlChangeItem(entry, `<div class="property-list">${rows}</div>`)
+  })
+  const templateChanges = byType(diffs, 'template-changed').map(entry => htmlChangeItem(
+    entry,
+    `<div class="delta">${htmlValueDelta(ctx.templateLabelOld(entry.oldValue), ctx.templateLabelNew(entry.newValue))}</div>`,
+  ))
+  const orderChanges = byType(diffs, 'order-changed').map(entry => htmlChangeItem(
+    entry,
+    `<div class="delta">${htmlValueDelta(String(entry.oldValue ?? ''), String(entry.newValue ?? ''))}</div>`,
+  ))
+  const schemaChanges = templateDiffs.map(change => {
+    const severity = schemaSeverity([change])
+    return `<article class="change-card"><div class="change-heading"><div>` +
+      `<h3>${html(change.templateLabel || change.templateId)}</h3><p>${html(describeTemplateChange(change))}</p></div>` +
+      `<div class="badges"><span class="badge ${HTML_SEVERITY_CLASSES[severity]}">${html(severity)}</span>` +
+      `<span class="badge classification">Schema</span></div></div></article>`
+  })
+
+  const changeSections = [
+    htmlSection('Added', added),
+    htmlSection('Removed', removed),
+    htmlSection('Renamed', renamed),
+    htmlSection('Moved', moved),
+    htmlSection('Property changes', propertyChanges),
+    htmlSection('Template changes', templateChanges),
+    htmlSection('Order changes', orderChanges),
+    htmlSection('Schema changes', schemaChanges),
+  ].join('')
+  const hasChanges = diffs.length > 0 || templateDiffs.length > 0
+  const summary = hasChanges
+    ? `<section><div class="section-heading"><h2>Summary</h2><span>${diffs.length + templateDiffs.length} total</span></div><div class="summary-grid">${Object.entries(counts).map(([label, count]) => `<div class="summary"><span>${html(label)}</span><strong>${count}</strong></div>`).join('')}</div></section>`
+    : ''
+  const empty = !hasChanges
+    ? `<section class="empty"><h2>No changes</h2><p>No changes between ${html(ctx.from.name)} and ${html(ctx.to.name)}.</p></section>`
+    : ''
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>Change Report: ${html(ctx.projectName)}</title>
+  <style>
+    :root { color-scheme: light; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4; --paper:#fff; --wash:#f5f5f4; --accent:#4f46e5; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--wash); color:var(--ink); font:14px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { width:min(1040px,calc(100% - 32px)); margin:32px auto; }
+    header, section, footer { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:24px; margin-bottom:18px; }
+    header { border-top:5px solid var(--accent); }
+    h1,h2,h3,p { margin-top:0; } h1 { font-size:28px; margin-bottom:4px; } h2 { font-size:18px; margin:0; } h3 { font-size:14px; margin:0; }
+    .eyebrow { color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .subtitle { color:var(--muted); margin-bottom:20px; }
+    .meta-grid,.summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+    .meta,.summary { background:var(--wash); border-radius:10px; padding:12px 14px; }
+    .meta span,.summary span { display:block; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+    .meta strong,.summary strong { display:block; margin-top:3px; overflow-wrap:anywhere; }
+    .description { color:#44403c; margin:6px 0 0; white-space:normal; }
+    .scope { margin-top:14px; color:#5b21b6; font-weight:650; }
+    .section-heading { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:14px; }
+    .section-heading span { color:var(--muted); font-variant-numeric:tabular-nums; }
+    .finding-list,.change-list { display:grid; gap:10px; }
+    .finding,.change-card { border:1px solid var(--line); border-radius:10px; padding:14px; break-inside:avoid; }
+    .finding { border-left-width:4px; } .finding h3 { margin:8px 0 3px; } .finding p,.change-heading p { color:var(--muted); margin:0; }
+    .change-heading .severity-reason { margin-top:4px; color:#57534e; }
+    .severity-border-high { border-left-color:#b91c1c; } .severity-border-medium { border-left-color:#b45309; } .severity-border-low { border-left-color:#047857; }
+    .change-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+    .badges { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .badge { border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .severity-high { background:#fee2e2; color:#991b1b; } .severity-medium { background:#fef3c7; color:#92400e; } .severity-low { background:#d1fae5; color:#065f46; }
+    .classification { background:#e7e5e4; color:#44403c; }
+    .delta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .old-value,.new-value { background:var(--wash); border-radius:6px; padding:3px 7px; overflow-wrap:anywhere; }
+    .old-value { color:#9f1239; } .new-value { color:#166534; } .arrow { color:var(--muted); }
+    .impact,.property-list { border-top:1px solid var(--line); margin-top:12px; padding-top:10px; }
+    .impact p { margin:4px 0; }
+    .property-row { display:grid; grid-template-columns:minmax(120px,1fr) auto minmax(220px,2fr); gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--line); }
+    .property-row:last-child { border-bottom:0; } .property-kind { color:var(--muted); font-size:12px; }
+    .empty { text-align:center; } .empty h2 { margin-bottom:4px; } .empty p { color:var(--muted); margin:0; }
+    footer { color:var(--muted); font-size:12px; }
+    @media (max-width:640px) { main { width:min(100% - 20px,1040px); margin:10px auto; } header,section,footer { padding:16px; } .property-row { grid-template-columns:1fr; } }
+    @media print { * { print-color-adjust:exact; -webkit-print-color-adjust:exact; } body { background:#fff; } main { width:100%; margin:0; } header,section,footer { box-shadow:none; } }
+  </style>
+</head>
+<body><main>
+  <header>
+    <p class="eyebrow">Manifest change review</p>
+    <h1>${html(ctx.projectName)}</h1>
+    <p class="subtitle">A portable review of observed project changes.</p>
+    <div class="meta-grid">
+      <div class="meta"><span>From</span><strong>${html(ctx.from.name)}</strong>${snapshotMetaDetails(ctx.from) ? `<p>${html(snapshotMetaDetails(ctx.from))}</p>` : ''}${ctx.from.note ? `<p class="description">${html(ctx.from.note)}</p>` : ''}</div>
+      <div class="meta"><span>To</span><strong>${html(ctx.to.name)}</strong>${snapshotMetaDetails(ctx.to) ? `<p>${html(snapshotMetaDetails(ctx.to))}</p>` : ''}${ctx.to.note ? `<p class="description">${html(ctx.to.note)}</p>` : ''}</div>
+      <div class="meta"><span>Generated</span><strong>${html(ctx.generatedAt)}</strong></div>
+    </div>
+    ${ctx.scope ? `<p class="scope">Scope: ${html(ctx.scope.path)}</p>` : ''}
+  </header>
+  ${findings}
+  ${summary}${empty}${changeSections}
+  <footer>This report describes observed differences and user-supplied context. It does not establish that a change caused an outcome.</footer>
+</main></body>
+</html>`
 }
 
 // ─── CSV (node changes only; one row per change, property-changes expanded) ───

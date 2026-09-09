@@ -113,6 +113,25 @@ describe('buildReport', () => {
     expect(r.data.suggestedName).toBe('Lab-changes-before-to-after.csv')
   })
 
+  it('builds a self-contained HTML review', async () => {
+    await open()
+    const r = await manager.buildReport('before', 'after', 'html')
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.data.content).toMatch(/^<!doctype html>/)
+    expect(r.data.content).toContain('Manifest change review')
+    expect(r.data.content).toContain('Known-good baseline')
+    expect(r.data.content).toContain('B2')
+    expect(r.data.suggestedName).toBe('Lab-changes-before-to-after.html')
+  })
+
+  it('rejects an unsupported report format', async () => {
+    await open()
+    const r = await manager.buildReport('before', 'after', 'pdf')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error.code).toBe('VALIDATION_FAILED')
+  })
+
   it('returns an error when a snapshot manifest is unreadable', async () => {
     await open(makeGit({ readSnapshotManifest: async () => { throw new Error('bad object') } }))
     const r = await manager.buildReport('before', 'after', 'markdown')

@@ -147,6 +147,12 @@ moved into or out of the subtree visible. Template changes are included only for
 templates used by nodes in that scoped set. The main process validates and
 applies scope so renderer views and exports share the same result set.
 
+`format` is validated as `markdown`, `csv`, or `html`. HTML reports are static,
+self-contained documents: user content is escaped, styling is embedded, a
+restrictive content security policy blocks external resources, and the shared
+review-insight engine supplies the same prioritized findings shown in the app
+without the renderer's four-card display limit.
+
 `dialog:*` are UI utility channels and return a bare value, not a `Result<T>`.
 
 This table is the whitelist for `contextBridge.exposeInMainWorld`. No channel

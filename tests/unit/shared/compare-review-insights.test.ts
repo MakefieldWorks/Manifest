@@ -4,7 +4,7 @@ import {
   filterDiffsByReviewInsight,
   focusMatchesDiff,
   type ReviewInsight,
-} from '../../../src/renderer/src/lib/compare-review-insights'
+} from '../../../src/shared/compare-review-insights'
 import type { DiffEntry } from '../../../src/shared/types'
 
 function diff(overrides: Partial<DiffEntry> & Pick<DiffEntry, 'changeType'>): DiffEntry {
@@ -208,6 +208,29 @@ describe('buildReviewInsights', () => {
     const ids = insights.map(insight => insight.id)
     expect(ids.every(id => id.length > 0)).toBe(true)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('keeps the UI default concise and allows reports to request every finding', () => {
+    const diffs = Array.from({ length: 5 }, (_, index) => diff({
+      nodeId: `removed-${index}`,
+      changeType: 'removed',
+      classification: 'dependency',
+      severity: 'High',
+      context: {
+        nodeName: `Removed ${index}`,
+        parentName: 'Lab',
+        path: ['Lab'],
+        removalImpact: {
+          descendants: [],
+          incomingReferences: [
+            { nodeId: `dependent-${index}`, nodeName: `Dependent ${index}`, path: ['Lab'], fieldKey: 'target' },
+          ],
+        },
+      },
+    }))
+
+    expect(buildReviewInsights(diffs)).toHaveLength(4)
+    expect(buildReviewInsights(diffs, [], { limit: null }).length).toBeGreaterThan(4)
   })
 
   it('keeps property insight ids unique when property keys slug to the same text', () => {
