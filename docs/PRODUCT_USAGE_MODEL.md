@@ -121,7 +121,13 @@ inside a mutable snapshot or navigating a tree of versions.
 ### Compare
 
 Compare is read-only. It lets the user inspect differences between two saved
-snapshots or, later, between a snapshot and the current project.
+snapshots or between a snapshot and the current project.
+
+The user can compare the whole project or explicitly limit the review to the
+currently selected subtree. A scoped comparison includes the selected node and
+everything beneath it on either side, so moves across the scope boundary remain
+visible. Reports state the selected scope and exclude unrelated node and schema
+changes.
 
 While comparing, editing controls should be unavailable or clearly disabled.
 

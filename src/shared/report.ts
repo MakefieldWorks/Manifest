@@ -7,7 +7,7 @@
 // rendering is owned here (not by diff-format's UI formatValue) because a report
 // must keep null / absent / empty-string distinct.
 
-import type { DiffEntry, TemplateDiffEntry } from './types'
+import type { ComparisonScope, DiffEntry, TemplateDiffEntry } from './types'
 import { formatPath, describeTemplateChange } from './diff-format'
 import { serializeCsv } from './csv'
 
@@ -25,6 +25,7 @@ export interface ReportContext {
   from: ReportSnapshotMeta
   to: ReportSnapshotMeta
   generatedAt: string
+  scope?: ComparisonScope | null
   // Full old-side path ("A / B / Name") for a node id, or null if it didn't
   // exist in the old snapshot. Used to show moved nodes as old → new path.
   oldPathById: (nodeId: string) => string | null
@@ -157,6 +158,7 @@ export function formatDiffReportMarkdown(
   if (ctx.from.note) lines.push(`**From description:** ${md(ctx.from.note)}  `)
   lines.push(`**To:** ${md(ctx.to.name)} (${md(ctx.to.date)} · ${md(ctx.to.hash)})  `)
   if (ctx.to.note) lines.push(`**To description:** ${md(ctx.to.note)}  `)
+  if (ctx.scope) lines.push(`**Scope:** ${md(ctx.scope.path)}  `)
   lines.push(`**Generated:** ${md(ctx.generatedAt)}`)
   lines.push('')
 
@@ -259,7 +261,7 @@ export function formatDiffReportMarkdown(
 
 const CSV_HEADER = [
   'path', 'node', 'change', 'severity', 'property', 'old', 'new',
-  'removed_descendants', 'broken_references', 'from_description', 'to_description',
+  'removed_descendants', 'broken_references', 'from_description', 'to_description', 'scope',
 ]
 
 // CSV carries node changes only (schema detail lives in the Markdown report). But
@@ -271,7 +273,7 @@ export function formatDiffReportCsv(
   ctx: ReportContext,
 ): string {
   const rows: string[][] = [CSV_HEADER]
-  const context = [csvContext(ctx.from.note), csvContext(ctx.to.note)]
+  const context = [csvContext(ctx.from.note), csvContext(ctx.to.note), csvContext(ctx.scope?.path ?? null)]
 
   if (templateDiffs.length > 0) {
     const n = templateDiffs.length

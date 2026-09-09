@@ -135,6 +135,36 @@ describe('buildMergedTree', () => {
     const result = buildMergedTree(from, to, [], 'v1', 'v2')
     expect(result.fromSnapshot).toBe('v1')
     expect(result.toSnapshot).toBe('v2')
+    expect(result.scope).toBeNull()
+  })
+
+  it('carries resolved comparison scope metadata', () => {
+    const nodes = [n('root', null, 0), n('rack', 'root', 0)]
+    const from = makeProject(nodes)
+    const to = makeProject(nodes)
+    const scope = { nodeId: 'rack', name: 'rack', path: 'root / rack' }
+    const result = buildMergedTree(from, to, [], 'v1', 'v2', { scope })
+    expect(result.scope).toEqual(scope)
+  })
+
+  it('keeps the full tree for context while summarizing only scoped diffs', () => {
+    const fromNodes = [
+      n('root', null, 0),
+      n('rack', 'root', 0),
+      n('inside', 'rack', 0),
+      n('outside', 'root', 1),
+    ]
+    const toNodes = [n('root', null, 0), n('rack', 'root', 0)]
+    const from = makeProject(fromNodes)
+    const to = makeProject(toNodes)
+    const scopedDiffs = diffProjects(from, to).filter(diff => diff.nodeId === 'inside')
+    const result = buildMergedTree(from, to, scopedDiffs, 'v1', 'v2', {
+      scope: { nodeId: 'rack', name: 'rack', path: 'root / rack' },
+    })
+
+    expect(findGhost(result, 'outside')).toBeDefined()
+    expect(findGhost(result, 'outside')?.diffs).toEqual([])
+    expect(result.summary.removed).toBe(1)
   })
 
   // ── Pure add ────────────────────────────────────────────────────────────────

@@ -419,7 +419,12 @@
   // never touches the filesystem); a canceled save dialog is a silent no-op.
   async function handleExportReport(format: 'markdown' | 'csv') {
     if (!mergedTree) return
-    const res = await window.api.report.export(mergedTree.fromSnapshot, mergedTree.toSnapshot, format)
+    const res = await window.api.report.export(
+      mergedTree.fromSnapshot,
+      mergedTree.toSnapshot,
+      format,
+      mergedTree.scope?.nodeId ?? null,
+    )
     if (!res.ok) { showToast(`Export failed: ${res.error.message}`); return }
     if (res.data.savedPath) showToast(`Report saved to ${res.data.savedPath}`)
   }
@@ -428,7 +433,12 @@
   // a filesystem touch, so it stays in the renderer.
   async function handleCopyReport() {
     if (!mergedTree) return
-    const res = await window.api.report.build(mergedTree.fromSnapshot, mergedTree.toSnapshot, 'markdown')
+    const res = await window.api.report.build(
+      mergedTree.fromSnapshot,
+      mergedTree.toSnapshot,
+      'markdown',
+      mergedTree.scope?.nodeId ?? null,
+    )
     if (!res.ok) { showToast(`Copy failed: ${res.error.message}`); return }
     try {
       await navigator.clipboard.writeText(res.data.content)
@@ -1495,10 +1505,10 @@
     }
   }
 
-  async function handleSnapshotCompare(from: string, to: string) {
+  async function handleSnapshotCompare(from: string, to: string, scopeNodeId: string | null) {
     snapshotComparing = true
     snapshotError = null
-    const result = await window.api.snapshot.loadCompare(from, to)
+    const result = await window.api.snapshot.loadCompare(from, to, scopeNodeId)
     snapshotComparing = false
 
     if (result.ok) {
@@ -1517,6 +1527,17 @@
       selectedIds = selectedId ? new Set([selectedId]) : new Set()
       selectionRecency = selectedId ? [selectedId] : []
       selectionAnchorId = selectedId
+      if (result.data.scope) {
+        const scopedSelectionId = result.data.nodes.some(node => node.id === result.data.scope!.nodeId)
+          ? result.data.scope.nodeId
+          : `ghost:${result.data.scope.nodeId}`
+        selectedId = scopedSelectionId
+        selectedIds = new Set([scopedSelectionId])
+        selectionRecency = [scopedSelectionId]
+        selectionAnchorId = scopedSelectionId
+        const scopeAncestors = getAncestorIds(scopedSelectionId, result.data.nodes)
+        compareExpanded = new Set([...compareExpanded, ...scopeAncestors, scopedSelectionId])
+      }
       clearSearch()  // search is a browse-mode aid; don't carry it into compare
 
       // Restore a stashed ghost selection if this snapshot pair still
@@ -2355,6 +2376,9 @@
             recoveringId={recoveryApplyingId}
             error={snapshotError}
             highlightedNodeId={selectedId}
+            scopeCandidate={selectedNode && selectedNode.parentId !== null
+              ? { id: selectedNode.id, name: selectedNode.name }
+              : null}
             onDiffNodeSelect={handleDiffNodeSelect}
             onClose={closeSnapshots}
             onRefresh={refreshSnapshots}

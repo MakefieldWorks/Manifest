@@ -18,8 +18,8 @@ const ctx: ReportContext = {
   templateLabelNew: (v) => (v ? `tplNew(${String(v)})` : '(none)'),
 }
 
-const CSV_HEADER = ['path', 'node', 'change', 'severity', 'property', 'old', 'new', 'removed_descendants', 'broken_references', 'from_description', 'to_description']
-const CSV_CONTEXT = ['Known-good baseline', 'Validated upgrade']
+const CSV_HEADER = ['path', 'node', 'change', 'severity', 'property', 'old', 'new', 'removed_descendants', 'broken_references', 'from_description', 'to_description', 'scope']
+const CSV_CONTEXT = ['Known-good baseline', 'Validated upgrade', '']
 
 function entry(over: Partial<DiffEntry> & Pick<DiffEntry, 'changeType'>): DiffEntry {
   return {
@@ -77,6 +77,14 @@ describe('formatDiffReportMarkdown', () => {
     expect(md).toContain('**To:** after (2026-01-02 · bbbbbbb)')
     expect(md).toContain('**To description:** Validated upgrade')
     expect(md).toContain('**Generated:** 2026-06-18T00:00:00.000Z')
+  })
+
+  it('renders an explicit subtree scope in Markdown', () => {
+    const scoped = {
+      ...ctx,
+      scope: { nodeId: 'rack-a', name: 'Rack A', path: 'Lab / Room 1 / Rack A' },
+    }
+    expect(formatDiffReportMarkdown([], [], scoped)).toContain('**Scope:** Lab / Room 1 / Rack A')
   })
 
   it('says "no changes" only when both node and schema diffs are empty', () => {
@@ -319,6 +327,28 @@ describe('formatDiffReportCsv', () => {
       entry({ changeType: 'added', severity: 'High' }),
     ], [], multiline))
     expect(rows[1][9]).toBe('Run 42 Passed with evidence')
+  })
+
+  it('adds the subtree path to each scoped CSV row', () => {
+    const scoped = {
+      ...ctx,
+      scope: { nodeId: 'rack-a', name: 'Rack A', path: 'Lab / Rack A' },
+    }
+    const rows = parseCsv(formatDiffReportCsv([
+      entry({ changeType: 'added', severity: 'High' }),
+    ], [], scoped))
+    expect(rows[1][11]).toBe('Lab / Rack A')
+  })
+
+  it('normalizes line breaks in the CSV scope path', () => {
+    const scoped = {
+      ...ctx,
+      scope: { nodeId: 'rack-a', name: 'Rack A', path: 'Lab / Room 1\n/ Rack A' },
+    }
+    const rows = parseCsv(formatDiffReportCsv([
+      entry({ changeType: 'added', severity: 'High' }),
+    ], [], scoped))
+    expect(rows[1][11]).toBe('Lab / Room 1 / Rack A')
   })
 
   it('neutralizes a formula-injection node name', () => {

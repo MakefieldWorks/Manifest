@@ -132,6 +132,50 @@ describe('snapshot workflow', () => {
     ])
   })
 
+  it('limits compare and reports to a selected subtree', async () => {
+    const rootId = manager.getCurrent()!.nodes.find(node => node.parentId === null)!.id
+    manager.nodeCreate(rootId, 'Rack A')
+    manager.nodeCreate(rootId, 'Rack B')
+    const rackA = manager.getCurrent()!.nodes.find(node => node.name === 'Rack A')!
+    const rackB = manager.getCurrent()!.nodes.find(node => node.name === 'Rack B')!
+    manager.nodeCreate(rackA.id, 'Server A')
+    manager.nodeCreate(rackB.id, 'Server B')
+    const serverA = manager.getCurrent()!.nodes.find(node => node.name === 'Server A')!
+    const serverB = manager.getCurrent()!.nodes.find(node => node.name === 'Server B')!
+    await manager.snapshotCreate('scope-before')
+
+    manager.nodeUpdate(serverA.id, { properties: { firmware: '2.0.0' } })
+    manager.nodeUpdate(serverB.id, { properties: { firmware: '9.0.0' } })
+    await manager.snapshotCreate('scope-after')
+
+    const compared = await manager.snapshotLoadCompare('scope-before', 'scope-after', rackA.id)
+    expect(compared.ok).toBe(true)
+    if (!compared.ok) return
+    expect(compared.data.scope).toEqual({
+      nodeId: rackA.id,
+      name: 'Rack A',
+      path: 'Snapshot Project / Rack A',
+    })
+    expect(compared.data.nodes.flatMap(node => node.diffs).map(diff => diff.nodeId))
+      .toEqual([serverA.id])
+
+    const report = await manager.buildReport('scope-before', 'scope-after', 'markdown', rackA.id)
+    expect(report.ok).toBe(true)
+    if (!report.ok) return
+    expect(report.data.content).toContain('**Scope:** Snapshot Project / Rack A')
+    expect(report.data.content).toContain('Server A')
+    expect(report.data.content).not.toContain('Server B')
+    expect(report.data.suggestedName).toContain(`-Rack_A-${rackA.id}.md`)
+
+    const invalid = await manager.snapshotLoadCompare('scope-before', 'scope-after', 'missing-node')
+    expect(invalid.ok).toBe(false)
+    if (!invalid.ok) expect(invalid.error.code).toBe('VALIDATION_FAILED')
+
+    const malformed = await manager.snapshotCompare('scope-before', 'scope-after', { nodeId: rackA.id })
+    expect(malformed.ok).toBe(false)
+    if (!malformed.ok) expect(malformed.error.code).toBe('VALIDATION_FAILED')
+  })
+
   it('compares a snapshot to the live current project (unsnapshotted changes)', async () => {
     const rootId = manager.getCurrent()!.nodes.find((node) => node.parentId === null)!.id
     manager.nodeCreate(rootId, 'Rack A')

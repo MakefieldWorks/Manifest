@@ -246,9 +246,9 @@ export interface ManifestAPI {
   snapshot: {
     create(name: string, description?: string | null): Promise<Result<Snapshot>>
     list(): Promise<Result<Snapshot[]>>
-    compare(a: string, b: string): Promise<Result<DiffEntry[]>>
+    compare(a: string, b: string, scopeNodeId?: string | null): Promise<Result<DiffEntry[]>>
     /** Full compare: returns merged tree with per-node diffs embedded. */
-    loadCompare(a: string, b: string): Promise<Result<MergedTree>>
+    loadCompare(a: string, b: string, scopeNodeId?: string | null): Promise<Result<MergedTree>>
     revert(request: SnapshotRevertRequest): Promise<Result<SnapshotRevertResult>>
     timeline(): Promise<Result<SnapshotTimeline>>
     applyRecovery(request: RecoveryPointApplyRequest): Promise<Result<RecoveryPointApplyResult>>
@@ -258,9 +258,9 @@ export interface ManifestAPI {
   }
   report: {
     /** Build a diff report between two refs (snapshot name or the `@current` sentinel) and write it via a save dialog. savedPath is null if canceled. */
-    export(from: string, to: string, format: ReportFormat): Promise<Result<{ savedPath: string | null }>>
+    export(from: string, to: string, format: ReportFormat, scopeNodeId?: string | null): Promise<Result<{ savedPath: string | null }>>
     /** Build a diff report between two refs (snapshot name or `@current`) and return its content (for clipboard copy). */
-    build(from: string, to: string, format: ReportFormat): Promise<Result<{ content: string; suggestedName: string }>>
+    build(from: string, to: string, format: ReportFormat, scopeNodeId?: string | null): Promise<Result<{ content: string; suggestedName: string }>>
   }
   dialog: {
     openFolder(title: string, purpose?: FolderDialogPurpose): Promise<string | null>

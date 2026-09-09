@@ -123,14 +123,14 @@ this table mirrors it.
 | `search:query` | `{ query }` | `Result<SearchResult[]>` |
 | `snapshot:create` | `{ name, description? }` | `Result<Snapshot>` |
 | `snapshot:list` | `{}` | `Result<Snapshot[]>` |
-| `snapshot:compare` | `{ a, b }` | `Result<DiffEntry[]>` |
-| `snapshot:loadCompare` | `{ a, b }` | `Result<MergedTree>` |
+| `snapshot:compare` | `{ a, b, scopeNodeId? }` | `Result<DiffEntry[]>` |
+| `snapshot:loadCompare` | `{ a, b, scopeNodeId? }` | `Result<MergedTree>` |
 | `snapshot:revert` | `{ request }` | `Result<SnapshotRevertResult>` |
 | `snapshot:timeline` | `{}` | `Result<SnapshotTimeline>` |
 | `recovery:apply` | `{ request }` | `Result<RecoveryPointApplyResult>` |
 | `git:check` | `{}` | `Result<GitStatus>` |
-| `report:export` | `{ from, to, format }` | `Result<{ savedPath }>` |
-| `report:build` | `{ from, to, format }` | `Result<{ content, suggestedName }>` |
+| `report:export` | `{ from, to, format, scopeNodeId? }` | `Result<{ savedPath }>` |
+| `report:build` | `{ from, to, format, scopeNodeId? }` | `Result<{ content, suggestedName }>` |
 | `dialog:openFolder` | `{ title }` | `string \| null` |
 | `dialog:openFile` | `{ title }` | `string \| null` |
 
@@ -140,6 +140,12 @@ name **or** the `@current` sentinel, which resolves to the live in-memory curren
 project — letting the user diff unsnapshotted work without creating a snapshot
 first. The sentinel is impossible as a real snapshot name (snapshot names allow
 only `[A-Za-z0-9._-]`).
+
+The optional `scopeNodeId` limits comparison and report results to that node and
+the union of its descendants on both sides. Using both sides keeps nodes that
+moved into or out of the subtree visible. Template changes are included only for
+templates used by nodes in that scoped set. The main process validates and
+applies scope so renderer views and exports share the same result set.
 
 `dialog:*` are UI utility channels and return a bare value, not a `Result<T>`.
 

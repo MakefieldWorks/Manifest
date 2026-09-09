@@ -10,7 +10,7 @@
 // parsed snapshots are already available) and the result is serialised across
 // the IPC boundary as a single payload.
 
-import type { ManifestNode, DiffEntry, Project, TemplateDiffEntry, NodeTemplate } from './types'
+import type { ComparisonScope, ManifestNode, DiffEntry, Project, TemplateDiffEntry, NodeTemplate } from './types'
 import { diffTemplates } from './diff-engine'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,6 +52,7 @@ export interface MergedTree {
   nodes: MergedTreeNode[]
   fromSnapshot: string
   toSnapshot: string
+  scope: ComparisonScope | null
   /**
    * Templates from each side of the comparison. A node's typed fields must be
    * resolved against the side it belongs to: live (B) nodes use `toTemplates`,
@@ -106,7 +107,8 @@ export function buildMergedTree(
   to: Project,
   diffs: DiffEntry[],
   fromSnapshot: string,
-  toSnapshot: string
+  toSnapshot: string,
+  options: { scope?: ComparisonScope | null; templateChanges?: TemplateDiffEntry[] } = {},
 ): MergedTree {
   const nodesA = new Map(from.nodes.map(n => [n.id, n]))
   const nodesB = new Map(to.nodes.map(n => [n.id, n]))
@@ -165,15 +167,16 @@ export function buildMergedTree(
     if (nodesB.has(nodeA.id)) continue // still alive — handled in step 1
     const nodeDiffs = diffsByNodeId.get(nodeA.id) ?? []
     merged.push(makeGhost(nodeA, 'removed', nodesB, nodeDiffs))
-    summary.removed++
+    if (nodeDiffs.some(diff => diff.changeType === 'removed')) summary.removed++
   }
 
-  const templateChanges = diffTemplates(from, to)
+  const templateChanges = options.templateChanges ?? diffTemplates(from, to)
 
   return {
     nodes: merged,
     fromSnapshot,
     toSnapshot,
+    scope: options.scope ?? null,
     fromTemplates: from.templates ?? {},
     toTemplates: to.templates ?? {},
     summary,

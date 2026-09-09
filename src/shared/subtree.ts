@@ -19,3 +19,25 @@ export function collectSubtreeIds(nodes: ManifestNode[], rootId: string): Set<st
   }
   return result
 }
+
+/** Build a reusable, cycle-safe resolver for a node's full display path. */
+export function buildNodePathResolver(nodes: ManifestNode[]): (nodeId: string) => string | null {
+  const byId = new Map(nodes.map(node => [node.id, node]))
+  return (nodeId: string) => {
+    const node = byId.get(nodeId)
+    if (!node) return null
+
+    const names = [node.name]
+    const visited = new Set([node.id])
+    let parentId = node.parentId
+    while (parentId !== null) {
+      if (visited.has(parentId)) break
+      visited.add(parentId)
+      const parent = byId.get(parentId)
+      if (!parent) break
+      names.unshift(parent.name)
+      parentId = parent.parentId
+    }
+    return names.join(' / ')
+  }
+}

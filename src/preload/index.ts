@@ -102,10 +102,10 @@ const api: ManifestAPI = {
       ipcRenderer.invoke(IPC.SNAPSHOT_CREATE, { name, description }),
     list: () =>
       ipcRenderer.invoke(IPC.SNAPSHOT_LIST, {}),
-    compare: (a, b) =>
-      ipcRenderer.invoke(IPC.SNAPSHOT_COMPARE, { a, b }),
-    loadCompare: (a, b) =>
-      ipcRenderer.invoke(IPC.SNAPSHOT_LOAD_COMPARE, { a, b }),
+    compare: (a, b, scopeNodeId) =>
+      ipcRenderer.invoke(IPC.SNAPSHOT_COMPARE, { a, b, scopeNodeId }),
+    loadCompare: (a, b, scopeNodeId) =>
+      ipcRenderer.invoke(IPC.SNAPSHOT_LOAD_COMPARE, { a, b, scopeNodeId }),
     revert: (request) =>
       ipcRenderer.invoke(IPC.SNAPSHOT_REVERT, request),
     timeline: () =>
@@ -120,10 +120,10 @@ const api: ManifestAPI = {
   },
 
   report: {
-    export: (from, to, format) =>
-      ipcRenderer.invoke(IPC.REPORT_EXPORT, { from, to, format }),
-    build: (from, to, format) =>
-      ipcRenderer.invoke(IPC.REPORT_BUILD, { from, to, format }),
+    export: (from, to, format, scopeNodeId) =>
+      ipcRenderer.invoke(IPC.REPORT_EXPORT, { from, to, format, scopeNodeId }),
+    build: (from, to, format, scopeNodeId) =>
+      ipcRenderer.invoke(IPC.REPORT_BUILD, { from, to, format, scopeNodeId }),
   },
 
   dialog: {
