@@ -2,6 +2,8 @@
 
 ## Completed
 
+- Portable project archives with current inventory, Git snapshots, history/recovery sidecars, verified export and restore to a separate folder, stale-review protection, and rebuilt indexes. **Implemented:** 2026-09-10
+
 - Review and explicitly register unlisted recovery files, with validation, stale-preview protection, truthful unknown provenance, separate recovery confirmation, and retention outside the automatic ten-point limit. **Implemented:** 2026-09-10
 
 - Validated automatic history metadata backup and explicit in-app restore preview, with original-byte preservation, stale-preview rejection, missing-primary protection, and backup-aware recovery-file pruning. **Implemented:** 2026-09-10

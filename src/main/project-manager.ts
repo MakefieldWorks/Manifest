@@ -20,12 +20,14 @@
 //                      └──▶ return Result<Project>
 //
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, renameSync, statSync, lstatSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, renameSync, statSync, lstatSync, realpathSync, unlinkSync } from 'fs'
+import { join, resolve, relative, isAbsolute, dirname, basename, sep } from 'path'
 import { createHash } from 'crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
+import { ProjectArchive } from './project-archive'
+import type { ProjectArchivePreview } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
 import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
 import {
@@ -165,6 +167,8 @@ export class ProjectManager {
   private currentProject: Project | null = null
   private readonly edits = new EditHistory()
   private historyOperationInProgress = false
+  private archiveBusy = false
+  private archivePreview: { path: string; token: string } | null = null
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null
   private backfillStatus: HistoryBackfillStatus = {
     inProgress: false, completed: 0, total: 0,
@@ -188,6 +192,7 @@ export class ProjectManager {
   // Create a new project at parentPath/name.
   // Auto-creates the root node and initialises git.
   async createProject(name: string, parentPath: string): Promise<Result<Project>> {
+    if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     const projectPath = join(parentPath, name)
     try {
       mkdirSync(projectPath, { recursive: true })
@@ -238,6 +243,7 @@ export class ProjectManager {
   // Reads the dedicated project document (or a legacy manifest.json), validates,
   // migrates, and rebuilds search index.
   async openProject(projectPath: string): Promise<Result<Project>> {
+    if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     const document = findProjectDocument(projectPath)
     if (!document) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No Manifest project document was found')
@@ -348,6 +354,7 @@ export class ProjectManager {
   // save succeeds. Callers that intentionally discard after a failed save must
   // use discardCurrentProject() so final-save failures are never silent.
   async flushAndClose(): Promise<Result<void>> {
+    if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     this.cancelAutosave()
     const result = await this.saveProject()
     if (!result.ok) return result
@@ -1559,6 +1566,59 @@ export class ProjectManager {
 
   // ─── Snapshots / history ───────────────────────────────────────────────────
 
+  private archiveService(): ProjectArchive {
+    return new ProjectArchive(this.git, raw => {
+      const result = this.parseManifestJson(raw)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.data
+    })
+  }
+
+  async exportProjectArchive(destination: string): Promise<Result<{ path: string }>> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    if (this.archiveBusy || this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current history or archive operation to finish.')
+    try {
+      const target = relative(realpathSync(this.currentProject.path), join(realpathSync(dirname(resolve(destination))), basename(destination)))
+      if (target.split(sep)[0] !== '..' && !isAbsolute(target)) return err(ErrorCode.VALIDATION_FAILED, 'Save the archive outside the project folder.')
+    } catch (error) { return err(ErrorCode.ARCHIVE_FAILED, `Archive destination is unavailable: ${String(error)}`) }
+    this.archiveBusy = true
+    this.historyOperationInProgress = true
+    try {
+      this.readSnapshotHistory()
+      await this.archiveService().export(this.currentProject.path, this.serializeProjectForPersistence(this.currentProject), destination)
+      return ok({ path: destination })
+    } catch (error) {
+      return err(ErrorCode.ARCHIVE_FAILED, `Could not export project archive: ${error instanceof Error ? error.message : String(error)}`)
+    } finally { this.archiveBusy = false; this.historyOperationInProgress = false }
+  }
+
+  async inspectProjectArchive(path: string): Promise<Result<ProjectArchivePreview>> {
+    if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
+    this.archiveBusy = true
+    this.archivePreview = null
+    try {
+      const preview = await this.archiveService().inspect(path)
+      this.archivePreview = { path, token: preview.token }
+      return ok(preview)
+    } catch (error) {
+      return err(ErrorCode.ARCHIVE_FAILED, `Could not verify project archive: ${error instanceof Error ? error.message : String(error)}`)
+    } finally { this.archiveBusy = false }
+  }
+
+  async restoreProjectArchive(token: unknown, parent: string): Promise<Result<{ path: string }>> {
+    if (this.archiveBusy || this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current history or archive operation to finish.')
+    const preview = this.archivePreview
+    if (!preview || typeof token !== 'string' || preview.token !== token) return err(ErrorCode.VALIDATION_FAILED, 'Review the archive before restoring.')
+    this.archiveBusy = true
+    try {
+      const path = await this.archiveService().restore(preview.path, token, parent)
+      this.archivePreview = null
+      return ok({ path })
+    } catch (error) {
+      return err(ErrorCode.ARCHIVE_FAILED, `Could not restore project archive: ${error instanceof Error ? error.message : String(error)}`)
+    } finally { this.archiveBusy = false }
+  }
+
   private scanRecoveryFiles(): RecoveryFilePreview {
     const project = this.currentProject!
     const directory = join(project.path!, '.manifest', 'recovery')
@@ -2053,7 +2113,7 @@ export class ProjectManager {
         if (!recoveryPointId) continue
         const point = persistedHistory.recoveryPoints.find(p => p.id === recoveryPointId)
         if (!point) continue
-        const recoveryFile = join(projectPath, point.manifestPath)
+        const recoveryFile = join(projectPath, ...point.manifestPath.split(/[\\/]/))
         let recoveredProject: Project | null = null
         try {
           if (existsSync(recoveryFile)) {
@@ -2376,7 +2436,7 @@ export class ProjectManager {
         return err(ErrorCode.VALIDATION_FAILED, `Recovery point not found: ${request.id}`)
       }
 
-      const manifestPath = join(this.currentProject.path, recoveryPoint.manifestPath)
+      const manifestPath = join(this.currentProject.path, ...recoveryPoint.manifestPath.split(/[\\/]/))
       if (!existsSync(manifestPath)) {
         return err(ErrorCode.SNAPSHOT_READ_FAILED, `Recovery manifest not found: ${recoveryPoint.manifestPath}`)
       }
@@ -2857,7 +2917,7 @@ export class ProjectManager {
     const retained = new Set(history.recoveryPoints.map(point => point.manifestPath))
     for (const point of previous.recoveryPoints) {
       if (retained.has(point.manifestPath)) continue
-      try { unlinkSync(join(projectPath, point.manifestPath)) } catch (error) {
+      try { unlinkSync(join(projectPath, ...point.manifestPath.split(/[\\/]/))) } catch (error) {
         this.logger.warn('recovery point file delete failed', { id: point.id, error: String(error) })
       }
     }

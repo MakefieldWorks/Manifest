@@ -9,6 +9,11 @@ import { isMenuCommandId } from '../shared/menu-commands'
 import { desktopChromeForPlatform } from '../shared/desktop-chrome'
 
 const api: ManifestAPI = {
+  archive: {
+    export: () => ipcRenderer.invoke(IPC.ARCHIVE_EXPORT),
+    inspect: () => ipcRenderer.invoke(IPC.ARCHIVE_INSPECT),
+    restore: request => ipcRenderer.invoke(IPC.ARCHIVE_RESTORE, request),
+  },
   platform: desktopChromeForPlatform(process.platform),
 
   project: {

@@ -26,6 +26,7 @@ import type {
   HistoryBackupStatus,
   HistoryBackupRestoreResult,
   RecoveryFilePreview,
+  ProjectArchivePreview,
   RecoveryPoint,
   ImportMapping,
   ImportInspect,
@@ -47,6 +48,9 @@ import type { InventoryExportRequest, InventoryTablePage, InventoryTableRequest 
 
 // Channel name constants — use these everywhere, never raw strings.
 export const IPC = {
+  ARCHIVE_EXPORT: 'archive:export',
+  ARCHIVE_INSPECT: 'archive:inspect',
+  ARCHIVE_RESTORE: 'archive:restore',
   PROJECT_CREATE:      'project:create',
   PROJECT_OPEN:        'project:open',
   PROJECT_OPEN_EXAMPLE: 'project:openExample',
@@ -163,6 +167,11 @@ export type FolderDialogPurpose = 'open-project' | 'create-project'
 // after each mutation. The renderer replaces its local store entirely, which
 // eliminates any possibility of partial-sync bugs.
 export interface ManifestAPI {
+  archive: {
+    export(): Promise<Result<{ path: string } | null>>
+    inspect(): Promise<Result<ProjectArchivePreview | null>>
+    restore(request: { token: string }): Promise<Result<{ path: string } | null>>
+  }
   platform: DesktopChromeInfo
   project: {
     create(name: string, parentPath: string): Promise<Result<Project>>

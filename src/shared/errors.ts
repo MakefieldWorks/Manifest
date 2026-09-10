@@ -4,6 +4,7 @@
 import type { Result, AppError } from './types'
 
 export const ErrorCode = {
+  ARCHIVE_FAILED: 'ARCHIVE_FAILED',
   GIT_CORRUPT:           'GIT_CORRUPT',
   GIT_COMMIT_FAILED:     'GIT_COMMIT_FAILED',
   SNAPSHOT_READ_FAILED:  'SNAPSHOT_READ_FAILED',

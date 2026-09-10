@@ -375,6 +375,15 @@ export interface RecoveryFilePreview {
   files: Array<{ name: string; eligible: boolean; explanation: string; projectName?: string; nodeCount?: number }>
 }
 
+export interface ProjectArchivePreview {
+  token: string
+  projectName: string
+  createdAt: string
+  snapshotCount: number
+  recoveryFileCount: number
+  fileCount: number
+}
+
 // Per-node history entry. One entry per transition (creation, change,
 // deletion, revert that changed this node, recover that changed this node).
 // Snapshots where the node did NOT change emit no entry — delta-encoded.

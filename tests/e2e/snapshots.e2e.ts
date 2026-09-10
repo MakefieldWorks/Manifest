@@ -171,6 +171,40 @@ test('creates, compares, and reverts snapshots from the renderer surface', async
   await expect(appPage.getByTestId('snapshot-timeline-event').filter({ hasText: 'Recovered current project from a recovery point' })).toBeVisible()
 })
 
+test('exports and reviews a portable archive before restoring a separate project folder', async ({ appPage, electronApp, workspaceDir }) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Portable Lab')
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'baseline', 'Archive context')
+  await addChildNode(appPage, 'Portable Lab', 'Current rack')
+  const archive = join(workspaceDir, 'Portable.manifestarchive')
+  await electronApp.evaluate(({ dialog }, path) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
+  }, archive)
+  await appPage.getByTestId('open-archives-btn').click()
+  const modal = appPage.getByTestId('project-archive-dialog')
+  await modal.getByTestId('archive-export').click()
+  await expect(modal.getByRole('status')).toContainText('Verified archive saved')
+  await setDialogPath(electronApp, archive)
+  await modal.getByTestId('archive-review').click()
+  await expect(modal.getByTestId('archive-preview')).toContainText('Portable Lab')
+  await modal.screenshot({ path: test.info().outputPath('project-archive-preview.png') })
+  await modal.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(readdirSync(workspaceDir).filter(name => name.startsWith('Manifest-restored-'))).toEqual([])
+  await modal.getByTestId('archive-review').click()
+  await expect(modal.getByTestId('archive-preview')).toBeVisible()
+  await setDialogPath(electronApp, workspaceDir)
+  await modal.getByTestId('archive-restore').click()
+  await expect(modal.getByRole('status')).toContainText('Verified project restored')
+  const restored = readdirSync(workspaceDir).filter(name => name.startsWith('Manifest-restored-'))
+  expect(restored).toHaveLength(1)
+  const document = JSON.parse(readFileSync(join(workspaceDir, restored[0], 'Manifest.manifestproject'), 'utf8'))
+  expect(document.nodes.some((node: { name: string }) => node.name === 'Current rack')).toBe(true)
+  const current = await appPage.evaluate(() => window.api.project.getCurrent())
+  expect(current.ok && current.data?.path).not.toBe(join(workspaceDir, restored[0]))
+  await modal.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(treeRow(appPage, 'Current rack')).toBeVisible()
+})
+
 test('top-bar snapshots button toggles panel open and closed', async ({ appPage, electronApp, workspaceDir }) => {
   const projectName = 'Snapshots Toggle Lab'
 

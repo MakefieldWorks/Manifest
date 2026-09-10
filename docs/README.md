@@ -28,6 +28,7 @@ Manifest is a local-first desktop app for managing structured, hierarchical proj
 | [SCOPED_COMPARISON.md](SCOPED_COMPARISON.md) | Selected-subtree comparison and scope-aware reporting |
 | [REVIEW_REPORT.md](REVIEW_REPORT.md) | Self-contained HTML change reviews and their trust boundary |
 | [HISTORY_PRESERVATION.md](HISTORY_PRESERVATION.md) | History preservation, automatic metadata backup, and explicit restore |
+| [PROJECT_ARCHIVES.md](PROJECT_ARCHIVES.md) | Portable archives, verified restore, included history, and format limits |
 
 ---
 
