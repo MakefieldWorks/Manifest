@@ -48,3 +48,8 @@ and an explicit in-app repair flow, followed by reconciliation of orphaned
 recovery payloads. Read-only investigation with a clearly marked incomplete
 metadata state should be designed alongside repair; silently dropping context
 from exports is not an acceptable fallback.
+
+Repair diagnostics should identify the offending record and field rather than
+only the record category. When the first nested schema migration is added,
+deep-clone its input and test that nested caller-owned records remain unchanged;
+the current migration has no nested mutating steps.
