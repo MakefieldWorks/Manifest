@@ -23,6 +23,8 @@ import type {
   SnapshotRevertRequest,
   SnapshotRevertResult,
   SnapshotTimeline,
+  HistoryBackupStatus,
+  HistoryBackupRestoreResult,
   ImportMapping,
   ImportInspect,
   ImportPlan,
@@ -81,6 +83,8 @@ export const IPC = {
   SNAPSHOT_LOAD_COMPARE: 'snapshot:loadCompare',
   SNAPSHOT_REVERT:       'snapshot:revert',
   SNAPSHOT_TIMELINE:     'snapshot:timeline',
+  HISTORY_BACKUP_STATUS: 'history:backupStatus',
+  HISTORY_BACKUP_RESTORE: 'history:restoreBackup',
   RECOVERY_APPLY:        'recovery:apply',
   GIT_CHECK:           'git:check',
   REPORT_EXPORT:       'report:export',
@@ -244,6 +248,8 @@ export interface ManifestAPI {
     exportCsv(request: InventoryExportRequest): Promise<Result<{ savedPath: string | null; rowCount: number }>>
   }
   snapshot: {
+    historyBackupStatus(): Promise<Result<HistoryBackupStatus>>
+    restoreHistoryBackup(request: { token: string }): Promise<Result<HistoryBackupRestoreResult>>
     create(name: string, description?: string | null): Promise<Result<Snapshot>>
     list(): Promise<Result<Snapshot[]>>
     compare(a: string, b: string, scopeNodeId?: string | null): Promise<Result<DiffEntry[]>>

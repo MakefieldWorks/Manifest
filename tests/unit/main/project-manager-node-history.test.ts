@@ -338,6 +338,7 @@ describe('nodeHistory IPC', () => {
     const projectPath = manager.getCurrent()!.path!
     await manager.flushAndClose()
     rmSync(join(projectPath, '.manifest', 'history.json'), { force: true })
+    rmSync(join(projectPath, '.manifest', 'history.backup.json'), { force: true })
 
     // Reopen with a fresh manager. nodeHistory must still produce entries
     // for the now-eventless snapshots.

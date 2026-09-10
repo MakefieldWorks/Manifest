@@ -361,6 +361,14 @@ export interface SnapshotTimeline {
   recoveryPoints: RecoveryPoint[]
 }
 
+export type HistoryBackupStatus =
+  | { available: false; reason: string }
+  | { available: true; token: string; savedAt: string; snapshotCount: number; eventCount: number; recoveryPointCount: number; missingSnapshots: string[]; unlistedRecoveryFiles: string[]; originalMissing: boolean }
+
+export interface HistoryBackupRestoreResult {
+  preservedPath: string | null
+}
+
 // Per-node history entry. One entry per transition (creation, change,
 // deletion, revert that changed this node, recover that changed this node).
 // Snapshots where the node did NOT change emit no entry — delta-encoded.

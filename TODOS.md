@@ -2,6 +2,7 @@
 
 ## Completed
 
+- Validated automatic history metadata backup and explicit in-app restore preview, with original-byte preservation, stale-preview rejection, missing-primary protection, and backup-aware recovery-file pruning. **Implemented:** 2026-09-10
 - Preserve unreadable history metadata and block snapshot/revert/recovery mutations before side effects; show restoration guidance and resume after a valid file is restored. **Implemented:** 2026-09-09
 - Self-contained HTML comparison reviews with complete prioritized findings, severity/classification context, scoped changes, snapshot descriptions, escaped user content, and offline browser/print support. **Implemented:** 2026-09-09
 - Scoped comparison for a selected room, rack, device, or other subtree, with backend-enforced node and relevant schema filtering plus scope-aware Markdown/CSV reports. **Implemented:** 2026-09-09

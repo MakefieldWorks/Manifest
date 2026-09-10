@@ -98,6 +98,8 @@ const api: ManifestAPI = {
   },
 
   snapshot: {
+    historyBackupStatus: () => ipcRenderer.invoke(IPC.HISTORY_BACKUP_STATUS),
+    restoreHistoryBackup: (request) => ipcRenderer.invoke(IPC.HISTORY_BACKUP_RESTORE, request),
     create: (name, description) =>
       ipcRenderer.invoke(IPC.SNAPSHOT_CREATE, { name, description }),
     list: () =>

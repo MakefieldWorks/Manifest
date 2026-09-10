@@ -577,6 +577,9 @@ function registerIpcHandlers(): void {
     projectManager.snapshotTimeline()
   )
 
+  ipcMain.handle(IPC.HISTORY_BACKUP_STATUS, () => projectManager.historyBackupStatus())
+  ipcMain.handle(IPC.HISTORY_BACKUP_RESTORE, (_, request: unknown) => projectManager.restoreHistoryBackup(request))
+
   ipcMain.handle(IPC.RECOVERY_APPLY, (_, request: { id: string }) =>
     projectManager.recoveryPointApply(request)
   )
