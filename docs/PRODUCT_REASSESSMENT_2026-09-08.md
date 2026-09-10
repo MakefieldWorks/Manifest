@@ -12,8 +12,9 @@ effects. Automatic metadata backup and explicit restore now give damaged or
 missing history a recovery path. Users can now review and register unlisted
 recovery payloads without inventing lost provenance or replacing inventory.
 Portable archive export and verified restore to a new folder now preserve that
-inventory and history together. Interrupted multi-file writes and external edit
-conflict handling remain open.
+inventory and history together. External project-file changes now pause saves
+and preserve both versions through explicit resolution. Interrupted multi-file
+writes remain the next recovery boundary to address.
 
 ## Recommendation
 
