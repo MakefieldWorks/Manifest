@@ -23,7 +23,11 @@ export function writeHistoryFile(path: string, data: string | Buffer): void {
 }
 
 export interface HistoryBackupCandidate {
+  // Initially the metadata-file fingerprint. ProjectManager replaces this
+  // with the preview fingerprint, which also covers Git and recovery files.
   token: string
+  // Always the metadata-file fingerprint, rechecked by restore immediately
+  // before replacing the primary file. Never compare it to the preview token.
   sourceToken: string
   savedAt: string
   history: SnapshotHistoryState
@@ -64,7 +68,13 @@ export class HistoryBackupStore {
     }
     if (readable) throw new Error('History metadata is readable. Backup restoration is only available for damaged metadata.')
 
-    const bytes = readFileSync(this.backupPath)
+    let bytes: Buffer
+    try { bytes = readFileSync(this.backupPath) } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error('No automatic history backup has been saved for this project. Restore history.json from a known-good external backup if available.')
+      }
+      throw error
+    }
     const backup = JSON.parse(bytes.toString('utf8'))
     if (!backup || backup.version !== 1) throw new Error('The automatic backup format is invalid or unsupported.')
     if (backup.projectId !== this.projectId) throw new Error('The history backup belongs to another project.')

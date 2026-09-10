@@ -151,6 +151,7 @@ const AUTOSAVE_DEBOUNCE_MS = 2500              // 2.5 seconds
 const MAX_RECOVERY_POINTS = 10                 // cap stored auto-saved recovery points
 
 class HistoryMetadataReadError extends Error {}
+class HistoryBackupProjectChangedError extends Error {}
 
 
 export interface HistoryBackfillStatus {
@@ -1564,7 +1565,7 @@ export class ProjectManager {
     const candidate = new HistoryBackupStore(project.path, project.id).candidate()
     const snapshots = await this.git.listSnapshots(project.path)
     if (this.currentProject?.path !== project.path || this.currentProject.id !== project.id) {
-      throw new Error('The project changed. Review the backup again.')
+      throw new HistoryBackupProjectChangedError('The project changed while checking the backup. Try reviewing the backup again.')
     }
     const names = new Set(snapshots.map(snapshot => snapshot.id))
     const refs = [
@@ -1626,6 +1627,9 @@ export class ProjectManager {
         originalMissing: candidate.damaged === null,
       })
     } catch (error) {
+      if (error instanceof HistoryBackupProjectChangedError) {
+        return err(ErrorCode.VALIDATION_FAILED, error.message)
+      }
       return ok({ available: false, reason: `No restorable automatic backup: ${error instanceof Error ? error.message : String(error)}` })
     }
   }

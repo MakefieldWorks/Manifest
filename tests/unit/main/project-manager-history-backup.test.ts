@@ -71,6 +71,7 @@ describe('automatic history backup and explicit restore', () => {
     expect(await git.listSnapshots(projectPath)).toEqual(tags)
     const restored = JSON.parse(readFileSync(historyPath, 'utf8'))
     expect(restored).toEqual({ ...history, currentBaseSnapshotId: null, pendingRevertEventId: null })
+    expect(JSON.parse(readFileSync(backupPath, 'utf8')).history).toEqual(history)
     expect((await manager.snapshotTimeline()).ok).toBe(true)
     expect((await manager.recoveryPointApply({ id: point.id })).ok).toBe(true)
   })
@@ -199,6 +200,30 @@ describe('automatic history backup and explicit restore', () => {
     expect((await manager.restoreHistoryBackup({ token: status.token })).ok).toBe(false)
     expect(readFileSync(historyPath, 'utf8')).toBe(damaged)
     expect(readFileSync(backupPath)).toEqual(backup)
+  })
+
+  it('offers a retry when the project changes during backup preview', async () => {
+    await manager.snapshotCreate('baseline')
+    writeFileSync(historyPath, '{damaged')
+    const snapshots = await git.listSnapshots(projectPath)
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    vi.spyOn(git, 'listSnapshots').mockImplementation(async () => { await gate; return snapshots })
+    const pending = manager.historyBackupStatus()
+    await manager.flushAndClose()
+    release()
+    expect(await pending).toMatchObject({ ok: false, error: {
+      code: 'VALIDATION_FAILED', message: expect.stringContaining('Try reviewing the backup again'),
+    } })
+  })
+
+  it('explains when no automatic backup has been saved', async () => {
+    await manager.snapshotCreate('baseline')
+    writeFileSync(historyPath, '{damaged')
+    rmSync(backupPath)
+    expect(await manager.historyBackupStatus()).toMatchObject({ ok: true, data: {
+      available: false, reason: expect.stringContaining('No automatic history backup has been saved'),
+    } })
   })
 
   it('excludes competing history operations while restore is validating', async () => {

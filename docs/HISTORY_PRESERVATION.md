@@ -31,7 +31,7 @@ is a different condition and is never silently treated as legacy history.
 `.manifest/history.backup.json` holds one validated metadata copy, with its
 project ID and save time. Existing readable metadata is backed up before a
 history operation starts. If that backup cannot be written, the operation is
-blocked before changing the project. After a successful primary metadata write,
+blocked before changing the project. After a successful history-operation metadata write,
 the backup is refreshed to match it. First-time projects receive their first
 backup when their first metadata write succeeds.
 
@@ -62,9 +62,17 @@ from Git timestamps, with second-resolution ties placed after recorded events;
 missing descriptions and exact event ordering cannot be recovered. Unlisted
 recovery payloads stay on disk and are explicitly reported as outside the backup.
 
+Restore intentionally retains the source backup unchanged, including its original
+save time and lineage. The next history operation backs up the restored primary
+before making changes. Preserved `history.json.damaged-*` files have no automatic
+expiry; users may remove them manually after verifying recovery and retaining
+any copies they need.
+
 Metadata publication uses a flushed unique temporary file and rename. This is
 one local metadata backup, not a project archive, versioned backup history, or a
 transaction spanning Git, the inventory document, and all sidecars.
+The containing directory is not fsynced, so a sudden power loss can still lose
+the rename; file flushing alone does not guarantee crash durability.
 
 ## Verification
 
