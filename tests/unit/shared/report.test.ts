@@ -433,6 +433,7 @@ describe('formatDiffReportHtml', () => {
     expect(out).not.toMatch(/<script\b/i)
     expect(out).not.toMatch(/<link\b/i)
     expect(out).not.toMatch(/<img\b/i)
+    expect(out).not.toMatch(/\sstyle\s*=/i)
     expect(out).toContain("default-src 'none'")
   })
 

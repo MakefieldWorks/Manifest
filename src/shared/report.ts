@@ -9,7 +9,7 @@
 
 import type { ComparisonScope, DiffEntry, TemplateDiffEntry } from './types'
 import { DIFF_CLASSIFICATION_LABELS, formatChangeType, formatPath, describeTemplateChange } from './diff-format'
-import { buildReviewInsights, schemaSeverity } from './compare-review-insights'
+import { ALL_REVIEW_INSIGHTS, buildReviewInsights, schemaSeverity } from './compare-review-insights'
 import { serializeCsv } from './csv'
 
 export type ReportFormat = 'markdown' | 'csv' | 'html'
@@ -329,7 +329,7 @@ export function formatDiffReportHtml(
     'Order changes': byType(diffs, 'order-changed').length,
     'Schema changes': templateDiffs.length,
   }
-  const insights = buildReviewInsights(diffs, templateDiffs, { limit: null })
+  const insights = buildReviewInsights(diffs, templateDiffs, { limit: ALL_REVIEW_INSIGHTS })
   const findings = insights.length === 0 ? '' : `<section><div class="section-heading"><h2>Review findings</h2><span>${insights.length}</span></div>` +
     `<div class="finding-list">${insights.map(insight => {
       return `<article class="finding ${HTML_SEVERITY_BORDER_CLASSES[insight.severity]}"><div class="badges">` +
@@ -398,6 +398,8 @@ export function formatDiffReportHtml(
   const empty = !hasChanges
     ? `<section class="empty"><h2>No changes</h2><p>No changes between ${html(ctx.from.name)} and ${html(ctx.to.name)}.</p></section>`
     : ''
+  const fromDetails = snapshotMetaDetails(ctx.from)
+  const toDetails = snapshotMetaDetails(ctx.to)
 
   return `<!doctype html>
 <html lang="en">
@@ -453,8 +455,8 @@ export function formatDiffReportHtml(
     <h1>${html(ctx.projectName)}</h1>
     <p class="subtitle">A portable review of observed project changes.</p>
     <div class="meta-grid">
-      <div class="meta"><span>From</span><strong>${html(ctx.from.name)}</strong>${snapshotMetaDetails(ctx.from) ? `<p>${html(snapshotMetaDetails(ctx.from))}</p>` : ''}${ctx.from.note ? `<p class="description">${html(ctx.from.note)}</p>` : ''}</div>
-      <div class="meta"><span>To</span><strong>${html(ctx.to.name)}</strong>${snapshotMetaDetails(ctx.to) ? `<p>${html(snapshotMetaDetails(ctx.to))}</p>` : ''}${ctx.to.note ? `<p class="description">${html(ctx.to.note)}</p>` : ''}</div>
+      <div class="meta"><span>From</span><strong>${html(ctx.from.name)}</strong>${fromDetails ? `<p>${html(fromDetails)}</p>` : ''}${ctx.from.note ? `<p class="description">${html(ctx.from.note)}</p>` : ''}</div>
+      <div class="meta"><span>To</span><strong>${html(ctx.to.name)}</strong>${toDetails ? `<p>${html(toDetails)}</p>` : ''}${ctx.to.note ? `<p class="description">${html(ctx.to.note)}</p>` : ''}</div>
       <div class="meta"><span>Generated</span><strong>${html(ctx.generatedAt)}</strong></div>
     </div>
     ${ctx.scope ? `<p class="scope">Scope: ${html(ctx.scope.path)}</p>` : ''}

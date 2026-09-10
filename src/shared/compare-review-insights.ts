@@ -15,6 +15,8 @@ export interface ReviewInsight {
   }
 }
 
+export const ALL_REVIEW_INSIGHTS = 'all' as const
+
 function plural(count: number, singular: string, pluralLabel = `${singular}s`): string {
   return count === 1 ? singular : pluralLabel
 }
@@ -90,7 +92,7 @@ export function filterDiffsByReviewInsight(
 export function buildReviewInsights(
   allDiffs: DiffEntry[],
   templateChanges: TemplateDiffEntry[] = [],
-  options: { limit?: number | null } = {},
+  options: { limit?: number | typeof ALL_REVIEW_INSIGHTS } = {},
 ): ReviewInsight[] {
   const insights: ReviewInsight[] = []
 
@@ -211,6 +213,6 @@ export function buildReviewInsights(
     })
   }
 
-  const limit = options.limit === null ? null : options.limit ?? 4
-  return limit === null ? insights : insights.slice(0, limit)
+  const limit = options.limit ?? 4
+  return limit === ALL_REVIEW_INSIGHTS ? insights : insights.slice(0, limit)
 }

@@ -36,6 +36,7 @@ import {
 } from './final-save'
 import type { Project, Result, NodeTemplate, ImportMapping, NetboxImportOptions } from '../shared/types'
 import type { BatchPropertyUpdateRequest } from '../shared/batch-properties'
+import { isReportFormat } from '../shared/report'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -446,6 +447,9 @@ function registerIpcHandlers(): void {
   // the save dialog + file write — the renderer never touches the filesystem.
 
   ipcMain.handle(IPC.REPORT_EXPORT, async (_, { from, to, format, scopeNodeId }: { from: string; to: string; format: unknown; scopeNodeId?: unknown }) => {
+    if (!isReportFormat(format)) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Report format must be markdown, csv, or html')
+    }
     const built = await projectManager.buildReport(from, to, format, scopeNodeId)
     if (!built.ok) return built
     // showSaveDialog AND writeFile are both inside the try so a dialog or write

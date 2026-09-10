@@ -109,6 +109,26 @@ test('exports a self-contained HTML review of the snapshot diff', async ({ appPa
   expect(html).not.toMatch(/<link\b/i)
 })
 
+test('rejects an unsupported report format before opening the save dialog', async ({ appPage, electronApp, workspaceDir }) => {
+  await setUpCompare(appPage, electronApp, workspaceDir, 'Invalid Report Lab')
+  await electronApp.evaluate(({ dialog }) => {
+    ;(globalThis as unknown as { __reportDialogCalls: number }).__reportDialogCalls = 0
+    dialog.showSaveDialog = async () => {
+      ;(globalThis as unknown as { __reportDialogCalls: number }).__reportDialogCalls++
+      return { canceled: true, filePath: undefined }
+    }
+  })
+
+  const result = await appPage.evaluate(() =>
+    window.api.report.export('before', 'after', 'pdf' as never)
+  )
+
+  expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
+  expect(await electronApp.evaluate(() =>
+    (globalThis as unknown as { __reportDialogCalls: number }).__reportDialogCalls
+  )).toBe(0)
+})
+
 test('a canceled save dialog is a silent no-op', async ({ appPage, electronApp, workspaceDir }) => {
   await setUpCompare(appPage, electronApp, workspaceDir, 'Cancel Report Lab')
   await setSaveDialogCanceled(electronApp)

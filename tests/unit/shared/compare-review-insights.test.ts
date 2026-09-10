@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ALL_REVIEW_INSIGHTS,
   buildReviewInsights,
   filterDiffsByReviewInsight,
   focusMatchesDiff,
@@ -230,7 +231,7 @@ describe('buildReviewInsights', () => {
     }))
 
     expect(buildReviewInsights(diffs)).toHaveLength(4)
-    expect(buildReviewInsights(diffs, [], { limit: null }).length).toBeGreaterThan(4)
+    expect(buildReviewInsights(diffs, [], { limit: ALL_REVIEW_INSIGHTS }).length).toBeGreaterThan(4)
   })
 
   it('keeps property insight ids unique when property keys slug to the same text', () => {
