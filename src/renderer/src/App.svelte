@@ -14,6 +14,7 @@
   import { computeSubtreeSummaries, templatesForNode } from '../../shared/merged-tree'
   import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
   import type { BatchPropertyUpdateRequest } from '../../shared/batch-properties'
+  import type { ReportFormat } from '../../shared/report'
   import { hasInventoryFilters, hasPropertyPredicate, type InventoryFilters } from '../../shared/inventory-filters'
   import { DEFAULT_INVENTORY_COLUMNS, type InventoryColumn, type InventorySortDirection } from '../../shared/inventory-table'
   import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
@@ -417,7 +418,7 @@
 
   // Export the loaded compare as a saved report. Main builds + writes (renderer
   // never touches the filesystem); a canceled save dialog is a silent no-op.
-  async function handleExportReport(format: 'markdown' | 'csv') {
+  async function handleExportReport(format: ReportFormat) {
     if (!mergedTree) return
     const res = await window.api.report.export(
       mergedTree.fromSnapshot,
@@ -602,6 +603,7 @@
     state['report:copyMarkdown'] = compareLoaded && !projectBusy
     state['report:exportMarkdown'] = compareLoaded && !projectBusy
     state['report:exportCsv'] = compareLoaded && !projectBusy
+    state['report:exportHtml'] = compareLoaded && !projectBusy
     state['node:addChild'] = selectedLiveNode !== null
     state['node:rename'] = selectedLiveNode !== null
     state['node:duplicate'] = canMutateSelectedChild
@@ -661,6 +663,9 @@
         return
       case 'report:exportCsv':
         await handleExportReport('csv')
+        return
+      case 'report:exportHtml':
+        await handleExportReport('html')
         return
       case 'node:addChild':
         if (selectedNode && !selectedId?.startsWith('ghost:')) handleAddChild(selectedNode.id)

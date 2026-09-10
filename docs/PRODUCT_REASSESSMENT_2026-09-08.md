@@ -2,6 +2,12 @@
 
 Status: proposed direction, grounded in the current repository and GitHub backlog. This assessment does not change the product contract or authorize implementation of every candidate below.
 
+Progress through September 9: PRs #75–#80 completed safe inventory maintenance
+and inventory views; PRs #81–#82 added snapshot descriptions and scoped
+comparisons. The self-contained HTML review completes the bounded configuration
+investigation milestone described below. Portable archive/restore and history
+failure handling remain the next ownership-and-recovery work.
+
 ## Recommendation
 
 Manifest has the foundation of a useful configuration-history product. Its next milestone should complete the daily workflow for someone maintaining a real lab: bring in inventory, maintain it efficiently, record a meaningful configuration, investigate a failure, recover safely, and hand the evidence to another person.
@@ -34,7 +40,7 @@ The promising product promise is: **Know what was in the lab, what changed, and 
 | Sharing | Markdown and CSV comparison reports | Full inventory export, readable review document, portable backup/handoff including history |
 | Desktop | Settings, appearance, menus, persistence, diagnostics and packaging tools | Verified signed distribution, update procedure, clean-machine testing, keyboard/accessibility pass |
 
-Evidence: `src/shared/ipc.ts`, `src/shared/types.ts`, `src/main/project-manager.ts`, `src/main/search-index.ts`, `src/renderer/src/App.svelte`, `src/renderer/src/components/DetailPane.svelte`, `src/renderer/src/lib/compare-review-insights.ts`, `src/shared/report.ts`, and corresponding unit/E2E tests.
+Evidence: `src/shared/ipc.ts`, `src/shared/types.ts`, `src/main/project-manager.ts`, `src/main/search-index.ts`, `src/renderer/src/App.svelte`, `src/renderer/src/components/DetailPane.svelte`, `src/shared/compare-review-insights.ts`, `src/shared/report.ts`, and corresponding unit/E2E tests.
 
 ## Product gaps worth prioritizing
 

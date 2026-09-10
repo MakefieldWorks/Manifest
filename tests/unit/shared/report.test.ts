@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   formatDiffReportMarkdown,
   formatDiffReportCsv,
+  formatDiffReportHtml,
+  isReportFormat,
   diffPropertyMaps,
   type ReportContext,
 } from '../../../src/shared/report'
@@ -25,10 +27,19 @@ function entry(over: Partial<DiffEntry> & Pick<DiffEntry, 'changeType'>): DiffEn
   return {
     nodeId: 'n1',
     severity: 'Medium',
+    classification: 'data',
     context: { nodeName: 'Widget', parentName: 'Rack A-01', path: ['Lab', 'Rack A-01'] },
     ...over,
   } as DiffEntry
 }
+
+describe('report formats', () => {
+  it('recognizes only supported formats', () => {
+    expect(['markdown', 'csv', 'html'].every(isReportFormat)).toBe(true)
+    expect(isReportFormat('pdf')).toBe(false)
+    expect(isReportFormat(null)).toBe(false)
+  })
+})
 
 describe('diffPropertyMaps', () => {
   it('reports added, removed, and changed keys; ignores unchanged', () => {
@@ -77,6 +88,13 @@ describe('formatDiffReportMarkdown', () => {
     expect(md).toContain('**To:** after (2026-01-02 · bbbbbbb)')
     expect(md).toContain('**To description:** Validated upgrade')
     expect(md).toContain('**Generated:** 2026-06-18T00:00:00.000Z')
+  })
+
+  it('omits empty date/hash punctuation for the current project', () => {
+    const live = { ...ctx, from: { name: 'Current project', date: '', hash: '', note: null } }
+    const md = formatDiffReportMarkdown([], [], live)
+    expect(md).toContain('**From:** Current project  ')
+    expect(md).not.toContain('( · )')
   })
 
   it('renders an explicit subtree scope in Markdown', () => {
@@ -358,5 +376,148 @@ describe('formatDiffReportCsv', () => {
     // serializeCsv prefixes a single quote on =/+/-/@ leaders.
     expect(csv).toContain("'=cmd()")
     expect(parseCsv(csv)[1][1]).toBe("'=cmd()")
+  })
+})
+
+describe('formatDiffReportHtml', () => {
+  it('builds a self-contained review with context, findings, and classified changes', () => {
+    const scoped = {
+      ...ctx,
+      scope: { nodeId: 'rack-a', name: 'Rack A', path: 'Lab / Rack A' },
+    }
+    const out = formatDiffReportHtml([
+      entry({
+        changeType: 'added',
+        nodeId: 'new',
+        severity: 'High',
+        classification: 'structural',
+        severityReason: 'High: node was added to the hierarchy.',
+      }),
+      entry({
+        changeType: 'property-changed',
+        nodeId: 'changed',
+        oldValue: { firmware: '1.0' },
+        newValue: { firmware: '2.0' },
+      }),
+    ], [], scoped)
+
+    expect(out).toMatch(/^<!doctype html>/)
+    expect(out).toContain('Known-good baseline')
+    expect(out).toContain('Validated upgrade')
+    expect(out).toContain('Scope: Lab / Rack A')
+    expect(out).toContain('Review findings')
+    expect(out).toContain('1 high-priority change')
+    expect(out).toContain('Structural')
+    expect(out).toContain('High: node was added to the hierarchy.')
+    expect(out).toContain('firmware')
+    expect(out).toContain('1.0')
+    expect(out).toContain('2.0')
+    expect(out).toContain('does not establish that a change caused an outcome')
+  })
+
+  it('escapes untrusted values and contains no active or external resources', () => {
+    const hostile = {
+      ...ctx,
+      projectName: '<script>alert("project")</script>',
+      from: { ...ctx.from, note: '<img src=x onerror=alert(1)>' },
+    }
+    const out = formatDiffReportHtml([
+      entry({
+        changeType: 'added',
+        context: { nodeName: '<script>alert(1)</script>', parentName: null, path: ['Lab'] },
+      }),
+    ], [], hostile)
+
+    expect(out).toContain('&lt;script&gt;alert(&quot;project&quot;)&lt;/script&gt;')
+    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(out).not.toMatch(/<script\b/i)
+    expect(out).not.toMatch(/<link\b/i)
+    expect(out).not.toMatch(/<img\b/i)
+    expect(out).not.toMatch(/\sstyle\s*=/i)
+    expect(out).toContain("default-src 'none'")
+  })
+
+  it('renders moved, order, template-binding, and schema changes', () => {
+    const out = formatDiffReportHtml([
+      entry({
+        nodeId: 'n-moved',
+        changeType: 'moved',
+        severity: 'High',
+        classification: 'structural',
+      }),
+      entry({
+        changeType: 'order-changed',
+        severity: 'Low',
+        classification: 'ordering',
+        oldValue: 0,
+        newValue: 2,
+      }),
+      entry({
+        changeType: 'renamed',
+        oldValue: 'Old Widget',
+        newValue: 'Widget',
+      }),
+      entry({
+        changeType: 'template-changed',
+        classification: 'schema',
+        oldValue: 'board',
+        newValue: 'panel',
+      }),
+    ], [
+      { templateId: 'device', templateLabel: 'Device', changeType: 'field-removed', fieldKey: 'firmware' },
+    ], ctx)
+
+    expect(out).toContain('<h2>Moved</h2>')
+    expect(out).toContain('Lab / Old Rack / Widget')
+    expect(out).toContain('<h2>Order changes</h2>')
+    expect(out).toContain('<span class="old-value">0</span>')
+    expect(out).toContain('<span class="new-value">2</span>')
+    expect(out).toContain('<h2>Renamed</h2>')
+    expect(out).toContain('Old Widget')
+    expect(out).toContain('<h2>Template changes</h2>')
+    expect(out).toContain('tplOld(board)')
+    expect(out).toContain('tplNew(panel)')
+    expect(out).toContain('<h2>Schema changes</h2>')
+    expect(out).toContain('Device: removed field &quot;firmware&quot;')
+    expect(out).toContain('<span class="badge severity-high">High</span>')
+  })
+
+  it('includes every review finding instead of applying the four-card UI cap', () => {
+    const diffs = Array.from({ length: 5 }, (_, index) => entry({
+      nodeId: `removed-${index}`,
+      changeType: 'removed',
+      severity: 'High',
+      classification: 'dependency',
+      context: {
+        nodeName: `Removed ${index}`,
+        parentName: 'Lab',
+        path: ['Lab'],
+        removalImpact: {
+          descendants: [],
+          incomingReferences: [
+            { nodeId: `dependent-${index}`, nodeName: `Dependent ${index}`, path: ['Lab'], fieldKey: 'target' },
+          ],
+        },
+      },
+    }))
+    const out = formatDiffReportHtml(diffs, [], ctx)
+
+    expect(out).toContain('to &quot;Removed 0&quot;')
+    expect(out).toContain('to &quot;Removed 4&quot;')
+  })
+
+  it('renders a clear empty state', () => {
+    const out = formatDiffReportHtml([], [], ctx)
+    expect(out).toContain('<h2>No changes</h2>')
+    expect(out).toContain('No changes between before and after.')
+    expect(out).not.toContain('<h2>Summary</h2>')
+  })
+
+  it('omits an empty metadata line for the current project', () => {
+    const live = { ...ctx, to: { name: 'Current project', date: '', hash: '', note: null } }
+    const out = formatDiffReportHtml([], [], live)
+    const currentCard = out.match(/<div class="meta"><span>To<\/span>.*?<\/div>/)?.[0] ?? ''
+    expect(currentCard).toContain('<strong>Current project</strong>')
+    expect(currentCard).not.toContain('<p> · </p>')
   })
 })

@@ -121,6 +121,8 @@ import { parseNetboxDump, inspectNetbox, planNetbox, NetboxParseError } from '..
 import {
   formatDiffReportMarkdown,
   formatDiffReportCsv,
+  formatDiffReportHtml,
+  isReportFormat,
   type ReportFormat,
   type ReportContext,
 } from '../shared/report'
@@ -1950,7 +1952,7 @@ export class ProjectManager {
   }
 
   /**
-   * Build a shareable diff report (Markdown or CSV) between two snapshots.
+   * Build a shareable diff report (Markdown, CSV, or self-contained HTML) between two snapshots.
    * Re-runs the authoritative diff via loadAndDiff (renderer never decides
    * content) and returns the formatted string plus a suggested filename; the
    * IPC handler owns the save dialog + file write.
@@ -1958,11 +1960,14 @@ export class ProjectManager {
   async buildReport(
     from: string,
     to: string,
-    format: ReportFormat,
+    format: unknown,
     scopeNodeId: unknown = null,
   ): Promise<Result<{ content: string; suggestedName: string }>> {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    }
+    if (!isReportFormat(format)) {
+      return err(ErrorCode.VALIDATION_FAILED, 'Report format must be markdown, csv, or html')
     }
     try {
       const loaded = await this.loadAndDiff(from, to, scopeNodeId)
@@ -1999,9 +2004,18 @@ export class ProjectManager {
         templateLabelNew: (v) => (v ? templateLabel(projectB.templates?.[String(v)], String(v)) : '(none)'),
       }
 
-      const content = format === 'csv'
-        ? formatDiffReportCsv(diffs, templateDiffs, ctx)
-        : formatDiffReportMarkdown(diffs, templateDiffs, ctx)
+      let content: string
+      switch (format) {
+        case 'markdown':
+          content = formatDiffReportMarkdown(diffs, templateDiffs, ctx)
+          break
+        case 'csv':
+          content = formatDiffReportCsv(diffs, templateDiffs, ctx)
+          break
+        case 'html':
+          content = formatDiffReportHtml(diffs, templateDiffs, ctx)
+          break
+      }
 
       const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'snapshot'
       // The current-project side gets a clearer filename token than safe('@current')
@@ -2010,9 +2024,9 @@ export class ProjectManager {
       // residual clash with a snapshot literally named "current-project" is
       // tolerable, not a correctness concern.
       const fileToken = (ref: string) => (isCurrentRef(ref) ? 'current-project' : safe(ref))
-      const ext = format === 'csv' ? 'csv' : 'md'
+      const ext: Record<ReportFormat, string> = { markdown: 'md', csv: 'csv', html: 'html' }
       const scopeToken = scope ? `-${safe(scope.name)}-${safe(scope.nodeId)}` : ''
-      const suggestedName = `${safe(ctx.projectName)}-changes-${fileToken(from)}-to-${fileToken(to)}${scopeToken}.${ext}`
+      const suggestedName = `${safe(ctx.projectName)}-changes-${fileToken(from)}-to-${fileToken(to)}${scopeToken}.${ext[format]}`
       return ok({ content, suggestedName })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)

@@ -750,7 +750,7 @@
     "result": {
       "ok": true,
       "data": {
-        "content": "# Change Report: Contract Lab\n\n**From:** v1 (<ts> · <hash>)  \n**To:** Current project ( · )  \n**Generated:** <ts>\n\n## Summary\n- Added: 1\n- Removed: 0\n- Renamed: 0\n- Moved: 1\n- Property changes: 0 node(s)\n- Template changes: 0\n- Order changes: 0\n- Schema changes: 0\n\n## Added (1)\n- Contract Lab / Rack B\n\n## Moved (1)\n- Contract Lab / Probe → Contract Lab / Rack B / Probe\n",
+        "content": "# Change Report: Contract Lab\n\n**From:** v1 (<ts> · <hash>)  \n**To:** Current project  \n**Generated:** <ts>\n\n## Summary\n- Added: 1\n- Removed: 0\n- Renamed: 0\n- Moved: 1\n- Property changes: 0 node(s)\n- Template changes: 0\n- Order changes: 0\n- Schema changes: 0\n\n## Added (1)\n- Contract Lab / Rack B\n\n## Moved (1)\n- Contract Lab / Probe → Contract Lab / Rack B / Probe\n",
         "suggestedName": "Contract_Lab-changes-v1-to-current-project.md"
       }
     }

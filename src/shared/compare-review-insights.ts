@@ -1,5 +1,5 @@
-import type { DiffClassification, DiffEntry, TemplateDiffEntry } from '../../../shared/types'
-import { DIFF_CLASSIFICATION_LABELS } from '../../../shared/diff-format'
+import type { DiffClassification, DiffEntry, TemplateDiffEntry } from './types'
+import { DIFF_CLASSIFICATION_LABELS } from './diff-format'
 
 export interface ReviewInsight {
   id: string
@@ -14,6 +14,8 @@ export interface ReviewInsight {
     expandRemovalImpact?: boolean
   }
 }
+
+export const ALL_REVIEW_INSIGHTS = 'all' as const
 
 function plural(count: number, singular: string, pluralLabel = `${singular}s`): string {
   return count === 1 ? singular : pluralLabel
@@ -47,7 +49,7 @@ function classificationBreakdown(diffs: DiffEntry[]): string {
     .join(', ')
 }
 
-function schemaSeverity(templateChanges: TemplateDiffEntry[]): DiffEntry['severity'] {
+export function schemaSeverity(templateChanges: TemplateDiffEntry[]): DiffEntry['severity'] {
   return templateChanges.some(change =>
     change.changeType === 'template-removed' ||
     change.changeType === 'field-removed'
@@ -89,7 +91,8 @@ export function filterDiffsByReviewInsight(
 
 export function buildReviewInsights(
   allDiffs: DiffEntry[],
-  templateChanges: TemplateDiffEntry[] = []
+  templateChanges: TemplateDiffEntry[] = [],
+  options: { limit?: number | typeof ALL_REVIEW_INSIGHTS } = {},
 ): ReviewInsight[] {
   const insights: ReviewInsight[] = []
 
@@ -210,5 +213,6 @@ export function buildReviewInsights(
     })
   }
 
-  return insights.slice(0, 4)
+  const limit = options.limit ?? 4
+  return limit === ALL_REVIEW_INSIGHTS ? insights : insights.slice(0, limit)
 }
