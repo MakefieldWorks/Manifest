@@ -237,6 +237,7 @@ export class ProjectManager {
       this.edits.clear()
       this.currentProject = runtimeProject
       this.logger.info('project created', { name, path: projectPath })
+      this.retainCurrentDocumentVersion()
       return ok(runtimeProject)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -343,6 +344,7 @@ export class ProjectManager {
       this.documentSaveError = null
       this.logger.info('project opened', { name: project.name, path: projectPath, nodes: project.nodes.length })
       if (data.version === originalVersion && !document.isLegacy) this.documentVersions.set(canonicalPath, openingHash)
+      this.retainCurrentDocumentVersion()
       this.scheduleHistoryBackfill()
       return ok(this.withLoadWarnings(runtimeProject, warnings))
     } catch (e: unknown) {
@@ -379,6 +381,8 @@ export class ProjectManager {
     this.edits.clear()
     this.currentProject = null
     this.documentSaveError = null
+    this.documentVersions.clear()
+    this.conflictLocalCopy = null
     this.search.close()
     this.history.close()
     this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
@@ -2521,6 +2525,14 @@ export class ProjectManager {
   // ─── Autosave ───────────────────────────────────────────────────────────────
 
   private hashDocument(bytes: Buffer | string): string { return createHash('sha256').update(bytes).digest('hex') }
+
+  private retainCurrentDocumentVersion(): void {
+    const currentPath = join(this.currentProject!.path!, PROJECT_DOCUMENT_FILE)
+    for (const path of this.documentVersions.keys()) {
+      if (path !== currentPath) this.documentVersions.delete(path)
+    }
+    if (this.conflictLocalCopy?.path !== this.currentProject!.path) this.conflictLocalCopy = null
+  }
 
   private documentBytes(path: string): Buffer | null {
     try {

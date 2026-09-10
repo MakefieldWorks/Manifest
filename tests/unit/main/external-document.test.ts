@@ -48,6 +48,40 @@ function copies() {
 }
 
 describe('external project document preservation', () => {
+  it('keeps the local inventory, undo state, and search index if external-load history persistence fails', async () => {
+    manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Unsaved local rack')
+    const current = structuredClone(manager.getCurrent())
+    const edits = manager.editHistoryState()
+    const external = outside()
+    manager.checkExternalDocument()
+    const history = readFileSync(join(path, '.manifest', 'history.json'))
+    const internals = manager as any
+    const restore = vi.spyOn(internals, 'restoreSearchIndex')
+    vi.spyOn(internals, 'writeSnapshotHistory').mockImplementation(() => { throw new Error('Injected history write failure') })
+    expect(await manager.resolveExternalDocument({ token: preview().token, choice: 'load-external' })).toMatchObject({ ok: false })
+    expect(manager.getCurrent()).toEqual(current)
+    expect(manager.editHistoryState()).toEqual(edits)
+    expect(restore).toHaveBeenCalledWith(current)
+    expect(internals.search.query(path, 'Unsaved')).toHaveLength(1)
+    expect(readFileSync(file)).toEqual(external)
+    expect(readFileSync(join(path, '.manifest', 'history.json'))).toEqual(history)
+    expect(manager.documentSaveStatus()).toMatchObject({ ok: true, data: { message: expect.any(String) } })
+  })
+
+  it('retains only the active document baseline and clears it on discard', async () => {
+    const other = await manager.createProject('Other Lab', root)
+    expect(other.ok).toBe(true)
+    const versions = (manager as any).documentVersions as Map<string, string | null>
+    expect([...versions.keys()]).toEqual([join(root, 'Other Lab', PROJECT_DOCUMENT_FILE)])
+    expect((await manager.openProject(path)).ok).toBe(true)
+    expect([...versions.keys()]).toEqual([file])
+    outside()
+    manager.checkExternalDocument()
+    manager.discardCurrentProject()
+    expect(versions.size).toBe(0)
+    expect((manager as any).conflictLocalCopy).toBeNull()
+  })
+
   it('unblocks editing when the outside writer restores the saved bytes', () => {
     outside()
     manager.checkExternalDocument()
