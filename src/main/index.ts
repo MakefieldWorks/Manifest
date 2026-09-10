@@ -255,6 +255,35 @@ nativeTheme.on('updated', () => {
 
 function registerIpcHandlers(): void {
 
+  ipcMain.handle(IPC.ARCHIVE_EXPORT, async () => {
+    try {
+      const project = projectManager.getCurrent()
+      if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+      const selected = await dialog.showSaveDialog({ title: 'Export project archive',
+        defaultPath: join(app.getPath('documents'), 'Manifest.manifestarchive'),
+        filters: [{ name: 'Manifest project archive', extensions: ['manifestarchive'] }] })
+      if (selected.canceled || !selected.filePath) return ok(null)
+      if (projectManager.getCurrent()?.path !== project.path) return err(ErrorCode.VALIDATION_FAILED, 'Project changed. Export again.')
+      return projectManager.exportProjectArchive(selected.filePath)
+    } catch (error) { return err(ErrorCode.ARCHIVE_FAILED, String(error)) }
+  })
+  ipcMain.handle(IPC.ARCHIVE_INSPECT, async () => {
+    try {
+      const selected = await dialog.showOpenDialog({ title: 'Review project archive', properties: ['openFile'],
+        filters: [{ name: 'Manifest project archive', extensions: ['manifestarchive'] }] })
+      if (selected.canceled || !selected.filePaths[0]) return ok(null)
+      return projectManager.inspectProjectArchive(selected.filePaths[0])
+    } catch (error) { return err(ErrorCode.ARCHIVE_FAILED, String(error)) }
+  })
+  ipcMain.handle(IPC.ARCHIVE_RESTORE, async (_, request: { token?: unknown } | null) => {
+    try {
+      if (typeof request?.token !== 'string') return err(ErrorCode.VALIDATION_FAILED, 'Review an archive first.')
+      const selected = await dialog.showOpenDialog({ title: 'Choose parent folder for a new restored project', properties: ['openDirectory', 'createDirectory'] })
+      if (selected.canceled || !selected.filePaths[0]) return ok(null)
+      return projectManager.restoreProjectArchive(request.token, selected.filePaths[0])
+    } catch (error) { return err(ErrorCode.ARCHIVE_FAILED, String(error)) }
+  })
+
   // ── Project lifecycle ────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.PROJECT_CREATE, async (_, { name, parentPath }: { name: string; parentPath: string }) => {

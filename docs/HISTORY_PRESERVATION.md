@@ -129,7 +129,8 @@ restore workflow remain separate ownership/recovery work.
 The independent Claude consultation agreed with prioritizing preservation
 before archives. Validated metadata backups and explicit restore are now
 implemented, along with explicit registration of valid unlisted recovery files.
-Portable project archives and verified restore remain next.
+Portable project archives and verified restore are now implemented; see
+[Project archives](PROJECT_ARCHIVES.md) for scope, limits, and verification.
 Read-only investigation with a clearly marked incomplete
 metadata state should be designed alongside repair; silently dropping context
 from exports is not an acceptable fallback.

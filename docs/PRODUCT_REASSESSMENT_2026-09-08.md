@@ -11,7 +11,9 @@ now preserves unreadable metadata and blocks history mutations before side
 effects. Automatic metadata backup and explicit restore now give damaged or
 missing history a recovery path. Users can now review and register unlisted
 recovery payloads without inventing lost provenance or replacing inventory.
-Interrupted multi-file writes and portable archive/restore remain open.
+Portable archive export and verified restore to a new folder now preserve that
+inventory and history together. Interrupted multi-file writes and external edit
+conflict handling remain open.
 
 ## Recommendation
 

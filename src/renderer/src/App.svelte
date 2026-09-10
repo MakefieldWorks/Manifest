@@ -2,6 +2,8 @@
 
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte'
+  import ProjectArchive from './components/ProjectArchive.svelte'
+  let archiveOpen = $state(false)
   import type { EditHistoryState, Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, ReferenceBlocker, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
   import { isUsableTemplate, templateLabel } from '../../shared/validation'
   import { CURRENT_PROJECT_REF, snapshotRefLabel } from '../../shared/snapshot-ref'
@@ -83,7 +85,7 @@
   })
 
   const canUndoProject = $derived.by(() => appState === 'open' && project !== null && !editingLocked &&
-    !snapshotCreating && !snapshotComparing && !importDialogOpen && !templateManagerOpen &&
+    !archiveOpen && !snapshotCreating && !snapshotComparing && !importDialogOpen && !templateManagerOpen &&
     !duplicateNodeId && !batchDialogOpen && !moveToNodeId && !addingChildTo && !revertDialogSnapshotName && !recoveryDialogPoint)
 
   async function applyUndoRedo(direction: 'undo' | 'redo') {
@@ -1774,6 +1776,7 @@
 {/if}
 
 <!-- ─── Welcome ────────────────────────────────────────────────────────────── -->
+{#if archiveOpen}<ProjectArchive canExport={appState === 'open' && project !== null} onClose={() => { archiveOpen = false }} />{/if}
 {#if appState === 'welcome'}
   <div class="flex h-full bg-stone-50">
     <div class="flex w-full max-w-4xl flex-col px-10 py-10 mx-auto">
@@ -1788,6 +1791,7 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <button onclick={() => { archiveOpen = true }} class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" data-testid="open-archives-btn">Archives…</button>
           <button
             onclick={beginCreateProject}
             class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100 cursor-default"
@@ -1966,6 +1970,7 @@
         </div>
       </div>
       <div class="flex items-center gap-2 [-webkit-app-region:no-drag]">
+        <button onclick={() => { archiveOpen = true }} class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600" data-testid="open-archives-btn">Archives…</button>
         <button
           onclick={() => applyUndoRedo('undo')}
           disabled={!canUndoProject || !editHistory.undoLabel}
