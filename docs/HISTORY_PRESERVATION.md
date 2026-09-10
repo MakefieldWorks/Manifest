@@ -82,8 +82,10 @@ shown with an eligibility explanation. Manifest accepts recognized recovery
 filenames containing a valid inventory for this project; malformed, foreign,
 unsupported, oversized, linked, and unrecognized files remain untouched.
 Hidden files are skipped. Each review lists at most 100 unlisted entries and
-reads at most 50 MB total; the preview reports uninspected files rather than
+uses a 50 MB total read budget; the preview reports uninspected files rather than
 silently implying they are invalid or absent.
+The read budget is soft if another process grows a file during the read; actual
+bytes are charged afterward and overflow is not parsed or eligible for adoption.
 
 Choose **Review adding this file**, then **Add recovery point** to register one
 eligible file. Cancel does not write metadata. Confirmation rechecks the primary

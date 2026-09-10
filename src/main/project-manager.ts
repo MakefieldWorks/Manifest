@@ -1561,12 +1561,15 @@ export class ProjectManager {
 
   private scanRecoveryFiles(): RecoveryFilePreview {
     const project = this.currentProject!
-    const history = this.readSnapshotHistory()
     const directory = join(project.path!, '.manifest', 'recovery')
     const manifestDirectory = join(project.path!, '.manifest')
     if (existsSync(manifestDirectory) && lstatSync(manifestDirectory).isSymbolicLink()) {
       throw new Error('The metadata directory must not be a link.')
     }
+    if (existsSync(directory) && (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink())) {
+      throw new Error('The recovery directory must be a local directory, not a link.')
+    }
+    const history = this.readSnapshotHistory()
     const hash = createHash('sha256').update(project.id).update(project.path!)
     // Include the exact primary bytes so even a semantically equivalent edit
     // invalidates the preview. Missing legacy metadata has a distinct token.
@@ -1576,9 +1579,6 @@ export class ProjectManager {
     let uninspectedCount = 0
     let inspectedBytes = 0
     if (!existsSync(directory)) return { token: hash.digest('hex'), files, uninspectedCount }
-    if (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink()) {
-      throw new Error('The recovery directory must be a local directory, not a link.')
-    }
     const registered = new Set(history.recoveryPoints.map(point => point.manifestPath.split(/[/\\]/).pop()))
     for (const name of readdirSync(directory).sort()) {
       hash.update(JSON.stringify(name))
@@ -1593,8 +1593,11 @@ export class ProjectManager {
         if (!/^recovery-[a-zA-Z0-9-]+\.manifest\.json$/.test(name)) throw new Error('Unrecognized recovery filename; left untouched.')
         if (stat.size > MAX_FILE_SIZE_BYTES) throw new Error(`Recovery file exceeds the ${MAX_FILE_SIZE_MB} MB limit.`)
         if (inspectedBytes + stat.size > MAX_FILE_SIZE_BYTES) throw new Error('Not inspected: this review reached its 50 MB total limit. Move other unlisted files to a safe external folder and review again.')
-        inspectedBytes += stat.size
         const bytes = readFileSync(path)
+        // The stat precheck is a soft I/O limit: external writers can grow a
+        // file during read. Charge actual bytes and refuse to parse overflow.
+        inspectedBytes += bytes.length
+        if (inspectedBytes > MAX_FILE_SIZE_BYTES) throw new Error('Not inspected: files grew beyond the 50 MB review limit. Review again after file changes finish.')
         hash.update(createHash('sha256').update(bytes).digest())
         const parsed = this.parseManifestJson(bytes.toString('utf8'))
         if (!parsed.ok) throw new Error(parsed.error.message)
@@ -1633,6 +1636,8 @@ export class ProjectManager {
         if (preview.token !== request.token) return err(ErrorCode.VALIDATION_FAILED, 'Recovery files changed. Review them again.')
         const file = preview.files.find(file => file.name === request.name && file.eligible)
         if (!file) return err(ErrorCode.VALIDATION_FAILED, 'This file cannot be added as a recovery point.')
+        // Keep the payload filename, but use a new identity so old timeline
+        // references cannot silently attach invented provenance to this point.
         const point: RecoveryPoint = {
           id: `reconciled-${uuidv7()}`, createdAt: new Date().toISOString(),
           reason: 'reconciled', manifestPath: `.manifest/recovery/${file.name}`,
@@ -1662,7 +1667,7 @@ export class ProjectManager {
       }
       history.recoveryPoints = history.recoveryPoints.filter(point => point.id !== request.id)
       try {
-        this.writeSnapshotHistory(history, false)
+        this.writeSnapshotHistory(history, { deleteRemovedPayloads: false })
         return ok(undefined)
       } catch (error) {
         return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not remove recovery point: ${String(error)}`)
@@ -2829,7 +2834,7 @@ export class ProjectManager {
     }
   }
 
-  private writeSnapshotHistory(history: SnapshotHistoryState, prunePayloads = true): void {
+  private writeSnapshotHistory(history: SnapshotHistoryState, { deleteRemovedPayloads = true }: { deleteRemovedPayloads?: boolean } = {}): void {
     const projectPath = this.currentProject?.path
     if (!projectPath) return
 
@@ -2846,7 +2851,9 @@ export class ProjectManager {
       this.logger.warn('history backup refresh failed; previous backup retained', { error: String(error) })
       return
     }
-    if (!prunePayloads) return
+    // Forgetting a registration removes it from the retained set, but must
+    // keep its file. Automatic retention pruning explicitly permits deletion.
+    if (!deleteRemovedPayloads) return
     const retained = new Set(history.recoveryPoints.map(point => point.manifestPath))
     for (const point of previous.recoveryPoints) {
       if (retained.has(point.manifestPath)) continue
