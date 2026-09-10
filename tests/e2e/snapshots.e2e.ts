@@ -1,4 +1,6 @@
 import { execFileSync } from 'child_process'
+import { readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { expect, test } from './fixtures'
 import { CURRENT_PROJECT_REF } from '../../src/shared/snapshot-ref'
 
@@ -185,6 +187,34 @@ test('top-bar snapshots button toggles panel open and closed', async ({ appPage,
   await toggle.click()
   await expect(appPage.getByTestId('snapshots-panel')).toHaveCount(0)
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('shows preserved history metadata errors and resumes after the file is restored', async ({ appPage, electronApp, workspaceDir }) => {
+  const name = 'History Preservation Lab'
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, name)
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'baseline', 'Keep this context')
+  const project = await appPage.evaluate(() => window.api.project.getCurrent())
+  if (!project.ok || !project.data?.path) throw new Error('Project path unavailable')
+  const historyPath = join(project.data.path, '.manifest', 'history.json')
+  const original = readFileSync(historyPath, 'utf8')
+  const damaged = '{interrupted history write'
+  writeFileSync(historyPath, damaged)
+  await appPage.getByTestId('refresh-snapshots-btn').click()
+  await expect(appPage.getByTestId('snapshot-error')).toContainText('The original file is preserved')
+  await expect(appPage.getByTestId('snapshot-error')).toContainText('known-good backup')
+  await expect(appPage.getByText('No snapshots yet.', { exact: true })).toHaveCount(0)
+  await expect(appPage.getByTestId('snapshot-timeline-event')).toHaveCount(0)
+  await appPage.getByTestId('snapshot-name-input').fill('blocked')
+  await appPage.getByTestId('create-snapshot-btn').click()
+  await expect(appPage.getByTestId('snapshot-error')).toContainText('Snapshot creation, revert, and recovery are blocked')
+  expect(readFileSync(historyPath, 'utf8')).toBe(damaged)
+
+  writeFileSync(historyPath, original)
+  await appPage.getByTestId('refresh-snapshots-btn').click()
+  await expect(appPage.getByTestId('snapshot-error')).toHaveCount(0)
+  await expect(appPage.getByText('Keep this context')).toBeVisible()
+  await createSnapshot(appPage, 'after-repair')
 })
 
 test('surfaces removed nodes in snapshot compare mode', async ({ appPage, electronApp, workspaceDir }) => {

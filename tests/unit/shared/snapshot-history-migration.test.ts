@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest'
+import { emptySnapshotHistory, migrateSnapshotHistory, SnapshotHistoryVersionError } from '../../../src/shared/snapshot-history-migration'
+
+describe('snapshot history validation', () => {
+  it('accepts current and unversioned legacy metadata without mutating the input', () => {
+    const current = emptySnapshotHistory()
+    expect(migrateSnapshotHistory(current)).toEqual(current)
+    const { version: _version, ...legacy } = current
+    expect(migrateSnapshotHistory(Object.freeze(legacy))).toEqual(current)
+    expect(legacy).not.toHaveProperty('version')
+  })
+
+  it('refuses future versions rather than erasing their provenance', () => {
+    expect(() => migrateSnapshotHistory({ ...emptySnapshotHistory(), version: 999 }))
+      .toThrow(SnapshotHistoryVersionError)
+  })
+
+  it.each([
+    null, [], {}, { ...emptySnapshotHistory(), version: '1' },
+    { ...emptySnapshotHistory(), events: {} },
+    { ...emptySnapshotHistory(), snapshots: [] },
+    { ...emptySnapshotHistory(), recoveryPoints: 'bad' },
+    { ...emptySnapshotHistory(), snapshots: { tag: { id: 'other' } } },
+    { ...emptySnapshotHistory(), events: [{ id: 'event', type: 'snapshot', createdAt: 'bad', snapshotId: 'tag' }] },
+  ])('rejects malformed metadata: %j', value => {
+    expect(() => migrateSnapshotHistory(value)).toThrow()
+  })
+
+  it.each(['.manifest/recovery/recovery-1.manifest.json', '.manifest\\recovery\\recovery-1.manifest.json'])('accepts native recovery paths: %s', manifestPath => {
+    const history = emptySnapshotHistory()
+    history.recoveryPoints.push({ id: 'recovery-1', createdAt: '2026-09-09T00:00:00Z', reason: 'pre-revert', manifestPath })
+    expect(migrateSnapshotHistory(history)).toEqual(history)
+  })
+
+  it.each(['../outside.json', '.manifest/recovery/../../outside.json', '/tmp/outside.json'])('rejects recovery paths outside the payload directory: %s', manifestPath => {
+    const history = emptySnapshotHistory()
+    history.recoveryPoints.push({ id: 'recovery-1', createdAt: '2026-09-09T00:00:00Z', reason: 'pre-revert', manifestPath })
+    expect(() => migrateSnapshotHistory(history)).toThrow('Invalid recovery point metadata')
+  })
+})

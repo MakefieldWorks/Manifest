@@ -46,20 +46,21 @@ export class SnapshotHistoryVersionError extends Error {
   }
 }
 
-// Forward-only migration. Files newer than CURRENT_VERSION reset to empty —
-// history metadata is recoverable from git tags + a fresh start, so refusing
-// to load is worse than starting clean.
+// Git tags cannot reconstruct descriptions, recovery points, or revert lineage.
+// Reject unreadable metadata instead of silently replacing it with empty state.
 export function migrateSnapshotHistory(raw: unknown): SnapshotHistoryState {
-  if (!raw || typeof raw !== 'object') return emptySnapshotHistory()
+  if (!isRecord(raw)) throw new Error('History metadata must be an object')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let data: any = raw
+  let data: any = { ...raw }
   const version = typeof data.version === 'number' ? data.version : 1
+  if (data.version !== undefined && (!Number.isInteger(data.version) || data.version < 1)) {
+    throw new Error('Invalid history metadata version')
+  }
   data.version = version
 
   if (version > CURRENT_VERSION) {
-    // Newer-than-known: refuse silently and start fresh.
-    return emptySnapshotHistory()
+    throw new SnapshotHistoryVersionError(version, CURRENT_VERSION)
   }
 
   while (data.version < CURRENT_VERSION) {
@@ -68,6 +69,7 @@ export function migrateSnapshotHistory(raw: unknown): SnapshotHistoryState {
     data = migrator(data)
   }
 
+  validateHistory(data)
   return {
     version: CURRENT_VERSION,
     currentBaseSnapshotId: data.currentBaseSnapshotId ?? null,
@@ -75,6 +77,49 @@ export function migrateSnapshotHistory(raw: unknown): SnapshotHistoryState {
     snapshots: data.snapshots ?? {},
     events: Array.isArray(data.events) ? data.events : [],
     recoveryPoints: Array.isArray(data.recoveryPoints) ? data.recoveryPoints : [],
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function optionalText(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === 'string'
+}
+
+function validateHistory(data: Record<string, unknown>): void {
+  if (!isRecord(data.snapshots) || !Array.isArray(data.events) || !Array.isArray(data.recoveryPoints) ||
+      !optionalText(data.currentBaseSnapshotId) || !optionalText(data.pendingRevertEventId)) {
+    throw new Error('Invalid history metadata structure')
+  }
+  for (const [id, meta] of Object.entries(data.snapshots)) {
+    if (!isRecord(meta) || meta.id !== id || !optionalText(meta.note) ||
+        !optionalText(meta.basedOnSnapshotId) || !optionalText(meta.createdAfterRevertEventId)) {
+      throw new Error('Invalid snapshot metadata entry')
+    }
+  }
+  const eventIds = new Set<string>()
+  for (const event of data.events) {
+    if (!isRecord(event) || typeof event.id !== 'string' || !event.id || eventIds.has(event.id) ||
+        typeof event.createdAt !== 'string' || !Number.isFinite(Date.parse(event.createdAt)) ||
+        !optionalText(event.note) || !optionalText(event.safetyRecoveryPointId) ||
+        !(event.type === 'snapshot' && typeof event.snapshotId === 'string' && event.snapshotId ||
+          event.type === 'revert' && typeof event.targetSnapshotId === 'string' && event.targetSnapshotId ||
+          event.type === 'recover' && typeof event.recoveryPointId === 'string' && event.recoveryPointId)) {
+      throw new Error('Invalid history timeline event')
+    }
+    eventIds.add(event.id)
+  }
+  const recoveryIds = new Set<string>()
+  for (const point of data.recoveryPoints) {
+    if (!isRecord(point) || typeof point.id !== 'string' || !point.id || recoveryIds.has(point.id) ||
+        typeof point.createdAt !== 'string' || !Number.isFinite(Date.parse(point.createdAt)) ||
+        point.reason !== 'pre-revert' || typeof point.manifestPath !== 'string' ||
+        !/^\.manifest[/\\]recovery[/\\][^/\\]+\.json$/.test(point.manifestPath) || point.manifestPath.includes('..')) {
+      throw new Error('Invalid recovery point metadata')
+    }
+    recoveryIds.add(point.id)
   }
 }
 

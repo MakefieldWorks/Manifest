@@ -1423,6 +1423,7 @@
     if (result.ok) {
       snapshots = result.data
     } else {
+      snapshots = []
       snapshotError = result.error.message
     }
 
@@ -1430,6 +1431,8 @@
       snapshotTimelineEvents = timelineResult.data.events
       snapshotRecoveryPoints = timelineResult.data.recoveryPoints
     } else {
+      snapshotTimelineEvents = []
+      snapshotRecoveryPoints = []
       snapshotError = timelineResult.error.message
     }
   }
