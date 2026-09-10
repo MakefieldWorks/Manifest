@@ -871,7 +871,7 @@
 
         {#if loading}
           <p class="text-xs text-stone-400">Loading…</p>
-        {:else if timelineEvents.length === 0}
+        {:else if !error && timelineEvents.length === 0}
           <div class="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-4
                       text-xs text-stone-400 text-center">
             No snapshots yet.

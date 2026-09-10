@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, writeFileSync } from 'fs'
 import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -8,6 +8,7 @@ import { GitService } from '../../../src/main/git-service'
 import { HistoryIndexService } from '../../../src/main/history-index'
 import { SearchIndexService } from '../../../src/main/search-index'
 import { CURRENT_PROJECT_REF } from '../../../src/shared/snapshot-ref'
+import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-launcher'
 
 const noopLogger = {
   error: () => {},
@@ -407,29 +408,89 @@ describe('snapshot workflow', () => {
     }
   })
 
-  it('reads malformed and newer-version history files by starting fresh', async () => {
-    const rootId = manager.getCurrent()!.nodes.find((node) => node.parentId === null)!.id
-    manager.nodeCreate(rootId, 'Rack')
-    await manager.snapshotCreate('baseline')
-
+  it('keeps the current project editable after reopening with damaged metadata', async () => {
+    expect((await manager.snapshotCreate('baseline')).ok).toBe(true)
+    await manager.flushAndClose()
     const historyPath = join(projectDir, '.manifest', 'history.json')
+    const damaged = '{damaged on disk'
+    writeFileSync(historyPath, damaged)
+    expect((await manager.openProject(projectDir)).ok).toBe(true)
+    await manager.waitForHistoryBackfill()
+    expect(manager.getHistoryBackfillStatus().inProgress).toBe(false)
+    expect(await manager.nodeHistory(manager.getCurrent()!.nodes[0].id))
+      .toMatchObject({ ok: false, error: { code: 'HISTORY_METADATA_UNAVAILABLE' } })
+    expect(manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Work continues').ok).toBe(true)
+    expect((await manager.saveProject()).ok).toBe(true)
+    expect(readFileSync(historyPath, 'utf8')).toBe(damaged)
+  })
 
-    // Malformed JSON — read should fall back to empty history; timeline still
-    // works (synthesized from git tags).
-    writeFileSync(historyPath, '{not valid json', 'utf8')
-    const malformed = await manager.snapshotTimeline()
-    expect(malformed.ok).toBe(true)
-    if (!malformed.ok) return
-    expect(malformed.data.events.length).toBe(1)
-    expect(malformed.data.events[0].snapshotId).toBe('baseline')
+  it('does not treat a filesystem read failure as missing legacy metadata', async () => {
+    expect((await manager.snapshotCreate('baseline')).ok).toBe(true)
+    const historyPath = join(projectDir, '.manifest', 'history.json')
+    renameSync(historyPath, `${historyPath}.backup`)
+    mkdirSync(historyPath)
+    expect(await manager.snapshotCreate('blocked'))
+      .toMatchObject({ ok: false, error: { code: 'HISTORY_METADATA_UNAVAILABLE' } })
+    expect((await git.listSnapshots(projectDir)).map(snapshot => snapshot.name)).toEqual(['baseline'])
+    rmdirSync(historyPath)
+    renameSync(`${historyPath}.backup`, historyPath)
+    expect((await manager.snapshotTimeline()).ok).toBe(true)
+  })
 
-    // Newer-than-known version — refuse silently and start fresh.
-    writeFileSync(historyPath, JSON.stringify({ version: 999, events: [], recoveryPoints: [] }), 'utf8')
-    const newer = await manager.snapshotTimeline()
-    expect(newer.ok).toBe(true)
-    if (!newer.ok) return
-    expect(newer.data.events.length).toBe(1)
-    expect(newer.data.recoveryPoints).toEqual([])
+  it.each([
+    ['malformed JSON', '{not valid json'],
+    ['newer version', JSON.stringify({ version: 999, events: [], recoveryPoints: [], snapshots: {} })],
+    ['invalid structure', JSON.stringify({ version: 1, events: 'lost', recoveryPoints: [], snapshots: {} })],
+    ['invalid event', JSON.stringify({ version: 1, events: [null], recoveryPoints: [], snapshots: {} })],
+  ])('preserves %s metadata and blocks history mutations until restored', async (_label, damaged) => {
+    const rootId = manager.getCurrent()!.nodes.find((node) => node.parentId === null)!.id
+    expect((await manager.snapshotCreate('baseline', 'Known-good context')).ok).toBe(true)
+    manager.nodeCreate(rootId, 'Recoverable rack')
+    const reverted = await manager.snapshotRevert({ name: 'baseline' })
+    expect(reverted.ok).toBe(true)
+    if (!reverted.ok) return
+    const recoveryId = reverted.data.safetyRecoveryPoint!.id
+    manager.nodeCreate(rootId, 'Current rack')
+    await manager.saveProject()
+    manager.cancelAutosave()
+    await manager.waitForHistoryBackfill()
+    const historyPath = join(projectDir, '.manifest', 'history.json')
+    const original = readFileSync(historyPath, 'utf8')
+    const document = readFileSync(join(projectDir, PROJECT_DOCUMENT_FILE), 'utf8')
+    const current = structuredClone(manager.getCurrent())
+    const edits = manager.editHistoryState()
+    const snapshots = await git.listSnapshots(projectDir)
+    const recoveryFiles = readdirSync(join(projectDir, '.manifest', 'recovery'))
+    writeFileSync(historyPath, damaged, 'utf8')
+
+    for (const result of [
+      await manager.snapshotTimeline(),
+      await manager.snapshotList(),
+      await manager.nodeHistory(rootId),
+      await manager.buildReport('baseline', CURRENT_PROJECT_REF, 'html'),
+      await manager.snapshotCreate('must-not-exist'),
+      await manager.snapshotRevert({ name: 'baseline' }),
+      await manager.recoveryPointApply({ id: recoveryId }),
+    ]) {
+      expect(result).toMatchObject({ ok: false, error: { code: 'HISTORY_METADATA_UNAVAILABLE' } })
+      if (!result.ok) expect(result.error.message).toContain(historyPath)
+    }
+    await manager.waitForHistoryBackfill()
+    expect(manager.getHistoryBackfillStatus().inProgress).toBe(false)
+    expect(readFileSync(historyPath, 'utf8')).toBe(damaged)
+    expect(readFileSync(join(projectDir, PROJECT_DOCUMENT_FILE), 'utf8')).toBe(document)
+    expect(manager.getCurrent()).toEqual(current)
+    expect(manager.editHistoryState()).toEqual(edits)
+    expect(await git.listSnapshots(projectDir)).toEqual(snapshots)
+    expect(readdirSync(join(projectDir, '.manifest', 'recovery'))).toEqual(recoveryFiles)
+
+    // Restoring the original file is sufficient; no restart or destructive reset.
+    writeFileSync(historyPath, original, 'utf8')
+    const timeline = await manager.snapshotTimeline()
+    expect(timeline.ok).toBe(true)
+    if (timeline.ok) expect(timeline.data.events[0].note).toBe('Known-good context')
+    expect((await manager.recoveryPointApply({ id: recoveryId })).ok).toBe(true)
+    expect((await manager.snapshotCreate('after-repair')).ok).toBe(true)
   })
 })
 

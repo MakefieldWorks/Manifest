@@ -6,7 +6,9 @@ Progress through September 9: PRs #75–#80 completed safe inventory maintenance
 and inventory views; PRs #81–#82 added snapshot descriptions and scoped
 comparisons. The self-contained HTML review completes the bounded configuration
 investigation milestone described below. Portable archive/restore and history
-failure handling remain the next ownership-and-recovery work.
+failure handling remain the next ownership-and-recovery work. The first safeguard
+now preserves unreadable metadata and blocks history mutations before side
+effects; interrupted multi-file writes and portable archive/restore remain open.
 
 ## Recommendation
 

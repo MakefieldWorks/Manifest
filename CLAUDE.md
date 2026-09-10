@@ -20,7 +20,7 @@ bun run dev          # start electron-vite dev server with HMR
 bun run build        # production build
 
 # Tests
-bun test             # run all tests (Vitest)
+bun run test         # run all tests (Vitest)
 bun run test:e2e     # Playwright E2E tests
 
 # Type check
