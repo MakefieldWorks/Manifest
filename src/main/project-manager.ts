@@ -20,10 +20,13 @@
 //                      └──▶ return Result<Project>
 //
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, renameSync, statSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
+import { createHash } from 'crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
+import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
+import type { HistoryBackupStatus, HistoryBackupRestoreResult } from '../shared/types'
 import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
 import {
   planBatchPropertyUpdate,
@@ -148,6 +151,7 @@ const AUTOSAVE_DEBOUNCE_MS = 2500              // 2.5 seconds
 const MAX_RECOVERY_POINTS = 10                 // cap stored auto-saved recovery points
 
 class HistoryMetadataReadError extends Error {}
+class HistoryBackupProjectChangedError extends Error {}
 
 
 export interface HistoryBackfillStatus {
@@ -157,6 +161,7 @@ export interface HistoryBackfillStatus {
 }
 
 export class ProjectManager {
+  private historyBeforeOperation: SnapshotHistoryState | null = null
   private currentProject: Project | null = null
   private readonly edits = new EditHistory()
   private historyOperationInProgress = false
@@ -435,7 +440,16 @@ export class ProjectManager {
     this.historyOperationInProgress = true
     try {
       // Check before autosave cancellation, git changes, or recovery payload writes.
-      this.readSnapshotHistory()
+      const history = this.readSnapshotHistory()
+      this.historyBeforeOperation = history
+      if (this.currentProject?.path && existsSync(this.snapshotHistoryPath(this.currentProject.path))) {
+        try {
+          mkdirSync(join(this.currentProject.path, '.manifest'), { recursive: true })
+          new HistoryBackupStore(this.currentProject.path, this.currentProject.id).save(history)
+        } catch (error) {
+          return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not protect history before the operation: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
       return await operation()
     } catch (e: unknown) {
       if (e instanceof HistoryMetadataReadError) {
@@ -443,7 +457,10 @@ export class ProjectManager {
       }
       throw e
     }
-    finally { this.historyOperationInProgress = false }
+    finally {
+      this.historyOperationInProgress = false
+      this.historyBeforeOperation = null
+    }
   }
 
   // ─── Node CRUD ──────────────────────────────────────────────────────────────
@@ -1542,6 +1559,99 @@ export class ProjectManager {
 
   // ─── Snapshots / history ───────────────────────────────────────────────────
 
+  private async validatedHistoryBackup(): Promise<HistoryBackupCandidate & { missingSnapshots: string[]; unlistedRecoveryFiles: string[] }> {
+    const project = this.currentProject
+    if (!project?.path) throw new Error('No project is currently open')
+    const candidate = new HistoryBackupStore(project.path, project.id).candidate()
+    const snapshots = await this.git.listSnapshots(project.path)
+    if (this.currentProject?.path !== project.path || this.currentProject.id !== project.id) {
+      throw new HistoryBackupProjectChangedError('The project changed while checking the backup. Try reviewing the backup again.')
+    }
+    const names = new Set(snapshots.map(snapshot => snapshot.id))
+    const refs = [
+      ...Object.keys(candidate.history.snapshots),
+      ...Object.values(candidate.history.snapshots).map(meta => meta.basedOnSnapshotId),
+      ...candidate.history.events.flatMap(event => [event.snapshotId, event.targetSnapshotId]),
+      candidate.history.currentBaseSnapshotId,
+    ].filter((value): value is string => Boolean(value))
+    const unavailable = refs.filter(ref => !names.has(ref))
+    if (unavailable.length) throw new Error(`Backup snapshots are unavailable: ${[...new Set(unavailable)].join(', ')}`)
+    const payloadHashes: string[] = []
+    for (const point of candidate.history.recoveryPoints) {
+      const path = join(project.path, ...point.manifestPath.split(/[\\/]/))
+      const payload = readFileSync(path)
+      payloadHashes.push(createHash('sha256').update(payload).digest('hex'))
+      const parsed = this.parseManifestJson(payload.toString('utf8'))
+      if (!parsed.ok || parsed.data.id !== project.id) {
+        throw new Error(`Recovery file for ${point.id} is invalid or belongs to another project.`)
+      }
+    }
+    const recorded = new Set(candidate.history.events.filter(event => event.type === 'snapshot').map(event => event.snapshotId))
+    const missing = snapshots.filter(snapshot => !recorded.has(snapshot.id))
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+    // Reconstruct missing snapshot events from Git. Preserve recorded ordering;
+    // insert by timestamp, placing second-resolution ties after recorded events.
+    // Exact historical order and descriptions cannot be recovered from tags.
+    for (const snapshot of missing) {
+      const event: SnapshotTimelineEvent = {
+        id: uuidv7(), type: 'snapshot', createdAt: snapshot.createdAt,
+        snapshotId: snapshot.id, note: candidate.history.snapshots[snapshot.id]?.note ?? null,
+      }
+      const index = candidate.history.events.findIndex(existing =>
+        Math.floor(Date.parse(existing.createdAt) / 1000) > Math.floor(Date.parse(event.createdAt) / 1000))
+      if (index < 0) candidate.history.events.push(event)
+      else candidate.history.events.splice(index, 0, event)
+    }
+    let recoveryFiles: string[] = []
+    try { recoveryFiles = readdirSync(join(project.path, '.manifest', 'recovery')) } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    const registered = new Set(candidate.history.recoveryPoints.map(point => point.manifestPath.split(/[\\/]/).pop()))
+    const token = createHash('sha256').update(JSON.stringify([
+      candidate.sourceToken, snapshots.map(snapshot => [snapshot.id, snapshot.commitHash]).sort(), payloadHashes, recoveryFiles.sort(),
+    ])).digest('hex')
+    return { ...candidate, token, missingSnapshots: missing.map(snapshot => snapshot.name),
+      unlistedRecoveryFiles: recoveryFiles.filter(name => name.endsWith('.manifest.json') && !registered.has(name)).sort() }
+  }
+
+  async historyBackupStatus(): Promise<Result<HistoryBackupStatus>> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    try {
+      const candidate = await this.validatedHistoryBackup()
+      return ok({
+        available: true, token: candidate.token, savedAt: candidate.savedAt,
+        snapshotCount: Object.keys(candidate.history.snapshots).length,
+        eventCount: candidate.history.events.length,
+        recoveryPointCount: candidate.history.recoveryPoints.length,
+        missingSnapshots: candidate.missingSnapshots, unlistedRecoveryFiles: candidate.unlistedRecoveryFiles,
+        originalMissing: candidate.damaged === null,
+      })
+    } catch (error) {
+      if (error instanceof HistoryBackupProjectChangedError) {
+        return err(ErrorCode.VALIDATION_FAILED, error.message)
+      }
+      return ok({ available: false, reason: `No restorable automatic backup: ${error instanceof Error ? error.message : String(error)}` })
+    }
+  }
+
+  async restoreHistoryBackup(request: unknown): Promise<Result<HistoryBackupRestoreResult>> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    if (this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
+    if (!request || typeof request !== 'object' || !('token' in request) || typeof request.token !== 'string') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Review the history backup before restoring it.')
+    }
+    this.historyOperationInProgress = true
+    try {
+      const candidate = await this.validatedHistoryBackup()
+      if (candidate.token !== request.token) return err(ErrorCode.VALIDATION_FAILED, 'History files changed. Review the backup again before restoring.')
+      const preservedPath = new HistoryBackupStore(this.currentProject.path, this.currentProject.id).restore(candidate)
+      this.scheduleHistoryBackfill()
+      return ok({ preservedPath })
+    } catch (error) {
+      return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not restore history backup: ${error instanceof Error ? error.message : String(error)}`)
+    } finally { this.historyOperationInProgress = false }
+  }
+
   async snapshotCreate(name: unknown, description: unknown = null): Promise<Result<Snapshot>> {
     return this.withHistoryOperation(() => this.performSnapshotCreate(name, description))
   }
@@ -1572,7 +1682,7 @@ export class ProjectManager {
 
     try {
       const snapshot = await this.git.createSnapshot(this.currentProject.path!, name)
-      const history = this.readSnapshotHistory()
+      const history = structuredClone(this.historyBeforeOperation!)
       const event: SnapshotTimelineEvent = {
         id: uuidv7(),
         type: 'snapshot',
@@ -2113,7 +2223,7 @@ export class ProjectManager {
         note,
         safetyRecoveryPointId: safetyRecoveryPoint?.id ?? null,
       }
-      const history = this.readSnapshotHistory()
+      const history = structuredClone(this.historyBeforeOperation!)
       history.events.push(event)
       history.currentBaseSnapshotId = name
       history.pendingRevertEventId = event.id
@@ -2144,7 +2254,7 @@ export class ProjectManager {
     this.cancelAutosave()
 
     try {
-      const history = this.readSnapshotHistory()
+      const history = structuredClone(this.historyBeforeOperation!)
       const recoveryPoint = history.recoveryPoints.find(point => point.id === request.id)
       if (!recoveryPoint) {
         return err(ErrorCode.VALIDATION_FAILED, `Recovery point not found: ${request.id}`)
@@ -2559,8 +2669,8 @@ export class ProjectManager {
     }
   }
 
-  // Keep only the most recent MAX_RECOVERY_POINTS entries on disk and in history.
-  // Mutates `history.recoveryPoints` in place; caller must writeSnapshotHistory.
+  // Select retained entries. Physical deletion happens only after primary
+  // metadata and its automatic backup both contain the retained registry.
   private pruneRecoveryPoints(history: SnapshotHistoryState): void {
     const projectPath = this.currentProject?.path
     if (!projectPath) return
@@ -2573,15 +2683,6 @@ export class ProjectManager {
     const toRemove = sorted.slice(0, removeCount)
     const removeIds = new Set(toRemove.map(p => p.id))
 
-    for (const point of toRemove) {
-      const filePath = join(projectPath, point.manifestPath)
-      try {
-        if (existsSync(filePath)) unlinkSync(filePath)
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e)
-        this.logger.warn('recovery point file delete failed', { id: point.id, path: filePath, error: msg })
-      }
-    }
     history.recoveryPoints = history.recoveryPoints.filter(p => !removeIds.has(p.id))
   }
 
@@ -2594,7 +2695,10 @@ export class ProjectManager {
       const parsed = JSON.parse(readFileSync(historyPath, 'utf8'))
       return migrateSnapshotHistory(parsed)
     } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return emptySnapshotHistory()
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (!existsSync(new HistoryBackupStore(projectPath, this.currentProject!.id).backupPath)) return emptySnapshotHistory()
+        throw new HistoryMetadataReadError('History metadata is missing, but an automatic backup exists. Review and restore the backup before creating snapshots, reverting, or recovering.')
+      }
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.warn('snapshot history unavailable; preserving original metadata', { path: historyPath, error: msg })
       throw new HistoryMetadataReadError(
@@ -2611,10 +2715,24 @@ export class ProjectManager {
 
     const manifestDir = join(projectPath, '.manifest')
     const historyPath = this.snapshotHistoryPath(projectPath)
-    const tmpPath = `${historyPath}.tmp`
+    const previous = this.historyBeforeOperation ?? emptySnapshotHistory()
     mkdirSync(manifestDir, { recursive: true })
-    writeFileSync(tmpPath, JSON.stringify(history, null, 2), 'utf8')
-    renameSync(tmpPath, historyPath)
+    writeHistoryFile(historyPath, JSON.stringify(history, null, 2))
+    try {
+      new HistoryBackupStore(projectPath, this.currentProject!.id).save(history)
+    } catch (error) {
+      // Primary metadata has committed. Keep the pre-operation backup and its
+      // payloads, and do not report an already-completed operation as failed.
+      this.logger.warn('history backup refresh failed; previous backup retained', { error: String(error) })
+      return
+    }
+    const retained = new Set(history.recoveryPoints.map(point => point.manifestPath))
+    for (const point of previous.recoveryPoints) {
+      if (retained.has(point.manifestPath)) continue
+      try { unlinkSync(join(projectPath, point.manifestPath)) } catch (error) {
+        this.logger.warn('recovery point file delete failed', { id: point.id, error: String(error) })
+      }
+    }
   }
 
   private snapshotHistoryPath(projectPath: string): string {

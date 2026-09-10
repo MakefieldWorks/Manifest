@@ -198,6 +198,7 @@
   let snapshotComparing: boolean = $state(false)
   let snapshotRestoringName: string | null = $state(null)
   let snapshotError: string | null = $state(null)
+  let snapshotErrorCode: string | null = $state(null)
   let revertDialogSnapshotName: string | null = $state(null)
   let revertDialogNoteRequired: boolean = $state(false)
   let revertDialogError: string | null = $state(null)
@@ -1413,6 +1414,7 @@
     if (!project) return
     snapshotLoading = true
     snapshotError = null
+    snapshotErrorCode = null
 
     const [result, timelineResult] = await Promise.all([
       window.api.snapshot.list(),
@@ -1425,6 +1427,7 @@
     } else {
       snapshots = []
       snapshotError = result.error.message
+      snapshotErrorCode = result.error.code
     }
 
     if (timelineResult.ok) {
@@ -1434,6 +1437,7 @@
       snapshotTimelineEvents = []
       snapshotRecoveryPoints = []
       snapshotError = timelineResult.error.message
+      snapshotErrorCode = timelineResult.error.code
     }
   }
 
@@ -1509,6 +1513,7 @@
       return true
     } else {
       snapshotError = result.error.message
+      snapshotErrorCode = result.error.code
       return false
     }
   }
@@ -1569,6 +1574,7 @@
       }
     } else {
       snapshotError = result.error.message
+      snapshotErrorCode = result.error.code
     }
   }
 
@@ -1645,6 +1651,7 @@
     const recoveryPoint = snapshotRecoveryPoints.find(point => point.id === id)
     if (!recoveryPoint) {
       snapshotError = `Recovery point not found: ${id}`
+      snapshotErrorCode = null
       return
     }
 
@@ -2383,6 +2390,13 @@
             restoringName={snapshotRestoringName}
             recoveringId={recoveryApplyingId}
             error={snapshotError}
+            historyUnavailable={snapshotErrorCode === 'HISTORY_METADATA_UNAVAILABLE'}
+            onHistoryRepaired={async (path) => {
+              await refreshSnapshots()
+              workingCopyBaseSnapshot = null
+              workingCopyDirty = true
+              showToast(path ? `History restored. Original preserved at ${path}` : 'History restored from automatic backup.')
+            }}
             highlightedNodeId={selectedId}
             scopeCandidate={selectedNode && selectedNode.parentId !== null
               ? { id: selectedNode.id, name: selectedNode.name }

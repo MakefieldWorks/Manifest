@@ -21,6 +21,7 @@
   import { orderCompareDiffs, type CompareOrderMode } from '../lib/compare-diff-order'
   import { diffNodeIdCandidatesFromSelection } from '../lib/compare-highlight'
   import SnapshotDiffRowBody from './SnapshotDiffRowBody.svelte'
+  import HistoryBackupRepair from './HistoryBackupRepair.svelte'
   import { MAX_SNAPSHOT_DESCRIPTION_LENGTH } from '../../../shared/validation'
 
   interface Props {
@@ -35,6 +36,8 @@
     restoringName: string | null
     recoveringId: string | null
     error: string | null
+    historyUnavailable?: boolean
+    onHistoryRepaired?: (path: string | null) => Promise<void>
     /** Node id currently selected in the tree — highlights the matching diff row. */
     highlightedNodeId?: string | null
     scopeCandidate?: { id: string; name: string } | null
@@ -65,6 +68,8 @@
     restoringName,
     recoveringId,
     error,
+    historyUnavailable = false,
+    onHistoryRepaired,
     highlightedNodeId = null,
     scopeCandidate = null,
     onDiffNodeSelect,
@@ -866,6 +871,9 @@
           <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
                data-testid="snapshot-error">
             {error}
+            {#if historyUnavailable && onHistoryRepaired}
+              <HistoryBackupRepair onRestored={onHistoryRepaired} />
+            {/if}
           </div>
         {/if}
 

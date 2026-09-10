@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
 import { CURRENT_PROJECT_REF } from '../../src/shared/snapshot-ref'
@@ -214,6 +214,36 @@ test('shows preserved history metadata errors and resumes after the file is rest
   await appPage.getByTestId('refresh-snapshots-btn').click()
   await expect(appPage.getByTestId('snapshot-error')).toHaveCount(0)
   await expect(appPage.getByText('Keep this context')).toBeVisible()
+  await createSnapshot(appPage, 'after-repair')
+})
+
+test('reviews and restores an automatic history backup without replacing current inventory', async ({ appPage, electronApp, workspaceDir }) => {
+  const name = 'Automatic Backup Lab'
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, name)
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'baseline', 'Preserved backup context')
+  await addChildNode(appPage, name, 'Unsnapshotted rack')
+  const current = await appPage.evaluate(() => window.api.project.getCurrent())
+  if (!current.ok || !current.data?.path) throw new Error('Project unavailable')
+  const metadataDir = join(current.data.path, '.manifest')
+  const path = join(metadataDir, 'history.json')
+  const damaged = '{damaged metadata'
+  writeFileSync(path, damaged)
+  await appPage.getByTestId('refresh-snapshots-btn').click()
+  await appPage.getByTestId('history-backup-review').click()
+  const repair = appPage.getByTestId('history-backup-repair')
+  await expect(repair).toContainText('Your current inventory and Undo/Redo remain unchanged')
+  await repair.screenshot({ path: test.info().outputPath('history-backup-preview.png') })
+  await repair.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(readFileSync(path, 'utf8')).toBe(damaged)
+  await appPage.getByTestId('history-backup-review').click()
+  await appPage.getByTestId('history-backup-confirm').click()
+  await expect(appPage.getByTestId('snapshot-error')).toHaveCount(0)
+  await expect(appPage.getByText('Preserved backup context')).toBeVisible()
+  await expect(treeRow(appPage, 'Unsnapshotted rack')).toBeVisible()
+  const preserved = readdirSync(metadataDir).filter(file => file.startsWith('history.json.damaged-'))
+  expect(preserved).toHaveLength(1)
+  expect(readFileSync(join(metadataDir, preserved[0]), 'utf8')).toBe(damaged)
   await createSnapshot(appPage, 'after-repair')
 })
 
