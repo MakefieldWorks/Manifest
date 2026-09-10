@@ -22,6 +22,7 @@
   import { diffNodeIdCandidatesFromSelection } from '../lib/compare-highlight'
   import SnapshotDiffRowBody from './SnapshotDiffRowBody.svelte'
   import HistoryBackupRepair from './HistoryBackupRepair.svelte'
+  import RecoveryFiles from './RecoveryFiles.svelte'
   import { MAX_SNAPSHOT_DESCRIPTION_LENGTH } from '../../../shared/validation'
 
   interface Props {
@@ -982,6 +983,10 @@
           </div>
         {/if}
       </section>
+      {#if !historyUnavailable}
+        <RecoveryFiles points={recoveryPoints} {onRefresh} onRecover={onApplyRecovery}
+          disabled={loading || creating || restoringName !== null || recoveringId !== null} />
+      {/if}
     </div>
 
     {#if snapshots.length >= 1}

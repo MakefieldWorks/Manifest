@@ -578,6 +578,9 @@ function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(IPC.HISTORY_BACKUP_STATUS, () => projectManager.historyBackupStatus())
+  ipcMain.handle(IPC.RECOVERY_FILES_PREVIEW, () => projectManager.recoveryFilesPreview())
+  ipcMain.handle(IPC.RECOVERY_FILES_ADOPT, (_, request: unknown) => projectManager.adoptRecoveryFile(request))
+  ipcMain.handle(IPC.RECOVERY_FILES_FORGET, (_, request: unknown) => projectManager.forgetRecoveryFile(request))
   ipcMain.handle(IPC.HISTORY_BACKUP_RESTORE, (_, request: unknown) => projectManager.restoreHistoryBackup(request))
 
   ipcMain.handle(IPC.RECOVERY_APPLY, (_, request: { id: string }) =>

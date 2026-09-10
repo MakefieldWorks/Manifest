@@ -9,8 +9,9 @@ investigation milestone described below. Portable archive/restore and history
 failure handling remain the next ownership-and-recovery work. The first safeguard
 now preserves unreadable metadata and blocks history mutations before side
 effects. Automatic metadata backup and explicit restore now give damaged or
-missing history a recovery path. Orphaned recovery payload reconciliation,
-interrupted multi-file writes, and portable archive/restore remain open.
+missing history a recovery path. Users can now review and register unlisted
+recovery payloads without inventing lost provenance or replacing inventory.
+Interrupted multi-file writes and portable archive/restore remain open.
 
 ## Recommendation
 

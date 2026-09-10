@@ -98,6 +98,9 @@ const api: ManifestAPI = {
   },
 
   snapshot: {
+    recoveryFilesPreview: () => ipcRenderer.invoke(IPC.RECOVERY_FILES_PREVIEW),
+    adoptRecoveryFile: request => ipcRenderer.invoke(IPC.RECOVERY_FILES_ADOPT, request),
+    forgetRecoveryFile: request => ipcRenderer.invoke(IPC.RECOVERY_FILES_FORGET, request),
     historyBackupStatus: () => ipcRenderer.invoke(IPC.HISTORY_BACKUP_STATUS),
     restoreHistoryBackup: (request) => ipcRenderer.invoke(IPC.HISTORY_BACKUP_RESTORE, request),
     create: (name, description) =>

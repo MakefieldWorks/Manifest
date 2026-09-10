@@ -333,7 +333,7 @@ export interface SnapshotTimelineEvent {
 export interface RecoveryPoint {
   id: string
   createdAt: string // ISO 8601
-  reason: 'pre-revert'
+  reason: 'pre-revert' | 'reconciled'
   manifestPath: string
 }
 
@@ -367,6 +367,12 @@ export type HistoryBackupStatus =
 
 export interface HistoryBackupRestoreResult {
   preservedPath: string | null
+}
+
+export interface RecoveryFilePreview {
+  token: string
+  uninspectedCount: number
+  files: Array<{ name: string; eligible: boolean; explanation: string; projectName?: string; nodeCount?: number }>
 }
 
 // Per-node history entry. One entry per transition (creation, change,

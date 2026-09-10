@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process'
-import { readFileSync, readdirSync, writeFileSync } from 'fs'
+import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
 import { CURRENT_PROJECT_REF } from '../../src/shared/snapshot-ref'
@@ -245,6 +245,42 @@ test('reviews and restores an automatic history backup without replacing current
   expect(preserved).toHaveLength(1)
   expect(readFileSync(join(metadataDir, preserved[0]), 'utf8')).toBe(damaged)
   await createSnapshot(appPage, 'after-repair')
+})
+
+test('reviews an unlisted recovery file, adds it without replacing inventory, and recovers separately', async ({ appPage, electronApp, workspaceDir }) => {
+  const name = 'Recovery Files Lab'
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, name)
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'baseline')
+  const current = await appPage.evaluate(() => window.api.project.getCurrent())
+  if (!current.ok || !current.data?.path) throw new Error('Project unavailable')
+  const directory = join(current.data.path, '.manifest', 'recovery')
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(join(directory, 'recovery-unlisted.manifest.json'), JSON.stringify(current.data))
+  await addChildNode(appPage, name, 'Current rack')
+  const bytes = readFileSync(join(current.data.path, '.manifest', 'history.json'))
+  const files = appPage.getByTestId('recovery-files')
+  await files.getByTestId('recovery-files-review').click()
+  await files.getByRole('button', { name: 'Review adding this file' }).click()
+  await expect(files.getByTestId('recovery-file-confirmation')).toContainText('No files will be deleted')
+  await files.screenshot({ path: test.info().outputPath('recovery-files-preview.png') })
+  await files.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(readFileSync(join(current.data.path, '.manifest', 'history.json'))).toEqual(bytes)
+  await files.getByTestId('recovery-files-review').click()
+  await files.getByRole('button', { name: 'Review adding this file' }).click()
+  await files.getByTestId('recovery-file-add').click()
+  await expect(files.getByRole('status')).toContainText('Recovery point added')
+  await expect(treeRow(appPage, 'Current rack')).toBeVisible()
+  await files.getByTestId('reconciled-recovery-point').getByRole('button', { name: 'Recover', exact: true }).click()
+  await expect(appPage.getByTestId('recovery-dialog')).toContainText('Original save time and operation context are unknown')
+  await appPage.getByTestId('recovery-confirm-btn').click()
+  await expect(treeRow(appPage, 'Current rack')).toHaveCount(0)
+  await expect(appPage.getByTestId('recovery-dialog')).toHaveCount(0)
+  const added = files.getByTestId('reconciled-recovery-point')
+  await added.getByRole('button', { name: 'Remove from list' }).click()
+  await added.getByTestId('recovery-file-forget').click()
+  await expect(added).toHaveCount(0)
+  expect(readFileSync(join(directory, 'recovery-unlisted.manifest.json'), 'utf8')).toBe(JSON.stringify(current.data))
 })
 
 test('surfaces removed nodes in snapshot compare mode', async ({ appPage, electronApp, workspaceDir }) => {
