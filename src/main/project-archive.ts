@@ -20,7 +20,7 @@ function allowedPath(path: string): boolean {
   return path === PROJECT_DOCUMENT_FILE || path === 'snapshots.bundle' ||
     path === '.manifest/history.json' || path === '.manifest/history.backup.json' ||
     /^\.manifest\/history\.json\.damaged-[a-zA-Z0-9-]+$/.test(path) ||
-    /^\.manifest\/recovery\/[^/\\:]+$/.test(path) && !path.includes('..') && !/[\x00-\x1f]/.test(path)
+    (/^\.manifest\/recovery\/[^/\\:]+$/.test(path) && !path.includes('..') && !/[\x00-\x1f]/.test(path))
 }
 
 function readBounded(path: string, max = MAX_BYTES): Buffer {

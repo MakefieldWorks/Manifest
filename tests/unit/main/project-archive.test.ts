@@ -165,6 +165,9 @@ describe('portable project archives', () => {
     vi.spyOn(git, 'restoreArchiveBundle').mockRejectedValue(new Error('injected failure'))
     expect((await manager.restoreProjectArchive(review.token, target)).ok).toBe(false)
     expect(readdirSync(target)).toEqual(['existing'])
+    vi.restoreAllMocks()
+    expect(await manager.restoreProjectArchive(review.token, target)).toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
+    expect((await manager.restoreProjectArchive((await preview()).token, target)).ok).toBe(true)
   })
 
   it('rejects export destinations hidden behind links or dot-prefixed source directories', async () => {

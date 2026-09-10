@@ -1615,6 +1615,7 @@ export class ProjectManager {
       this.archivePreview = null
       return ok({ path })
     } catch (error) {
+      this.archivePreview = null
       return err(ErrorCode.ARCHIVE_FAILED, `Could not restore project archive: ${error instanceof Error ? error.message : String(error)}`)
     } finally { this.archiveBusy = false }
   }
