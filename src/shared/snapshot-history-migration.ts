@@ -6,7 +6,7 @@
 
 import type { SnapshotTimelineEvent, RecoveryPoint } from './types'
 
-const CURRENT_VERSION = 1
+const CURRENT_VERSION = 2
 
 export interface SnapshotHistoryState {
   version: number
@@ -35,7 +35,10 @@ export function emptySnapshotHistory(): SnapshotHistoryState {
 
 // Key = target version. migrations[2] would migrate v1 → v2.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const migrations: Record<number, (data: any) => any> = {}
+const migrations: Record<number, (data: any) => any> = {
+  // v2 supports explicitly reconciled recovery files without invented lineage.
+  2: data => ({ ...data, version: 2 }),
+}
 
 export class SnapshotHistoryVersionError extends Error {
   constructor(public readonly fromVersion: number, public readonly toVersion: number) {
@@ -115,7 +118,7 @@ function validateHistory(data: Record<string, unknown>): void {
   for (const point of data.recoveryPoints) {
     if (!isRecord(point) || typeof point.id !== 'string' || !point.id || recoveryIds.has(point.id) ||
         typeof point.createdAt !== 'string' || !Number.isFinite(Date.parse(point.createdAt)) ||
-        point.reason !== 'pre-revert' || typeof point.manifestPath !== 'string' ||
+        (point.reason !== 'pre-revert' && point.reason !== 'reconciled') || typeof point.manifestPath !== 'string' ||
         !/^\.manifest[/\\]recovery[/\\][^/\\]+\.json$/.test(point.manifestPath) || point.manifestPath.includes('..')) {
       throw new Error('Invalid recovery point metadata')
     }

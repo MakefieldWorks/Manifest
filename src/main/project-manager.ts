@@ -20,13 +20,13 @@
 //                      └──▶ return Result<Project>
 //
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, renameSync, statSync, lstatSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
-import type { HistoryBackupStatus, HistoryBackupRestoreResult } from '../shared/types'
+import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
 import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
 import {
   planBatchPropertyUpdate,
@@ -1559,6 +1559,122 @@ export class ProjectManager {
 
   // ─── Snapshots / history ───────────────────────────────────────────────────
 
+  private scanRecoveryFiles(): RecoveryFilePreview {
+    const project = this.currentProject!
+    const directory = join(project.path!, '.manifest', 'recovery')
+    const manifestDirectory = join(project.path!, '.manifest')
+    if (existsSync(manifestDirectory) && lstatSync(manifestDirectory).isSymbolicLink()) {
+      throw new Error('The metadata directory must not be a link.')
+    }
+    if (existsSync(directory) && (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink())) {
+      throw new Error('The recovery directory must be a local directory, not a link.')
+    }
+    const history = this.readSnapshotHistory()
+    const hash = createHash('sha256').update(project.id).update(project.path!)
+    // Include the exact primary bytes so even a semantically equivalent edit
+    // invalidates the preview. Missing legacy metadata has a distinct token.
+    const metadataPath = this.snapshotHistoryPath(project.path!)
+    hash.update(existsSync(metadataPath) ? readFileSync(metadataPath) : 'missing')
+    const files: RecoveryFilePreview['files'] = []
+    let uninspectedCount = 0
+    let inspectedBytes = 0
+    if (!existsSync(directory)) return { token: hash.digest('hex'), files, uninspectedCount }
+    const registered = new Set(history.recoveryPoints.map(point => point.manifestPath.split(/[/\\]/).pop()))
+    for (const name of readdirSync(directory).sort()) {
+      hash.update(JSON.stringify(name))
+      if (registered.has(name) || name.startsWith('.')) continue
+      if (files.length >= 100) { uninspectedCount++; continue }
+      const file = { name, eligible: false, explanation: '' } as RecoveryFilePreview['files'][number]
+      files.push(file)
+      try {
+        const path = join(directory, name)
+        const stat = lstatSync(path)
+        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Not a regular local file.')
+        if (!/^recovery-[a-zA-Z0-9-]+\.manifest\.json$/.test(name)) throw new Error('Unrecognized recovery filename; left untouched.')
+        if (stat.size > MAX_FILE_SIZE_BYTES) throw new Error(`Recovery file exceeds the ${MAX_FILE_SIZE_MB} MB limit.`)
+        if (inspectedBytes + stat.size > MAX_FILE_SIZE_BYTES) throw new Error('Not inspected: this review reached its 50 MB total limit. Move other unlisted files to a safe external folder and review again.')
+        const bytes = readFileSync(path)
+        // The stat precheck is a soft I/O limit: external writers can grow a
+        // file during read. Charge actual bytes and refuse to parse overflow.
+        inspectedBytes += bytes.length
+        if (inspectedBytes > MAX_FILE_SIZE_BYTES) throw new Error('Not inspected: files grew beyond the 50 MB review limit. Review again after file changes finish.')
+        hash.update(createHash('sha256').update(bytes).digest())
+        const parsed = this.parseManifestJson(bytes.toString('utf8'))
+        if (!parsed.ok) throw new Error(parsed.error.message)
+        if (parsed.data.id !== project.id) throw new Error('This file belongs to another project.')
+        const id = name.slice(0, -'.manifest.json'.length)
+        if (history.recoveryPoints.some(point => point.id === id)) throw new Error('Recovery ID is already registered to another file.')
+        file.eligible = true
+        file.projectName = parsed.data.name
+        file.nodeCount = parsed.data.nodes.length
+        file.explanation = 'Original save time and operation context are unknown.'
+      } catch (error) {
+        file.explanation = error instanceof Error ? error.message : String(error)
+      }
+      hash.update(JSON.stringify(file))
+    }
+    return { token: hash.digest('hex'), files, uninspectedCount }
+  }
+
+  async recoveryFilesPreview(): Promise<Result<RecoveryFilePreview>> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    try { return ok(this.scanRecoveryFiles()) } catch (error) {
+      return err(error instanceof HistoryMetadataReadError ? ErrorCode.HISTORY_METADATA_UNAVAILABLE : ErrorCode.SNAPSHOT_READ_FAILED,
+        `Could not inspect recovery files: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  async adoptRecoveryFile(request: unknown): Promise<Result<RecoveryPoint>> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    if (!request || typeof request !== 'object' || !('token' in request) || typeof request.token !== 'string' ||
+        !('name' in request) || typeof request.name !== 'string') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Review recovery files before adding one.')
+    }
+    return this.withHistoryOperation(async () => {
+      try {
+        const preview = this.scanRecoveryFiles()
+        if (preview.token !== request.token) return err(ErrorCode.VALIDATION_FAILED, 'Recovery files changed. Review them again.')
+        const file = preview.files.find(file => file.name === request.name && file.eligible)
+        if (!file) return err(ErrorCode.VALIDATION_FAILED, 'This file cannot be added as a recovery point.')
+        // Keep the payload filename, but use a new identity so old timeline
+        // references cannot silently attach invented provenance to this point.
+        const point: RecoveryPoint = {
+          id: `reconciled-${uuidv7()}`, createdAt: new Date().toISOString(),
+          reason: 'reconciled', manifestPath: `.manifest/recovery/${file.name}`,
+        }
+        const history = structuredClone(this.historyBeforeOperation!)
+        history.recoveryPoints.push(point)
+        // Registration is not an inventory event. Never invent a revert or
+        // recover event, change lineage, or prune files during reconciliation.
+        this.writeSnapshotHistory(history)
+        return ok(point)
+      } catch (error) {
+        return err(error instanceof HistoryMetadataReadError ? ErrorCode.HISTORY_METADATA_UNAVAILABLE : ErrorCode.HISTORY_BACKUP_FAILED,
+          `Could not add recovery file: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    })
+  }
+
+  async forgetRecoveryFile(request: unknown): Promise<Result<void>> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    if (!request || typeof request !== 'object' || !('id' in request) || typeof request.id !== 'string') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Choose an added recovery point to remove from the list.')
+    }
+    return this.withHistoryOperation(async () => {
+      const history = structuredClone(this.historyBeforeOperation!)
+      if (!history.recoveryPoints.some(point => point.id === request.id && point.reason === 'reconciled')) {
+        return err(ErrorCode.VALIDATION_FAILED, 'Only explicitly added recovery points can be removed from this list.')
+      }
+      history.recoveryPoints = history.recoveryPoints.filter(point => point.id !== request.id)
+      try {
+        this.writeSnapshotHistory(history, { deleteRemovedPayloads: false })
+        return ok(undefined)
+      } catch (error) {
+        return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not remove recovery point: ${String(error)}`)
+      }
+    })
+  }
+
   private async validatedHistoryBackup(): Promise<HistoryBackupCandidate & { missingSnapshots: string[]; unlistedRecoveryFiles: string[] }> {
     const project = this.currentProject
     if (!project?.path) throw new Error('No project is currently open')
@@ -2265,8 +2381,16 @@ export class ProjectManager {
         return err(ErrorCode.SNAPSHOT_READ_FAILED, `Recovery manifest not found: ${recoveryPoint.manifestPath}`)
       }
 
+      if (recoveryPoint.reason === 'reconciled' &&
+          (lstatSync(join(this.currentProject.path, '.manifest')).isSymbolicLink() ||
+           lstatSync(join(this.currentProject.path, '.manifest', 'recovery')).isSymbolicLink() ||
+           !lstatSync(manifestPath).isFile() || lstatSync(manifestPath).isSymbolicLink())) {
+        return err(ErrorCode.VALIDATION_FAILED, 'Added recovery files must remain regular local files.')
+      }
+
       const recovered = this.parseManifestJson(readFileSync(manifestPath, 'utf8'))
       if (!recovered.ok) return recovered as Result<RecoveryPointApplyResult>
+      if (recovered.data.id !== this.currentProject.id) return err(ErrorCode.VALIDATION_FAILED, 'Recovery file belongs to another project.')
 
       const previousProject = this.currentProject
       const recoveredProject: Project = {
@@ -2674,9 +2798,10 @@ export class ProjectManager {
   private pruneRecoveryPoints(history: SnapshotHistoryState): void {
     const projectPath = this.currentProject?.path
     if (!projectPath) return
-    if (history.recoveryPoints.length <= MAX_RECOVERY_POINTS) return
+    const automatic = history.recoveryPoints.filter(point => point.reason !== 'reconciled')
+    if (automatic.length <= MAX_RECOVERY_POINTS) return
 
-    const sorted = [...history.recoveryPoints].sort(
+    const sorted = [...automatic].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     )
     const removeCount = sorted.length - MAX_RECOVERY_POINTS
@@ -2709,7 +2834,7 @@ export class ProjectManager {
     }
   }
 
-  private writeSnapshotHistory(history: SnapshotHistoryState): void {
+  private writeSnapshotHistory(history: SnapshotHistoryState, { deleteRemovedPayloads = true }: { deleteRemovedPayloads?: boolean } = {}): void {
     const projectPath = this.currentProject?.path
     if (!projectPath) return
 
@@ -2726,6 +2851,9 @@ export class ProjectManager {
       this.logger.warn('history backup refresh failed; previous backup retained', { error: String(error) })
       return
     }
+    // Forgetting a registration removes it from the retained set, but must
+    // keep its file. Automatic retention pruning explicitly permits deletion.
+    if (!deleteRemovedPayloads) return
     const retained = new Set(history.recoveryPoints.map(point => point.manifestPath))
     for (const point of previous.recoveryPoints) {
       if (retained.has(point.manifestPath)) continue

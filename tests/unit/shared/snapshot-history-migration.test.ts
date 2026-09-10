@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { emptySnapshotHistory, migrateSnapshotHistory, SnapshotHistoryVersionError } from '../../../src/shared/snapshot-history-migration'
 
 describe('snapshot history validation', () => {
+  it('upgrades v1 without changing nested records or inventing recovery context', () => {
+    const raw = { ...emptySnapshotHistory(), version: 1,
+      recoveryPoints: [{ id: 'old', reason: 'pre-revert', createdAt: '2026-09-10T00:00:00Z', manifestPath: '.manifest/recovery/old.json' }] }
+    const original = structuredClone(raw)
+    const migrated = migrateSnapshotHistory(raw)
+    expect(migrated.version).toBe(2)
+    expect(migrated.recoveryPoints).toEqual(original.recoveryPoints)
+    expect(raw).toEqual(original)
+  })
+
   it('accepts current and unversioned legacy metadata without mutating the input', () => {
     const current = emptySnapshotHistory()
     expect(migrateSnapshotHistory(current)).toEqual(current)
@@ -13,6 +23,12 @@ describe('snapshot history validation', () => {
   it('refuses future versions rather than erasing their provenance', () => {
     expect(() => migrateSnapshotHistory({ ...emptySnapshotHistory(), version: 999 }))
       .toThrow(SnapshotHistoryVersionError)
+  })
+
+  it.each(['unknown', ['pre-revert'], null])('rejects invalid recovery reasons: %j', reason => {
+    const history = { ...emptySnapshotHistory(), recoveryPoints: [{ id: 'point', reason,
+      createdAt: '2026-09-10T00:00:00Z', manifestPath: '.manifest/recovery/point.json' }] }
+    expect(() => migrateSnapshotHistory(history)).toThrow('Invalid recovery point metadata')
   })
 
   it.each([

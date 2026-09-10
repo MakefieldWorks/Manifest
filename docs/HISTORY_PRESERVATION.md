@@ -74,6 +74,42 @@ transaction spanning Git, the inventory document, and all sidecars.
 The containing directory is not fsynced, so a sudden power loss can still lose
 the rename; file flushing alone does not guarantee crash durability.
 
+## Review unlisted recovery files
+
+Once history metadata is readable, **Additional recovery files → Review recovery
+files** scans `.manifest/recovery` without changing it. Each unlisted file is
+shown with an eligibility explanation. Manifest accepts recognized recovery
+filenames containing a valid inventory for this project; malformed, foreign,
+unsupported, oversized, linked, and unrecognized files remain untouched.
+Hidden files are skipped. Each review lists at most 100 unlisted entries and
+uses a 50 MB total read budget; the preview reports uninspected files rather than
+silently implying they are invalid or absent.
+The read budget is soft if another process grows a file during the read; actual
+bytes are charged afterward and overflow is not parsed or eligible for adoption.
+
+Choose **Review adding this file**, then **Add recovery point** to register one
+eligible file. Cancel does not write metadata. Confirmation rechecks the primary
+metadata bytes and file inventory/content; changed previews must be reviewed
+again. Registration uses the same history-operation lock and backup gate as
+snapshot operations. It leaves the inventory, Undo/Redo, timeline events, and
+baseline/revert lineage unchanged and never deletes payloads.
+
+Added recovery points have a new identity and an explicit `reconciled` reason.
+Their displayed date is the registration date, not an inferred save date. Original
+save time and operation context remain unknown; old timeline events are not
+reattached by guessing from filenames. These points appear in a separate list
+and use the existing **Recover** confirmation to replace inventory. Recovery
+revalidates project identity; linked added files cannot be applied.
+
+The ten-point automatic retention limit excludes explicitly added points.
+**Remove from list → Confirm removal** unregisters an added point while keeping
+its payload and past recovery events. This also works when its file is missing
+or invalid, allowing future backups to stop referencing an unusable payload.
+Retained files may appear in the next review. There is no file-deletion action.
+History metadata version 2 records the
+new reason; version 1 migrates without changing its existing records. Older
+Manifest versions will refuse the newer history metadata.
+
 ## Verification
 
 Failure tests cover malformed JSON, future versions, invalid structures and
@@ -92,7 +128,8 @@ restore workflow remain separate ownership/recovery work.
 
 The independent Claude consultation agreed with prioritizing preservation
 before archives. Validated metadata backups and explicit restore are now
-implemented; reconciliation of orphaned recovery payloads remains next.
+implemented, along with explicit registration of valid unlisted recovery files.
+Portable project archives and verified restore remain next.
 Read-only investigation with a clearly marked incomplete
 metadata state should be designed alongside repair; silently dropping context
 from exports is not an acceptable fallback.

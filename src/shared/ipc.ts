@@ -25,6 +25,8 @@ import type {
   SnapshotTimeline,
   HistoryBackupStatus,
   HistoryBackupRestoreResult,
+  RecoveryFilePreview,
+  RecoveryPoint,
   ImportMapping,
   ImportInspect,
   ImportPlan,
@@ -85,6 +87,9 @@ export const IPC = {
   SNAPSHOT_TIMELINE:     'snapshot:timeline',
   HISTORY_BACKUP_STATUS: 'history:backupStatus',
   HISTORY_BACKUP_RESTORE: 'history:restoreBackup',
+  RECOVERY_FILES_PREVIEW: 'recovery:filesPreview',
+  RECOVERY_FILES_ADOPT: 'recovery:filesAdopt',
+  RECOVERY_FILES_FORGET: 'recovery:filesForget',
   RECOVERY_APPLY:        'recovery:apply',
   GIT_CHECK:           'git:check',
   REPORT_EXPORT:       'report:export',
@@ -248,6 +253,9 @@ export interface ManifestAPI {
     exportCsv(request: InventoryExportRequest): Promise<Result<{ savedPath: string | null; rowCount: number }>>
   }
   snapshot: {
+    recoveryFilesPreview(): Promise<Result<RecoveryFilePreview>>
+    adoptRecoveryFile(request: { token: string; name: string }): Promise<Result<RecoveryPoint>>
+    forgetRecoveryFile(request: { id: string }): Promise<Result<void>>
     historyBackupStatus(): Promise<Result<HistoryBackupStatus>>
     restoreHistoryBackup(request: { token: string }): Promise<Result<HistoryBackupRestoreResult>>
     create(name: string, description?: string | null): Promise<Result<Snapshot>>
