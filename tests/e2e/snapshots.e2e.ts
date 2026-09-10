@@ -205,6 +205,45 @@ test('exports and reviews a portable archive before restoring a separate project
   await expect(treeRow(appPage, 'Current rack')).toBeVisible()
 })
 
+for (const choice of ['keep-local', 'load-external'] as const) {
+  test(`preserves outside edits and resolves through ${choice}`, async ({ appPage, electronApp, workspaceDir }) => {
+    await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Conflict Lab')
+    await addChildNode(appPage, 'Conflict Lab', 'Local rack')
+    const current = await appPage.evaluate(() => window.api.project.getCurrent())
+    if (!current.ok || !current.data?.path) throw new Error('Missing project')
+    const file = join(current.data.path, 'Manifest.manifestproject')
+    const external = JSON.parse(readFileSync(file, 'utf8'))
+    external.nodes = external.nodes.filter((node: { parentId: string | null }) => node.parentId === null)
+    external.nodes[0].name = 'Outside root'
+    const bytes = JSON.stringify(external)
+    writeFileSync(file, bytes)
+    const banner = appPage.getByTestId('external-document-conflict')
+    await expect(banner).toBeVisible({ timeout: 8000 })
+    expect(readFileSync(file, 'utf8')).toBe(bytes)
+    await banner.getByRole('button', { name: 'Review both versions' }).click()
+    const modal = appPage.getByTestId('external-document-review')
+    await expect(modal).toContainText('Both available versions will be preserved')
+    if (choice === 'keep-local') await modal.screenshot({ path: test.info().outputPath('external-document-review.png') })
+    await modal.getByRole('button', { name: 'Cancel', exact: true }).click()
+    expect(readFileSync(file, 'utf8')).toBe(bytes)
+    await banner.getByRole('button', { name: 'Review both versions' }).click()
+    await modal.getByTestId(`conflict-${choice}`).click()
+    await expect(banner).toHaveCount(0)
+    if (choice === 'keep-local') {
+      await expect(treeRow(appPage, 'Local rack')).toBeVisible()
+      await expect(appPage.getByTestId('project-undo-btn')).toBeEnabled()
+    } else {
+      await expect(treeRow(appPage, 'Outside root')).toBeVisible()
+      await expect(treeRow(appPage, 'Local rack')).toHaveCount(0)
+      await expect(appPage.getByTestId('project-undo-btn')).toBeDisabled()
+    }
+    const recovery = join(current.data.path, '.manifest', 'recovery')
+    const preserved = readdirSync(recovery).map(name => readFileSync(join(recovery, name), 'utf8'))
+    expect(preserved.some(content => content === bytes)).toBe(true)
+    expect(preserved.some(content => content.includes('Local rack'))).toBe(true)
+  })
+}
+
 test('top-bar snapshots button toggles panel open and closed', async ({ appPage, electronApp, workspaceDir }) => {
   const projectName = 'Snapshots Toggle Lab'
 

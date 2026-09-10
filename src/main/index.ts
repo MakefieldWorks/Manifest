@@ -103,7 +103,7 @@ function createWindow(): BrowserWindow {
 
   win.once('ready-to-show', () => win.show())
   configureRendererNavigation(win)
-  win.on('focus', () => notifyWindowFocusChanged(win, true))
+  win.on('focus', () => { projectManager.checkExternalDocument(); notifyWindowFocusChanged(win, true) })
   win.on('blur', () => notifyWindowFocusChanged(win, false))
   win.webContents.on('did-finish-load', () => notifyWindowFocusChanged(win, win.isFocused()))
   win.on('move', () => scheduleWindowStateSave(win))
@@ -254,6 +254,9 @@ nativeTheme.on('updated', () => {
 // ─── IPC handlers ────────────────────────────────────────────────────────────
 
 function registerIpcHandlers(): void {
+  ipcMain.handle(IPC.DOCUMENT_SAVE_STATUS, () => projectManager.documentSaveStatus())
+  ipcMain.handle(IPC.DOCUMENT_CONFLICT_REVIEW, () => projectManager.reviewExternalDocument())
+  ipcMain.handle(IPC.DOCUMENT_CONFLICT_RESOLVE, (_, request: unknown) => projectManager.resolveExternalDocument(request))
 
   ipcMain.handle(IPC.ARCHIVE_EXPORT, async () => {
     try {

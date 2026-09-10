@@ -27,7 +27,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
 import { ProjectArchive } from './project-archive'
-import type { ProjectArchivePreview } from '../shared/types'
+import type { ProjectArchivePreview, ExternalDocumentPreview } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
 import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
 import {
@@ -132,7 +132,7 @@ import {
   type ReportContext,
 } from '../shared/report'
 import type { MergedTree } from '../shared/merged-tree'
-import type { GitService } from './git-service'
+import { SnapshotDocumentChangedError, type GitService } from './git-service'
 import type { Logger } from './logger'
 import { normalizeSearchPage, SearchIndexService } from './search-index'
 import { HistoryIndexService } from './history-index'
@@ -153,6 +153,7 @@ const AUTOSAVE_DEBOUNCE_MS = 2500              // 2.5 seconds
 const MAX_RECOVERY_POINTS = 10                 // cap stored auto-saved recovery points
 
 class HistoryMetadataReadError extends Error {}
+class ExternalDocumentChangedError extends Error {}
 class HistoryBackupProjectChangedError extends Error {}
 
 
@@ -168,6 +169,9 @@ export class ProjectManager {
   private readonly edits = new EditHistory()
   private historyOperationInProgress = false
   private archiveBusy = false
+  private documentVersions = new Map<string, string | null>()
+  private documentSaveError: { path: string; message: string } | null = null
+  private conflictLocalCopy: { path: string; hash: string; file: string } | null = null
   private archivePreview: { path: string; token: string } | null = null
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null
   private backfillStatus: HistoryBackfillStatus = {
@@ -194,6 +198,7 @@ export class ProjectManager {
   async createProject(name: string, parentPath: string): Promise<Result<Project>> {
     if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     const projectPath = join(parentPath, name)
+    if (findProjectDocument(projectPath)) return err(ErrorCode.PROJECT_EXISTS, 'A project already exists in this folder.')
     try {
       mkdirSync(projectPath, { recursive: true })
 
@@ -219,7 +224,8 @@ export class ProjectManager {
         path: projectPath,
       }
 
-      await this.writeManifest(project)
+      const saved = await this.writeManifest(project, { expectedDocumentHash: null })
+      if (!saved.ok) return saved as Result<Project>
       await this.git.initRepo(projectPath)
       await this.git.initialCommit(projectPath)
       const searchResult = this.rebuildSearchIndex(project, 'initialize')
@@ -256,7 +262,8 @@ export class ProjectManager {
         return err(ErrorCode.FILE_TOO_LARGE, `Project file is ${mb}MB (limit: 50MB)`)
       }
 
-      const raw = readFileSync(documentPath, 'utf8')
+      const rawBytes = readFileSync(documentPath)
+      const raw = rawBytes.toString('utf8')
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: any
@@ -285,6 +292,8 @@ export class ProjectManager {
       const warnings = this.collectLoadWarnings(data)
       const projectWarnings = this.collectProjectWarnings(projectPath)
       const project: Project = { ...data, path: projectPath }
+      const canonicalPath = join(projectPath, PROJECT_DOCUMENT_FILE)
+      const openingHash = document.isLegacy ? this.documentHash(canonicalPath) : this.hashDocument(rawBytes)
       if (warnings.length > 0) {
         this.logger.warn('project loaded with warnings', { path: projectPath, count: warnings.length })
       }
@@ -299,7 +308,7 @@ export class ProjectManager {
       // first successful open. Writing the new file atomically comes before
       // removing the old one, so a failed write never risks project data.
       if (data.version !== originalVersion || document.isLegacy) {
-        const persisted = await this.writeManifest(project, { touchModified: false })
+        const persisted = await this.writeManifest(project, { touchModified: false, expectedDocumentHash: openingHash })
         if (!persisted.ok) return persisted as Result<Project>
         if (document.isLegacy) unlinkSync(documentPath)
         this.logger.info('project document migrated', {
@@ -331,7 +340,9 @@ export class ProjectManager {
       const runtimeProject = this.withProjectWarnings(project, projectWarnings)
       this.edits.clear()
       this.currentProject = runtimeProject
+      this.documentSaveError = null
       this.logger.info('project opened', { name: project.name, path: projectPath, nodes: project.nodes.length })
+      if (data.version === originalVersion && !document.isLegacy) this.documentVersions.set(canonicalPath, openingHash)
       this.scheduleHistoryBackfill()
       return ok(this.withLoadWarnings(runtimeProject, warnings))
     } catch (e: unknown) {
@@ -367,6 +378,7 @@ export class ProjectManager {
     this.backfillToken++  // signal any in-flight backfill to exit early
     this.edits.clear()
     this.currentProject = null
+    this.documentSaveError = null
     this.search.close()
     this.history.close()
     this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
@@ -424,6 +436,7 @@ export class ProjectManager {
   private applyEditHistory(direction: 'undo' | 'redo'): Result<Project> {
     const previous = this.currentProject
     if (!previous) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    if (this.documentSaveError && this.documentSaveError.path === previous.path) return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, this.documentSaveError.message)
     if (this.historyOperationInProgress) {
       return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
     }
@@ -447,6 +460,7 @@ export class ProjectManager {
     this.historyOperationInProgress = true
     try {
       // Check before autosave cancellation, git changes, or recovery payload writes.
+      if (this.currentProject?.path) this.assertDocumentUnchanged(this.currentProject.path)
       const history = this.readSnapshotHistory()
       this.historyBeforeOperation = history
       if (this.currentProject?.path && existsSync(this.snapshotHistoryPath(this.currentProject.path))) {
@@ -459,6 +473,7 @@ export class ProjectManager {
       }
       return await operation()
     } catch (e: unknown) {
+      if (e instanceof ExternalDocumentChangedError) return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, e.message)
       if (e instanceof HistoryMetadataReadError) {
         return err(ErrorCode.HISTORY_METADATA_UNAVAILABLE, e.message)
       }
@@ -1584,6 +1599,7 @@ export class ProjectManager {
     this.archiveBusy = true
     this.historyOperationInProgress = true
     try {
+      this.assertDocumentUnchanged(this.currentProject.path)
       this.readSnapshotHistory()
       await this.archiveService().export(this.currentProject.path, this.serializeProjectForPersistence(this.currentProject), destination)
       return ok({ path: destination })
@@ -1858,7 +1874,8 @@ export class ProjectManager {
     }
 
     try {
-      const snapshot = await this.git.createSnapshot(this.currentProject.path!, name)
+      const snapshot = await this.git.createSnapshot(this.currentProject.path!, name,
+        this.documentVersions.get(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE)) ?? undefined)
       const history = structuredClone(this.historyBeforeOperation!)
       const event: SnapshotTimelineEvent = {
         id: uuidv7(),
@@ -1894,6 +1911,10 @@ export class ProjectManager {
         note: snapshotMeta.note,
       })
     } catch (e: unknown) {
+      if (e instanceof SnapshotDocumentChangedError) {
+        try { this.assertDocumentUnchanged(this.currentProject!.path!) } catch { /* Preserve the current inventory and expose conflict status. */ }
+        return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, e.message)
+      }
       const msg = e instanceof Error ? e.message : String(e)
       const code = msg.includes('already exists') ? ErrorCode.VALIDATION_FAILED : ErrorCode.GIT_COMMIT_FAILED
       const message = code === ErrorCode.VALIDATION_FAILED
@@ -2382,9 +2403,7 @@ export class ProjectManager {
         return searchResult as Result<SnapshotRevertResult>
       }
 
-      this.currentProject = restoredProject
-
-      const writeResult = await this.writeManifest(this.currentProject, { touchModified: false })
+      const writeResult = await this.writeManifest(restoredProject, { touchModified: false })
       if (!writeResult.ok) {
         this.currentProject = previousProject
         this.restoreSearchIndex(previousProject)
@@ -2466,9 +2485,7 @@ export class ProjectManager {
         return searchResult as Result<RecoveryPointApplyResult>
       }
 
-      this.currentProject = recoveredProject
-
-      const writeResult = await this.writeManifest(this.currentProject, { touchModified: false })
+      const writeResult = await this.writeManifest(recoveredProject, { touchModified: false })
       if (!writeResult.ok) {
         this.currentProject = previousProject
         this.restoreSearchIndex(previousProject)
@@ -2502,6 +2519,137 @@ export class ProjectManager {
   }
 
   // ─── Autosave ───────────────────────────────────────────────────────────────
+
+  private hashDocument(bytes: Buffer | string): string { return createHash('sha256').update(bytes).digest('hex') }
+
+  private documentBytes(path: string): Buffer | null {
+    try {
+      const stat = lstatSync(path)
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_SIZE_BYTES) throw new Error('The project file is linked, not a regular file, or exceeds 50 MB.')
+      const bytes = readFileSync(path)
+      if (bytes.length > MAX_FILE_SIZE_BYTES) throw new Error('The project file exceeds 50 MB.')
+      return bytes
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    }
+  }
+
+  private documentHash(path: string): string | null {
+    const bytes = this.documentBytes(path)
+    return bytes === null ? null : this.hashDocument(bytes)
+  }
+
+  private assertDocumentUnchanged(projectPath: string, expected?: string | null): void {
+    const path = join(projectPath, PROJECT_DOCUMENT_FILE)
+    const baseline = expected === undefined ? this.documentVersions.get(path) ?? null : expected
+    try {
+      if (this.documentHash(path) === baseline) return
+    } catch { /* An unreadable file must never be replaced blindly. */ }
+    let message = 'The project file changed outside Manifest or is no longer readable. Saving is paused. Review both versions before continuing.'
+    if (this.currentProject?.path === projectPath) {
+      try {
+        const local = this.serializeProjectForPersistence(this.currentProject)
+        const hash = this.hashDocument(local)
+        if (this.conflictLocalCopy?.path !== projectPath || this.conflictLocalCopy.hash !== hash ||
+            this.documentHash(this.conflictLocalCopy.file) !== hash) {
+          const directory = this.conflictRecoveryDirectory(projectPath)
+          const file = join(directory, `recovery-${uuidv7()}-local.manifest.json`)
+          writeHistoryFile(file, local)
+          this.conflictLocalCopy = { path: projectPath, hash, file }
+        }
+        message += ` Your current inventory is preserved at ${this.conflictLocalCopy.file}.`
+      } catch (error) { message += ` Could not preserve a local copy: ${String(error)}. Keep this project open until resolved.` }
+    }
+    this.documentSaveError = { path: projectPath, message }
+    throw new ExternalDocumentChangedError(message)
+  }
+
+  private conflictRecoveryDirectory(projectPath: string): string {
+    if (!existsSync(projectPath) || !lstatSync(projectPath).isDirectory() || lstatSync(projectPath).isSymbolicLink()) throw new Error('The project folder is missing, moved, or linked. Restore its original location before continuing.')
+    const metadata = join(projectPath, '.manifest')
+    const recovery = join(metadata, 'recovery')
+    for (const path of [metadata, recovery]) {
+      if (existsSync(path) && (!lstatSync(path).isDirectory() || lstatSync(path).isSymbolicLink())) throw new Error('Recovery copies require regular local directories.')
+    }
+    mkdirSync(recovery, { recursive: true })
+    return recovery
+  }
+
+  checkExternalDocument(): void {
+    if (!this.currentProject?.path || this.archiveBusy || this.historyOperationInProgress) return
+    try { this.assertDocumentUnchanged(this.currentProject.path); this.documentSaveError = null } catch { /* Status carries the error to the renderer. */ }
+  }
+
+  documentSaveStatus(): Result<{ message: string | null }> {
+    return ok({ message: this.documentSaveError?.path === this.currentProject?.path ? this.documentSaveError?.message ?? null : null })
+  }
+
+  private externalDocumentCandidate() {
+    const project = this.currentProject
+    if (!project?.path) throw new Error('No project is currently open')
+    const path = join(project.path, PROJECT_DOCUMENT_FILE)
+    const bytes = this.documentBytes(path)
+    const externalHash = bytes === null ? null : this.hashDocument(bytes)
+    if (externalHash === this.documentVersions.get(path)) throw new Error('The project file no longer differs from the last saved version. Try saving again.')
+    const local = this.serializeProjectForPersistence(project)
+    const parsed = bytes === null ? null : this.parseManifestJson(bytes.toString('utf8'))
+    const external = parsed?.ok && parsed.data.id === project.id ? parsed.data : null
+    const token = this.hashDocument(JSON.stringify([project.path, project.id, this.documentVersions.get(path), externalHash, this.hashDocument(local)]))
+    const description = bytes === null ? 'The project file is missing.' : !parsed?.ok ? 'The external file is not a supported valid project.' : !external ? 'The external file belongs to another project.' : 'The external inventory is valid for this project.'
+    return { project, bytes, externalHash, local, external, token, description }
+  }
+
+  reviewExternalDocument(): Result<ExternalDocumentPreview> {
+    try {
+      const candidate = this.externalDocumentCandidate()
+      return ok({ token: candidate.token, localNodeCount: candidate.project.nodes.length,
+        externalNodeCount: candidate.external?.nodes.length ?? null, canLoadExternal: candidate.external !== null,
+        externalDescription: candidate.description })
+    } catch (error) { return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, String(error)) }
+  }
+
+  async resolveExternalDocument(request: unknown): Promise<Result<Project>> {
+    if (this.historyOperationInProgress || this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current operation to finish.')
+    if (!request || typeof request !== 'object' || !('token' in request) || typeof request.token !== 'string' ||
+        !('choice' in request) || (request.choice !== 'keep-local' && request.choice !== 'load-external')) return err(ErrorCode.VALIDATION_FAILED, 'Review both versions before choosing one.')
+    this.historyOperationInProgress = true
+    try {
+      const candidate = this.externalDocumentCandidate()
+      if (request.token !== candidate.token) return err(ErrorCode.VALIDATION_FAILED, 'The versions changed. Review them again.')
+      if (request.choice === 'load-external' && !candidate.external) return err(ErrorCode.VALIDATION_FAILED, 'The external file cannot be loaded.')
+      const path = candidate.project.path!
+      const recovery = this.conflictRecoveryDirectory(path)
+      const history = request.choice === 'load-external' ? this.readSnapshotHistory() : null
+      this.historyBeforeOperation = history
+      if (history && existsSync(this.snapshotHistoryPath(path))) new HistoryBackupStore(path, candidate.project.id).save(history)
+      const id = uuidv7()
+      writeHistoryFile(join(recovery, `recovery-${id}-local.manifest.json`), candidate.local)
+      if (candidate.bytes !== null) writeHistoryFile(join(recovery, `recovery-${id}-external.manifest.json`), candidate.bytes)
+      // Copy both versions first, then recheck external bytes immediately
+      // before any replacement or in-memory transition.
+      this.assertDocumentUnchanged(path, candidate.externalHash)
+      if (request.choice === 'keep-local') {
+        const saved = await this.writeManifest(candidate.project, { expectedDocumentHash: candidate.externalHash })
+        if (!saved.ok) return saved as Result<Project>
+      } else {
+        const next = this.withProjectWarnings({ ...candidate.external!, path }, this.collectProjectWarnings(path))
+        const indexed = this.rebuildSearchIndex(next, 'rebuild')
+        if (!indexed.ok) return indexed as Result<Project>
+        try {
+          this.writeSnapshotHistory({ ...history!, currentBaseSnapshotId: null, pendingRevertEventId: null })
+        } catch (error) { this.restoreSearchIndex(candidate.project); throw error }
+        this.cancelAutosave()
+        this.currentProject = next
+        this.edits.clear()
+        this.documentVersions.set(join(path, PROJECT_DOCUMENT_FILE), candidate.externalHash)
+      }
+      this.documentSaveError = null
+      return ok(request.choice === 'load-external' ? this.withLoadWarnings(this.currentProject!, this.collectLoadWarnings(candidate.external!)) : this.currentProject!)
+    } catch (error) {
+      return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, `Could not resolve external change: ${error instanceof Error ? error.message : String(error)}`)
+    } finally { this.historyOperationInProgress = false; this.historyBeforeOperation = null }
+  }
 
   private async flushPendingAutosave(): Promise<Result<void>> {
     this.cancelAutosave()
@@ -2560,6 +2708,7 @@ export class ProjectManager {
     if (!previousProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
     }
+    if (this.documentSaveError?.path === previousProject.path) return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, this.documentSaveError.message)
 
     if (this.historyOperationInProgress) {
       return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
@@ -3076,32 +3225,40 @@ export class ProjectManager {
   // Atomic write: tmp then rename.
   private async writeManifest(
     project: Project,
-    options: { touchModified?: boolean } = {}
+    options: { touchModified?: boolean; expectedDocumentHash?: string | null } = {}
   ): Promise<Result<void>> {
     if (!project.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'Project has no path — cannot save')
     }
     const documentPath = join(project.path, PROJECT_DOCUMENT_FILE)
-    const tmpPath = `${documentPath}.tmp`
+    const tmpPath = `${documentPath}.${uuidv7()}.tmp`
     const touchModified = options.touchModified ?? true
     try {
+      this.assertDocumentUnchanged(project.path, options.expectedDocumentHash)
       const persistedProject = {
         ...project,
         modified: touchModified ? new Date().toISOString() : project.modified,
       }
       const { path: _path, loadWarnings: _warnings, projectWarnings: _projectWarnings, ...persistable } = persistedProject
-      writeFileSync(tmpPath, JSON.stringify(persistable, null, 2), 'utf8')
+      const serialized = JSON.stringify(persistable, null, 2)
+      writeFileSync(tmpPath, serialized, 'utf8')
+      this.assertDocumentUnchanged(project.path, options.expectedDocumentHash)
       renameSync(tmpPath, documentPath)
+      this.documentVersions.set(documentPath, this.hashDocument(serialized))
+      this.documentSaveError = null
       if (this.currentProject?.path === project.path && this.currentProject.id === project.id) {
         this.currentProject = persistedProject
       }
       this.logger.debug('project saved', { path: project.path })
       return ok(undefined as void)
     } catch (e: unknown) {
+      if (e instanceof ExternalDocumentChangedError) {
+        return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, e.message)
+      }
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.error('project save failed', { path: project.path, error: msg })
       return err(ErrorCode.AUTOSAVE_WRITE_FAILED, `Failed to save project: ${msg}`)
-    }
+    } finally { try { unlinkSync(tmpPath) } catch { /* Only remove our temporary file. */ } }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

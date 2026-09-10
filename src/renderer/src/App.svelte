@@ -3,6 +3,8 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte'
   import ProjectArchive from './components/ProjectArchive.svelte'
+  import ExternalDocumentConflict from './components/ExternalDocumentConflict.svelte'
+  let externalDocumentConflict = $state(false)
   let archiveOpen = $state(false)
   import type { EditHistoryState, Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, ReferenceBlocker, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
   import { isUsableTemplate, templateLabel } from '../../shared/validation'
@@ -329,10 +331,11 @@
   // Each of those operations mutates currentProject in main; interleaving a renderer
   // mutation can leave the project in a half-restored state.
   const editingLocked = $derived(
-    undoRedoBusy || snapshotCreating || compareMode || snapshotRestoringName !== null || recoveryApplyingId !== null
+    externalDocumentConflict || undoRedoBusy || snapshotCreating || compareMode || snapshotRestoringName !== null || recoveryApplyingId !== null
   )
 
   function lockReason(): string {
+    if (externalDocumentConflict) return 'Resolve the external project change before editing.'
     if (compareMode) return 'Exit compare to edit the current project.'
     if (snapshotRestoringName) return 'Wait for revert to finish before editing.'
     if (recoveryApplyingId) return 'Wait for recovery to finish before editing.'
@@ -2008,6 +2011,14 @@
     </div>
 
     <!-- Project-level warnings banner (non-blocking; environmental risk) -->
+    {#key project.path}
+      <ExternalDocumentConflict onStatus={(conflicted) => { externalDocumentConflict = conflicted }} onResolved={async (next, loadedExternal) => {
+        if (loadedExternal) { resetOpenProjectUi(); applyOpenedProject(next); workingCopyDirty = true }
+        else project = next
+        await refreshSnapshots()
+        showToast('Versions preserved in additional recovery files. Saving can continue.')
+      }} />
+    {/key}
     {#if showProjectWarnings}
       <div
         class="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900"
