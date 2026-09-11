@@ -2,6 +2,8 @@
 
 ## Completed
 
+- Preserve durable evidence for interrupted snapshot/revert/recovery operations; pause writes on reopen and explicitly continue with preserved inventories and cleared lineage assumptions. **Implemented:** 2026-09-10
+
 - Detect and preserve external project-file edits before saves/history operations, preserve local conflict copies, and review both versions before keeping current or loading external inventory. **Implemented:** 2026-09-10
 
 - Portable project archives with current inventory, Git snapshots, history/recovery sidecars, verified export and restore to a separate folder, stale-review protection, and rebuilt indexes. **Implemented:** 2026-09-10

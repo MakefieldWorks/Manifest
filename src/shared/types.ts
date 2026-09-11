@@ -392,6 +392,15 @@ export interface ExternalDocumentPreview {
   canLoadExternal: boolean
 }
 
+export interface InterruptedHistoryPreview {
+  token: string
+  label: string
+  startedAt: string
+  beforeNodeCount: number
+  currentNodeCount: number
+  recoveryPath: string
+}
+
 // Per-node history entry. One entry per transition (creation, change,
 // deletion, revert that changed this node, recover that changed this node).
 // Snapshots where the node did NOT change emit no entry — delta-encoded.

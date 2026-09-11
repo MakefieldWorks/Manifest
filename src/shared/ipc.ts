@@ -28,6 +28,7 @@ import type {
   RecoveryFilePreview,
   ProjectArchivePreview,
   ExternalDocumentPreview,
+  InterruptedHistoryPreview,
   RecoveryPoint,
   ImportMapping,
   ImportInspect,
@@ -49,6 +50,9 @@ import type { InventoryExportRequest, InventoryTablePage, InventoryTableRequest 
 
 // Channel name constants — use these everywhere, never raw strings.
 export const IPC = {
+  HISTORY_OPERATION_STATUS: 'historyOperation:status',
+  HISTORY_OPERATION_REVIEW: 'historyOperation:review',
+  HISTORY_OPERATION_ACKNOWLEDGE: 'historyOperation:acknowledge',
   DOCUMENT_SAVE_STATUS: 'project:saveStatus',
   DOCUMENT_CONFLICT_REVIEW: 'project:reviewExternalChange',
   DOCUMENT_CONFLICT_RESOLVE: 'project:resolveExternalChange',
@@ -171,6 +175,11 @@ export type FolderDialogPurpose = 'open-project' | 'create-project'
 // after each mutation. The renderer replaces its local store entirely, which
 // eliminates any possibility of partial-sync bugs.
 export interface ManifestAPI {
+  historyOperation: {
+    status(): Promise<Result<{ pending: boolean }>>
+    review(): Promise<Result<InterruptedHistoryPreview>>
+    acknowledge(request: { token: string }): Promise<Result<Project>>
+  }
   documentConflict: {
     status(): Promise<Result<{ message: string | null }>>
     review(): Promise<Result<ExternalDocumentPreview>>
