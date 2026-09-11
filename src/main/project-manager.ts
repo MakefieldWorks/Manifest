@@ -493,7 +493,10 @@ export class ProjectManager {
       if (e instanceof HistoryMetadataReadError) {
         return err(ErrorCode.HISTORY_METADATA_UNAVAILABLE, e.message)
       }
-      return err(ErrorCode.HISTORY_OPERATION_PENDING, `History operation could not finish: ${String(e)}. Review any pending operation before continuing.`)
+      const message = e instanceof Error ? e.message : String(e)
+      return this.hasInterruptedHistory()
+        ? err(ErrorCode.HISTORY_OPERATION_PENDING, `History operation could not finish: ${message}. Review the pending operation before continuing.`)
+        : err(ErrorCode.HISTORY_OPERATION_FAILED, `History operation stopped before any journaled change: ${message}`)
     }
     finally {
       this.historyOperationInProgress = false

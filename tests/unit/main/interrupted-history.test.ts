@@ -43,6 +43,16 @@ describe('interrupted history operations', () => {
     expect(readdirSync(store.recoveryPath)).toEqual([])
   })
 
+  it('reports a pre-journal failure without offering an unfinished operation', async () => {
+    vi.spyOn(git, 'listSnapshots').mockRejectedValueOnce(new Error('Injected list failure'))
+    expect(await manager.snapshotCreate('not-started')).toMatchObject({
+      ok: false,
+      error: { code: 'HISTORY_OPERATION_FAILED', message: expect.stringContaining('before any journaled change') },
+    })
+    expect(store.pending()).toBe(false)
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: false } })
+  })
+
   it('rejects save, close, and project switches while a journaled operation is in flight', async () => {
     let release!: () => void
     let entered!: () => void
