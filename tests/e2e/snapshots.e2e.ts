@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
 import { CURRENT_PROJECT_REF } from '../../src/shared/snapshot-ref'
+import { HistoryOperationStore } from '../../src/main/history-operation'
 
 import type { ElectronApplication, Page } from '@playwright/test'
 
@@ -203,6 +204,38 @@ test('exports and reviews a portable archive before restoring a separate project
   expect(current.ok && current.data?.path).not.toBe(join(workspaceDir, restored[0]))
   await modal.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(treeRow(appPage, 'Current rack')).toBeVisible()
+})
+
+test('reviews unfinished history, preserves evidence on cancel, and explicitly resumes editing', async ({ appPage, electronApp, workspaceDir }) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Interrupted Lab')
+  await addChildNode(appPage, 'Interrupted Lab', 'Preserved rack')
+  const current = await appPage.evaluate(async () => {
+    await window.api.project.save()
+    return window.api.project.getCurrent()
+  })
+  if (!current.ok || !current.data?.path) throw new Error('Missing project')
+  const path = current.data.path
+  const file = join(path, 'Manifest.manifestproject')
+  const store = new HistoryOperationStore(path, current.data.id)
+  // Simulate the durable boundary immediately before an interrupted operation.
+  store.begin('Create snapshot: interrupted', readFileSync(file, 'utf8'), JSON.stringify({ version: 1, events: [], snapshots: {}, recoveryPoints: [], currentBaseSnapshotId: null, pendingRevertEventId: null }))
+  const banner = appPage.getByTestId('interrupted-history')
+  await expect(banner).toBeVisible()
+  await banner.getByRole('button', { name: 'Review unfinished operation' }).click()
+  const modal = appPage.getByTestId('interrupted-history-review')
+  await expect(modal).toContainText('Create snapshot: interrupted')
+  await modal.screenshot({ path: test.info().outputPath('interrupted-history-review.png') })
+  await modal.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(store.pending()).toBe(true)
+  await banner.getByRole('button', { name: 'Review unfinished operation' }).click()
+  await modal.getByRole('button', { name: 'Continue with current inventory' }).click()
+  await expect(banner).toHaveCount(0)
+  expect(store.pending()).toBe(false)
+  await expect(treeRow(appPage, 'Preserved rack')).toBeVisible()
+  await expect(appPage.getByTestId('project-undo-btn')).toBeDisabled()
+  expect(readdirSync(store.recoveryPath).some(name => name.endsWith('-before.manifest.json'))).toBe(true)
+  await addChildNode(appPage, 'Interrupted Lab', 'Resumed rack')
+  await expect(treeRow(appPage, 'Resumed rack')).toBeVisible()
 })
 
 for (const choice of ['keep-local', 'load-external'] as const) {

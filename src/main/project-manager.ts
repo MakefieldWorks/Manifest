@@ -27,7 +27,8 @@ import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
 import { ProjectArchive } from './project-archive'
-import type { ProjectArchivePreview, ExternalDocumentPreview } from '../shared/types'
+import { HistoryOperationStore } from './history-operation'
+import type { ProjectArchivePreview, ExternalDocumentPreview, InterruptedHistoryPreview } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
 import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
 import {
@@ -196,6 +197,7 @@ export class ProjectManager {
   // Create a new project at parentPath/name.
   // Auto-creates the root node and initialises git.
   async createProject(name: string, parentPath: string): Promise<Result<Project>> {
+    if (this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the history operation to finish before switching projects.')
     if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     const projectPath = join(parentPath, name)
     if (findProjectDocument(projectPath)) return err(ErrorCode.PROJECT_EXISTS, 'A project already exists in this folder.')
@@ -250,6 +252,7 @@ export class ProjectManager {
   // Reads the dedicated project document (or a legacy manifest.json), validates,
   // migrates, and rebuilds search index.
   async openProject(projectPath: string): Promise<Result<Project>> {
+    if (this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the history operation to finish before switching projects.')
     if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     const document = findProjectDocument(projectPath)
     if (!document) {
@@ -308,7 +311,7 @@ export class ProjectManager {
       // Migrate legacy manifest.json projects to the dedicated document name on
       // first successful open. Writing the new file atomically comes before
       // removing the old one, so a failed write never risks project data.
-      if (data.version !== originalVersion || document.isLegacy) {
+      if ((data.version !== originalVersion || document.isLegacy) && !new HistoryOperationStore(projectPath, project.id).pending()) {
         const persisted = await this.writeManifest(project, { touchModified: false, expectedDocumentHash: openingHash })
         if (!persisted.ok) return persisted as Result<Project>
         if (document.isLegacy) unlinkSync(documentPath)
@@ -343,7 +346,7 @@ export class ProjectManager {
       this.currentProject = runtimeProject
       this.documentSaveError = null
       this.logger.info('project opened', { name: project.name, path: projectPath, nodes: project.nodes.length })
-      if (data.version === originalVersion && !document.isLegacy) this.documentVersions.set(canonicalPath, openingHash)
+      if ((data.version === originalVersion && !document.isLegacy) || new HistoryOperationStore(projectPath, project.id).pending()) this.documentVersions.set(canonicalPath, openingHash)
       this.retainCurrentDocumentVersion()
       this.scheduleHistoryBackfill()
       return ok(this.withLoadWarnings(runtimeProject, warnings))
@@ -357,6 +360,7 @@ export class ProjectManager {
   // Explicit save: called by autosave debounce and snapshot flush.
   // Uses atomic write (tmp → rename).
   async saveProject(): Promise<Result<void>> {
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
     if (!this.currentProject) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
@@ -367,6 +371,7 @@ export class ProjectManager {
   // save succeeds. Callers that intentionally discard after a failed save must
   // use discardCurrentProject() so final-save failures are never silent.
   async flushAndClose(): Promise<Result<void>> {
+    if (this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the history operation to finish before closing the project.')
     if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     this.cancelAutosave()
     const result = await this.saveProject()
@@ -438,6 +443,7 @@ export class ProjectManager {
   redo(): Result<Project> { return this.applyEditHistory('redo') }
 
   private applyEditHistory(direction: 'undo' | 'redo'): Result<Project> {
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
     const previous = this.currentProject
     if (!previous) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
     if (this.documentSaveError && this.documentSaveError.path === previous.path) return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, this.documentSaveError.message)
@@ -458,6 +464,7 @@ export class ProjectManager {
   }
 
   private async withHistoryOperation<T>(operation: () => Promise<Result<T>>): Promise<Result<T>> {
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
     if (this.historyOperationInProgress) {
       return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
     }
@@ -475,13 +482,18 @@ export class ProjectManager {
           return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not protect history before the operation: ${error instanceof Error ? error.message : String(error)}`)
         }
       }
-      return await operation()
+      const result = await operation()
+      if (result.ok && this.hasInterruptedHistory()) {
+        try { this.operationStore()!.finish() }
+        catch (error) { this.logger.warn('history operation committed; evidence cleanup needs review', { error: String(error) }) }
+      }
+      return result
     } catch (e: unknown) {
       if (e instanceof ExternalDocumentChangedError) return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, e.message)
       if (e instanceof HistoryMetadataReadError) {
         return err(ErrorCode.HISTORY_METADATA_UNAVAILABLE, e.message)
       }
-      throw e
+      return err(ErrorCode.HISTORY_OPERATION_PENDING, `History operation could not finish: ${String(e)}. Review any pending operation before continuing.`)
     }
     finally {
       this.historyOperationInProgress = false
@@ -1594,6 +1606,7 @@ export class ProjectManager {
   }
 
   async exportProjectArchive(destination: string): Promise<Result<{ path: string }>> {
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
     if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     if (this.archiveBusy || this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current history or archive operation to finish.')
     try {
@@ -1872,8 +1885,14 @@ export class ProjectManager {
     }
     const note = typeof description === 'string' ? description.trim() || null : null
 
+    if ((await this.git.listSnapshots(this.currentProject.path!)).some(snapshot => snapshot.name === name)) {
+      return err(ErrorCode.VALIDATION_FAILED, `Snapshot "${name}" already exists`)
+    }
+    this.beginHistoryOperation(`Create snapshot: ${name}`)
+
     const flushResult = await this.flushPendingAutosave()
     if (!flushResult.ok) {
+      this.abortHistoryOperation()
       return flushResult as Result<Snapshot>
     }
 
@@ -2400,10 +2419,13 @@ export class ProjectManager {
         path: previousProject.path,
       }
 
+      this.beginHistoryOperation(`Revert to snapshot: ${name}`)
       const safetyRecoveryPoint = await this.createSafetyRecoveryPointIfNeeded(previousProject)
 
       const searchResult = this.rebuildSearchIndex(restoredProject, 'rebuild')
       if (!searchResult.ok) {
+        this.restoreSearchIndex(previousProject)
+        this.abortHistoryOperation()
         return searchResult as Result<SnapshotRevertResult>
       }
 
@@ -2411,6 +2433,7 @@ export class ProjectManager {
       if (!writeResult.ok) {
         this.currentProject = previousProject
         this.restoreSearchIndex(previousProject)
+        this.abortHistoryOperation()
         return writeResult as Result<SnapshotRevertResult>
       }
       this.edits.clear()
@@ -2482,10 +2505,13 @@ export class ProjectManager {
         path: previousProject.path,
       }
 
+      this.beginHistoryOperation(`Apply recovery: ${request.id}`)
       const safetyRecoveryPoint = await this.createSafetyRecoveryPointIfNeeded(previousProject)
 
       const searchResult = this.rebuildSearchIndex(recoveredProject, 'rebuild')
       if (!searchResult.ok) {
+        this.restoreSearchIndex(previousProject)
+        this.abortHistoryOperation()
         return searchResult as Result<RecoveryPointApplyResult>
       }
 
@@ -2493,6 +2519,7 @@ export class ProjectManager {
       if (!writeResult.ok) {
         this.currentProject = previousProject
         this.restoreSearchIndex(previousProject)
+        this.abortHistoryOperation()
         return writeResult as Result<RecoveryPointApplyResult>
       }
       this.edits.clear()
@@ -2523,6 +2550,85 @@ export class ProjectManager {
   }
 
   // ─── Autosave ───────────────────────────────────────────────────────────────
+
+  private operationStore(): HistoryOperationStore | null {
+    return this.currentProject?.path ? new HistoryOperationStore(this.currentProject.path, this.currentProject.id) : null
+  }
+
+  private hasInterruptedHistory(): boolean { return this.operationStore()?.pending() ?? false }
+
+  private interruptedHistoryError<T>(): Result<T> {
+    return err(ErrorCode.HISTORY_OPERATION_PENDING, 'An unfinished history operation needs review. Saving and editing are paused; the pre-operation inventory is preserved.')
+  }
+
+  interruptedHistoryStatus(): Result<{ pending: boolean }> {
+    return ok({ pending: !this.historyOperationInProgress && this.hasInterruptedHistory() })
+  }
+
+  private beginHistoryOperation(label: string): void {
+    const store = this.operationStore()
+    if (!store || !this.currentProject) throw new Error('No project open')
+    store.begin(label, this.serializeProjectForPersistence(this.currentProject), JSON.stringify(this.historyBeforeOperation ?? this.readSnapshotHistory(), null, 2))
+    this.backfillToken++
+    this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
+  }
+
+  private abortHistoryOperation(): void {
+    try { this.operationStore()!.finish() }
+    catch (error) { this.logger.warn('rolled-back history operation evidence needs review', { error: String(error) }) }
+    if (!this.hasInterruptedHistory() && !this.documentSaveError) this.scheduleAutosave()
+  }
+
+  private interruptedHistoryCandidate() {
+    const store = this.operationStore()
+    if (!store || !this.currentProject) throw new Error('No project open')
+    const evidence = store.candidate()
+    const before = this.parseManifestJson(evidence.inventory.toString('utf8'))
+    if (!before.ok || before.data.id !== this.currentProject.id) throw new Error('The preserved inventory is invalid or belongs to another project.')
+    migrateSnapshotHistory(JSON.parse(evidence.history.toString('utf8')))
+    const history = this.readSnapshotHistory()
+    const current = this.serializeProjectForPersistence(this.currentProject)
+    const disk = this.documentBytes(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE))
+    if (!disk) throw new Error('Restore or resolve the missing project document before continuing.')
+    const token = store.fingerprint(evidence.bytes, evidence.inventory, evidence.history, JSON.stringify(history), current, disk)
+    return { store, evidence, before: before.data, history, current, token }
+  }
+
+  reviewInterruptedHistory(): Result<InterruptedHistoryPreview> {
+    if (this.historyOperationInProgress || this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current operation to finish.')
+    try {
+      const candidate = this.interruptedHistoryCandidate()
+      return ok({ token: candidate.token, label: candidate.evidence.record.label, startedAt: candidate.evidence.record.startedAt,
+        beforeNodeCount: candidate.before.nodes.length, currentNodeCount: this.currentProject!.nodes.length,
+        recoveryPath: join(candidate.store.recoveryPath, candidate.evidence.record.inventoryFile) })
+    } catch (error) { return err(ErrorCode.HISTORY_OPERATION_PENDING, `Could not review unfinished history: ${String(error)}. Preserve ${this.operationStore()?.pendingPath} and its recovery files for manual recovery; restore readable history metadata if necessary.`) }
+  }
+
+  async acknowledgeInterruptedHistory(request: unknown): Promise<Result<Project>> {
+    if (this.historyOperationInProgress || this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current operation to finish.')
+    if (!request || typeof request !== 'object' || !('token' in request) || typeof request.token !== 'string') return err(ErrorCode.VALIDATION_FAILED, 'Review the unfinished operation first.')
+    this.historyOperationInProgress = true
+    try {
+      const candidate = this.interruptedHistoryCandidate()
+      if (candidate.token !== request.token) return err(ErrorCode.VALIDATION_FAILED, 'The project or evidence changed. Review the unfinished operation again.')
+      this.assertDocumentUnchanged(this.currentProject!.path!)
+      const id = uuidv7()
+      writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued.manifest.json`), candidate.current)
+      writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued-history.json`), JSON.stringify(candidate.history, null, 2))
+      // No Git replay and no invented timeline event. Preserve the current
+      // inventory and relinquish lineage assumptions that may be incomplete.
+      const saved = await this.writeManifest(this.currentProject!)
+      if (!saved.ok) return saved as Result<Project>
+      this.historyBeforeOperation = candidate.history
+      this.writeSnapshotHistory({ ...candidate.history, currentBaseSnapshotId: null, pendingRevertEventId: null }, { deleteRemovedPayloads: false })
+      candidate.store.finish(true)
+      this.cancelAutosave()
+      this.edits.clear()
+      this.scheduleHistoryBackfill()
+      return ok(this.currentProject!)
+    } catch (error) { return err(ErrorCode.HISTORY_OPERATION_PENDING, `Could not continue after interrupted history: ${String(error)}`) }
+    finally { this.historyOperationInProgress = false; this.historyBeforeOperation = null }
+  }
 
   private hashDocument(bytes: Buffer | string): string { return createHash('sha256').update(bytes).digest('hex') }
 
@@ -2665,7 +2771,8 @@ export class ProjectManager {
 
   private async flushPendingAutosave(): Promise<Result<void>> {
     this.cancelAutosave()
-    return this.saveProject()
+    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    return this.writeManifest(this.currentProject)
   }
 
   private scheduleAutosave(): void {
@@ -2716,6 +2823,7 @@ export class ProjectManager {
     label: string,
     syncSearch: () => void
   ): Result<Project> {
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
     const previousProject = this.currentProject
     if (!previousProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
@@ -2826,6 +2934,7 @@ export class ProjectManager {
   // promise is returned. This lets nodeHistory and openProject both trigger
   // safely without coordinating.
   private scheduleHistoryBackfill(): void {
+    if (this.hasInterruptedHistory()) return
     if (this.backfillStatus.inProgress) return
     // Flip the flag synchronously so concurrent status queries don't see
     // a transient false-idle while runHistoryBackfill is still in its

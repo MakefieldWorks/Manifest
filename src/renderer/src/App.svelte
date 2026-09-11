@@ -4,6 +4,8 @@
   import { onMount, onDestroy, tick } from 'svelte'
   import ProjectArchive from './components/ProjectArchive.svelte'
   import ExternalDocumentConflict from './components/ExternalDocumentConflict.svelte'
+  import InterruptedHistory from './components/InterruptedHistory.svelte'
+  let interruptedHistory = $state(false)
   let externalDocumentConflict = $state(false)
   let archiveOpen = $state(false)
   import type { EditHistoryState, Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, ReferenceBlocker, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
@@ -331,10 +333,11 @@
   // Each of those operations mutates currentProject in main; interleaving a renderer
   // mutation can leave the project in a half-restored state.
   const editingLocked = $derived(
-    externalDocumentConflict || undoRedoBusy || snapshotCreating || compareMode || snapshotRestoringName !== null || recoveryApplyingId !== null
+    interruptedHistory || externalDocumentConflict || undoRedoBusy || snapshotCreating || compareMode || snapshotRestoringName !== null || recoveryApplyingId !== null
   )
 
   function lockReason(): string {
+    if (interruptedHistory) return 'Review the unfinished history operation before editing.'
     if (externalDocumentConflict) return 'Resolve the external project change before editing.'
     if (compareMode) return 'Exit compare to edit the current project.'
     if (snapshotRestoringName) return 'Wait for revert to finish before editing.'
@@ -2012,6 +2015,11 @@
 
     <!-- Project-level warnings banner (non-blocking; environmental risk) -->
     {#key project.path}
+      <InterruptedHistory onStatus={(pending) => { interruptedHistory = pending }} onResolved={async (next) => {
+        resetOpenProjectUi(); applyOpenedProject(next); workingCopyDirty = true
+        await refreshSnapshots()
+        showToast('Earlier and current inventories preserved. Saving can continue.')
+      }} />
       <ExternalDocumentConflict onStatus={(conflicted) => { externalDocumentConflict = conflicted }} onResolved={async (next, loadedExternal) => {
         if (loadedExternal) { resetOpenProjectUi(); applyOpenedProject(next); workingCopyDirty = true }
         else project = next

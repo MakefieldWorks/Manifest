@@ -30,6 +30,7 @@ Manifest is a local-first desktop app for managing structured, hierarchical proj
 | [HISTORY_PRESERVATION.md](HISTORY_PRESERVATION.md) | History preservation, automatic metadata backup, and explicit restore |
 | [PROJECT_ARCHIVES.md](PROJECT_ARCHIVES.md) | Portable archives, verified restore, included history, and format limits |
 | [EXTERNAL_DOCUMENT_CHANGES.md](EXTERNAL_DOCUMENT_CHANGES.md) | External-edit detection, preserved versions, and conflict resolution |
+| [INTERRUPTED_HISTORY.md](INTERRUPTED_HISTORY.md) | Durable evidence and explicit continuation after interrupted history operations |
 
 ---
 

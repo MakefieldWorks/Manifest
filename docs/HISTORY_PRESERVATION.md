@@ -122,9 +122,11 @@ usable again. Electron coverage exercises the visible error and repair flow.
 
 This safeguard addresses metadata that is already unreadable when an operation
 starts. It does not make the current document, Git commits, and history metadata
-one crash-atomic transaction. Interrupted history writes, recovery retention
-ordering, external modification conflicts, and a verified portable archive and
-restore workflow remain separate ownership/recovery work.
+one crash-atomic transaction. Snapshot/revert/recovery interruptions now have
+[durable evidence and explicit continuation](INTERRUPTED_HISTORY.md). Automatic
+completion or rollback and interruption protection for remaining metadata-only
+operations remain separate work. External modification conflicts now have
+[preservation and explicit resolution](EXTERNAL_DOCUMENT_CHANGES.md).
 
 The independent Claude consultation agreed with prioritizing preservation
 before archives. Validated metadata backups and explicit restore are now
