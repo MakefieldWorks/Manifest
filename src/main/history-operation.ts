@@ -4,8 +4,7 @@ import { createHash, randomUUID } from 'crypto'
 import { writeHistoryFile } from './history-backup'
 
 const LIMIT = 50 * 1024 * 1024
-export interface PendingHistoryOperation {
-  version: 1
+interface PendingHistoryOperationBase {
   id: string
   projectId: string
   label: string
@@ -15,6 +14,25 @@ export interface PendingHistoryOperation {
   inventoryHash: string
   historyHash: string
 }
+
+export interface PendingHistoryOperationV1 extends PendingHistoryOperationBase {
+  version: 1
+}
+
+export type HistoryOperationKind = 'snapshot-create' | 'snapshot-revert' | 'recovery-apply'
+
+export interface HistoryOperationIntent {
+  kind: HistoryOperationKind
+  eventId: string
+  targetId: string
+  expectedDocumentHash: string
+}
+
+export interface PendingHistoryOperationV2 extends PendingHistoryOperationBase, HistoryOperationIntent {
+  version: 2
+}
+
+export type PendingHistoryOperation = PendingHistoryOperationV1 | PendingHistoryOperationV2
 
 /** Durable evidence, not a transaction or a request to replay Git commands. */
 export class HistoryOperationStore {
@@ -56,26 +74,33 @@ export class HistoryOperationStore {
     this.directories()
     const bytes = this.read(this.pendingPath)
     const record = JSON.parse(bytes.toString('utf8')) as PendingHistoryOperation
-    if (record.version !== 1 || record.projectId !== this.projectId ||
+    if ((record.version !== 1 && record.version !== 2) || record.projectId !== this.projectId ||
         typeof record.id !== 'string' || !/^[0-9a-f-]{36}$/.test(record.id) ||
         typeof record.label !== 'string' || record.label.length > 300 ||
         typeof record.startedAt !== 'string' || !Number.isFinite(Date.parse(record.startedAt)) ||
         record.inventoryFile !== `recovery-${record.id}-before.manifest.json` ||
-        record.historyFile !== `recovery-${record.id}-history.json`) throw new Error('Unsupported or invalid operation record. Preserve it for manual recovery.')
+        record.historyFile !== `recovery-${record.id}-history.json` ||
+        (record.version === 2 && (!['snapshot-create', 'snapshot-revert', 'recovery-apply'].includes(record.kind) ||
+          typeof record.eventId !== 'string' || !/^[0-9a-f-]{36}$/.test(record.eventId) ||
+          typeof record.targetId !== 'string' || record.targetId.length === 0 || record.targetId.length > 2_000 ||
+          typeof record.expectedDocumentHash !== 'string' || !/^[0-9a-f]{64}$/.test(record.expectedDocumentHash)))) {
+      throw new Error('Unsupported or invalid operation record. Preserve it for manual recovery.')
+    }
     const inventory = this.read(join(this.recoveryPath, record.inventoryFile))
     const history = this.read(join(this.recoveryPath, record.historyFile))
     if (record.inventoryHash !== this.fingerprint(inventory) || record.historyHash !== this.fingerprint(history)) throw new Error('Preserved operation evidence has changed. Keep the files for manual recovery.')
     return { record, bytes, inventory, history }
   }
 
-  begin(label: string, inventory: string, history: string): void {
+  begin(label: string, inventory: string, history: string, intent?: HistoryOperationIntent): void {
     this.directories(true)
     if (this.pending()) throw new Error('Review the unfinished history operation first.')
     if (Buffer.byteLength(inventory) > LIMIT || Buffer.byteLength(history) > LIMIT || label.length > 300) throw new Error('Operation evidence exceeds supported limits.')
     const id = randomUUID()
-    const record: PendingHistoryOperation = { version: 1, id, projectId: this.projectId, label,
+    const base: PendingHistoryOperationBase = { id, projectId: this.projectId, label,
       startedAt: new Date().toISOString(), inventoryFile: `recovery-${id}-before.manifest.json`, historyFile: `recovery-${id}-history.json`,
       inventoryHash: this.fingerprint(inventory), historyHash: this.fingerprint(history) }
+    const record: PendingHistoryOperation = intent ? { ...base, version: 2, ...intent } : { ...base, version: 1 }
     writeHistoryFile(join(this.recoveryPath, record.inventoryFile), inventory)
     writeHistoryFile(join(this.recoveryPath, record.historyFile), history)
     // Published only after both before-state copies have been flushed.

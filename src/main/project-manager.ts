@@ -27,7 +27,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
 import { ProjectArchive } from './project-archive'
-import { HistoryOperationStore } from './history-operation'
+import { HistoryOperationStore, type HistoryOperationIntent } from './history-operation'
 import type { ProjectArchivePreview, ExternalDocumentPreview, InterruptedHistoryPreview } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
 import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
@@ -348,6 +348,7 @@ export class ProjectManager {
       this.logger.info('project opened', { name: project.name, path: projectPath, nodes: project.nodes.length })
       if ((data.version === originalVersion && !document.isLegacy) || new HistoryOperationStore(projectPath, project.id).pending()) this.documentVersions.set(canonicalPath, openingHash)
       this.retainCurrentDocumentVersion()
+      await this.finishProvenHistoryOperation()
       this.scheduleHistoryBackfill()
       return ok(this.withLoadWarnings(runtimeProject, warnings))
     } catch (e: unknown) {
@@ -485,7 +486,10 @@ export class ProjectManager {
       const result = await operation()
       if (result.ok && this.hasInterruptedHistory()) {
         try { this.operationStore()!.finish() }
-        catch (error) { this.logger.warn('history operation committed; evidence cleanup needs review', { error: String(error) }) }
+        catch (error) {
+          this.logger.warn('history operation committed; retrying evidence cleanup', { error: String(error) })
+          await this.finishProvenHistoryOperation()
+        }
       }
       return result
     } catch (e: unknown) {
@@ -1891,20 +1895,25 @@ export class ProjectManager {
     if ((await this.git.listSnapshots(this.currentProject.path!)).some(snapshot => snapshot.name === name)) {
       return err(ErrorCode.VALIDATION_FAILED, `Snapshot "${name}" already exists`)
     }
-    this.beginHistoryOperation(`Create snapshot: ${name}`)
-
     const flushResult = await this.flushPendingAutosave()
     if (!flushResult.ok) {
-      this.abortHistoryOperation()
       return flushResult as Result<Snapshot>
     }
+
+    const eventId = uuidv7()
+    const expectedDocumentHash = this.documentVersions.get(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE)) ??
+      this.hashDocument(this.serializeProjectForPersistence(this.currentProject))
+    this.beginHistoryOperation(`Create snapshot: ${name}`, {
+      kind: 'snapshot-create', eventId, targetId: name,
+      expectedDocumentHash,
+    })
 
     try {
       const snapshot = await this.git.createSnapshot(this.currentProject.path!, name,
         this.documentVersions.get(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE)) ?? undefined)
       const history = structuredClone(this.historyBeforeOperation!)
       const event: SnapshotTimelineEvent = {
-        id: uuidv7(),
+        id: eventId,
         type: 'snapshot',
         createdAt: snapshot.createdAt,
         snapshotId: snapshot.id,
@@ -1939,6 +1948,7 @@ export class ProjectManager {
     } catch (e: unknown) {
       if (e instanceof SnapshotDocumentChangedError) {
         try { this.assertDocumentUnchanged(this.currentProject!.path!) } catch { /* Preserve the current inventory and expose conflict status. */ }
+        this.abortHistoryOperation()
         return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, e.message)
       }
       const msg = e instanceof Error ? e.message : String(e)
@@ -2422,7 +2432,11 @@ export class ProjectManager {
         path: previousProject.path,
       }
 
-      this.beginHistoryOperation(`Revert to snapshot: ${name}`)
+      const eventId = uuidv7()
+      this.beginHistoryOperation(`Revert to snapshot: ${name}`, {
+        kind: 'snapshot-revert', eventId, targetId: name,
+        expectedDocumentHash: this.hashDocument(this.serializeProjectForPersistence(restoredProject)),
+      })
       const safetyRecoveryPoint = await this.createSafetyRecoveryPointIfNeeded(previousProject)
 
       const searchResult = this.rebuildSearchIndex(restoredProject, 'rebuild')
@@ -2442,7 +2456,7 @@ export class ProjectManager {
       this.edits.clear()
 
       const event: SnapshotTimelineEvent = {
-        id: uuidv7(),
+        id: eventId,
         type: 'revert',
         createdAt: new Date().toISOString(),
         targetSnapshotId: name,
@@ -2508,7 +2522,11 @@ export class ProjectManager {
         path: previousProject.path,
       }
 
-      this.beginHistoryOperation(`Apply recovery: ${request.id}`)
+      const eventId = uuidv7()
+      this.beginHistoryOperation(`Apply recovery: ${request.id}`, {
+        kind: 'recovery-apply', eventId, targetId: request.id,
+        expectedDocumentHash: this.hashDocument(this.serializeProjectForPersistence(recoveredProject)),
+      })
       const safetyRecoveryPoint = await this.createSafetyRecoveryPointIfNeeded(previousProject)
 
       const searchResult = this.rebuildSearchIndex(recoveredProject, 'rebuild')
@@ -2528,7 +2546,7 @@ export class ProjectManager {
       this.edits.clear()
 
       const event: SnapshotTimelineEvent = {
-        id: uuidv7(),
+        id: eventId,
         type: 'recover',
         createdAt: new Date().toISOString(),
         recoveryPointId: recoveryPoint.id,
@@ -2568,10 +2586,10 @@ export class ProjectManager {
     return ok({ pending: !this.historyOperationInProgress && this.hasInterruptedHistory() })
   }
 
-  private beginHistoryOperation(label: string): void {
+  private beginHistoryOperation(label: string, intent: HistoryOperationIntent): void {
     const store = this.operationStore()
     if (!store || !this.currentProject) throw new Error('No project open')
-    store.begin(label, this.serializeProjectForPersistence(this.currentProject), JSON.stringify(this.historyBeforeOperation ?? this.readSnapshotHistory(), null, 2))
+    store.begin(label, this.serializeProjectForPersistence(this.currentProject), JSON.stringify(this.historyBeforeOperation ?? this.readSnapshotHistory(), null, 2), intent)
     this.backfillToken++
     this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
   }
@@ -2580,6 +2598,48 @@ export class ProjectManager {
     try { this.operationStore()!.finish() }
     catch (error) { this.logger.warn('rolled-back history operation evidence needs review', { error: String(error) }) }
     if (!this.hasInterruptedHistory() && !this.documentSaveError) this.scheduleAutosave()
+  }
+
+  private async finishProvenHistoryOperation(): Promise<void> {
+    const store = this.operationStore()
+    if (!store?.pending() || !this.currentProject?.path) return
+    const projectPath = this.currentProject.path
+    const alreadyBusy = this.historyOperationInProgress
+    this.historyOperationInProgress = true
+    try {
+      const { record } = store.candidate()
+      if (record.version !== 2) return
+      const document = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
+      if (!document || this.hashDocument(document) !== record.expectedDocumentHash) return
+      const history = this.readSnapshotHistory()
+      const event = history.events.at(-1)
+      if (!event || event.id !== record.eventId) return
+
+      let complete = false
+      if (record.kind === 'snapshot-create' && event.type === 'snapshot' && event.snapshotId === record.targetId &&
+          history.currentBaseSnapshotId === record.targetId && history.pendingRevertEventId === null &&
+          history.snapshots[record.targetId]?.id === record.targetId) {
+        const snapshotDocument = await this.git.readSnapshotManifest(projectPath, record.targetId)
+        complete = this.hashDocument(snapshotDocument) === record.expectedDocumentHash
+      } else if (record.kind === 'snapshot-revert' && event.type === 'revert' && event.targetSnapshotId === record.targetId &&
+          history.currentBaseSnapshotId === record.targetId && history.pendingRevertEventId === record.eventId) {
+        const snapshotDocument = await this.git.readSnapshotManifest(projectPath, record.targetId)
+        complete = this.hashDocument(this.canonicalizeManifestJson(snapshotDocument)) === record.expectedDocumentHash
+      } else if (record.kind === 'recovery-apply' && event.type === 'recover' && event.recoveryPointId === record.targetId &&
+          history.currentBaseSnapshotId === null && history.pendingRevertEventId === record.eventId) {
+        complete = true
+      }
+
+      if (!complete) return
+      store.finish(true)
+      this.logger.info('confirmed completed interrupted history operation', {
+        path: projectPath, kind: record.kind, eventId: record.eventId,
+      })
+    } catch (error) {
+      // Missing, altered, legacy, or unreadable evidence remains pending for
+      // the explicit review flow. Automatic cleanup must never guess.
+      this.logger.warn('could not prove interrupted history operation completed', { error: String(error) })
+    } finally { this.historyOperationInProgress = alreadyBusy }
   }
 
   private interruptedHistoryCandidate() {

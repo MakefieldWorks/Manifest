@@ -210,6 +210,7 @@ describe('external project document preservation', () => {
       return original(...args)
     })
     expect(await manager.snapshotCreate('race')).toMatchObject({ ok: false, error: { code: 'EXTERNAL_DOCUMENT_CHANGED' } })
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: false } })
     expect(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: path, encoding: 'utf8' })).toBe(head)
     expect((await git.listSnapshots(path)).map(snapshot => snapshot.name)).toEqual(['baseline'])
   })

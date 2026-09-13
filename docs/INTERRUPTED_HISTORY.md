@@ -4,15 +4,21 @@ Snapshot creation, snapshot revert, and recovery-point application now preserve
 the current inventory (including unsaved edits) and readable history metadata
 before changing the project. A versioned `.manifest/history-operation.json`
 record is published after those copies have been flushed to disk. The record
-identifies the operation and fingerprints both copies.
+identifies the operation and fingerprints both copies. New records also include
+the operation kind, intended timeline-event ID and target, and expected document
+fingerprint. Existing version-1 records remain supported through manual review.
 
 The record remains until the operation reports success or safely rolls back.
 An uncertain failure,
 process termination, or interruption after the history commit but before cleanup
 therefore leaves evidence for the next session. A cleanup failure after a
-successful commit still reports the operation as successful, with the remaining
-evidence surfaced for review. Opening the project does not
-replay Git commands or infer whether the operation completed. Editing, Undo/Redo,
+successful commit still reports the operation as successful. Manifest immediately
+retries exact classification after a cleanup failure and checks again on the next
+open. It automatically recognizes completion only when the record, document,
+last timeline event, lineage pointers, and immutable Git snapshot (for snapshot
+creation and revert) all agree exactly. It then retains the before-state evidence,
+keeps the completed lineage, and resumes without a banner. Missing or conflicting
+proof remains in manual review. Manifest never replays Git commands. Editing, Undo/Redo,
 saving, final save on close, new history mutations, and archive export pause
 until the user reviews the unfinished operation. Read-only inspection remains
 available. Derived history-index backfill is not started while evidence is pending.
@@ -48,7 +54,8 @@ unfinished operation has been acknowledged.
 
 ## Boundaries
 
-This is process-interruption detection and explicit continuation, not an atomic
+This is process-interruption detection, exact completed-state recognition, and
+explicit continuation for ambiguous states, not an atomic
 transaction across Git, the document, and history. It does not automatically
 complete or roll back a partially executed operation, prevent arbitrary external
 writers, or guarantee directory-entry durability during sudden power loss.
@@ -59,5 +66,6 @@ Existing backup and preservation protections continue to apply to those paths.
 Tests inject failures before metadata persistence and during completion for all
 three journaled operations, reopen the project, and verify write blocking,
 preserved inventories, unchanged Git refs, stale-token rejection, retry behavior,
-and malformed evidence. Electron coverage exercises the review, Cancel, explicit
+malformed evidence, backward-compatible version-1 records, automatic completion,
+and disagreement in document, lineage, and Git evidence. Electron coverage exercises the review, Cancel, explicit
 continuation, and resumed editing.

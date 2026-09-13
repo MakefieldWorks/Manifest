@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -38,6 +39,129 @@ function failHistoryWrite() {
 }
 
 describe('interrupted history operations', () => {
+  it.each(['snapshot', 'revert', 'recover'] as const)('automatically confirms a completed interrupted %s without resetting lineage', async operation => {
+    let recoveryId = ''
+    if (operation === 'revert') {
+      manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Later rack')
+      expect((await manager.snapshotCreate('later')).ok).toBe(true)
+    } else if (operation === 'recover') {
+      manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Recovered rack')
+      const reverted = await manager.snapshotRevert({ name: 'baseline' })
+      if (!reverted.ok || !reverted.data.safetyRecoveryPoint) throw new Error('Missing recovery fixture')
+      recoveryId = reverted.data.safetyRecoveryPoint.id
+    }
+
+    const interruptedFinish = vi.spyOn(HistoryOperationStore.prototype, 'finish')
+      .mockImplementation(() => { throw new Error('Injected process interruption') })
+    const result = operation === 'snapshot' ? await manager.snapshotCreate('completed') : operation === 'revert' ?
+      await manager.snapshotRevert({ name: 'baseline', note: 'Return to the baseline configuration' }) : await manager.recoveryPointApply({ id: recoveryId })
+    expect(result.ok).toBe(true)
+    expect(store.pending()).toBe(true)
+    const record = store.candidate().record
+    expect(record.version).toBe(2)
+    const historyBeforeOpen = readFileSync(join(path, '.manifest', 'history.json'))
+    expect(JSON.parse(historyBeforeOpen.toString()).events.at(-1).id).toBe(record.version === 2 ? record.eventId : null)
+    const snapshotsBeforeOpen = (await git.listSnapshots(path)).map(snapshot => snapshot.id)
+    interruptedFinish.mockRestore()
+    manager.discardCurrentProject()
+    manager = new ProjectManager(git, logger as any)
+    expect((await manager.openProject(path)).ok).toBe(true)
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: false } })
+    expect(readFileSync(join(path, '.manifest', 'history.json'))).toEqual(historyBeforeOpen)
+    expect((await git.listSnapshots(path)).map(snapshot => snapshot.id)).toEqual(snapshotsBeforeOpen)
+    expect(readdirSync(store.recoveryPath).some(name => name.endsWith('-operation.json'))).toBe(true)
+    expect(manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Editing resumed').ok).toBe(true)
+  })
+
+  it('retries completed-operation classification after a transient same-session cleanup failure', async () => {
+    const originalFinish = HistoryOperationStore.prototype.finish
+    let first = true
+    vi.spyOn(HistoryOperationStore.prototype, 'finish').mockImplementation(function (preserve = false) {
+      if (first) { first = false; throw new Error('Transient cleanup failure') }
+      return originalFinish.call(this, preserve)
+    })
+    expect((await manager.snapshotCreate('completed')).ok).toBe(true)
+    expect(store.pending()).toBe(false)
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: false } })
+    const history = JSON.parse(readFileSync(join(path, '.manifest', 'history.json'), 'utf8'))
+    expect(history.currentBaseSnapshotId).toBe('completed')
+    expect(history.pendingRevertEventId).toBeNull()
+  })
+
+  it('keeps a legacy v1 record in the explicit review flow', async () => {
+    const current = manager.getCurrent()!
+    store.begin('Legacy interrupted operation', JSON.stringify({ ...current, path: undefined }),
+      readFileSync(join(path, '.manifest', 'history.json'), 'utf8'))
+    manager.discardCurrentProject()
+    manager = new ProjectManager(git, logger as any)
+    expect((await manager.openProject(path)).ok).toBe(true)
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: true } })
+  })
+
+  it('fails closed on invalid v2 intent without clearing the record', () => {
+    const current = manager.getCurrent()!
+    store.begin('Invalid intent fixture', JSON.stringify({ ...current, path: undefined }),
+      readFileSync(join(path, '.manifest', 'history.json'), 'utf8'), {
+        kind: 'snapshot-create', eventId: '01993a75-1234-7000-8000-123456789abc', targetId: 'future',
+        expectedDocumentHash: 'a'.repeat(64),
+      })
+    const record = JSON.parse(readFileSync(store.pendingPath, 'utf8'))
+    record.kind = 'unknown-operation'
+    writeFileSync(store.pendingPath, JSON.stringify(record))
+    expect(() => store.candidate()).toThrow('Unsupported or invalid operation record')
+    expect(store.pending()).toBe(true)
+  })
+
+  it.each(['git', 'lineage', 'document', 'timeline'] as const)('does not auto-confirm when completed snapshot %s evidence disagrees', async disagreement => {
+    const interruptedFinish = vi.spyOn(HistoryOperationStore.prototype, 'finish')
+      .mockImplementation(() => { throw new Error('Injected process interruption') })
+    expect((await manager.snapshotCreate('completed')).ok).toBe(true)
+    if (disagreement === 'git') execFileSync('git', ['tag', '-d', 'snapshot/completed'], { cwd: path })
+    if (disagreement === 'lineage') {
+      const historyPath = join(path, '.manifest', 'history.json')
+      const history = JSON.parse(readFileSync(historyPath, 'utf8'))
+      history.currentBaseSnapshotId = null
+      writeFileSync(historyPath, JSON.stringify(history))
+    }
+    if (disagreement === 'timeline') {
+      const historyPath = join(path, '.manifest', 'history.json')
+      const history = JSON.parse(readFileSync(historyPath, 'utf8'))
+      history.events.reverse()
+      writeFileSync(historyPath, JSON.stringify(history))
+    }
+    if (disagreement === 'document') {
+      const documentPath = join(path, PROJECT_DOCUMENT_FILE)
+      const document = JSON.parse(readFileSync(documentPath, 'utf8'))
+      document.nodes[0].name = 'Changed after completion'
+      writeFileSync(documentPath, JSON.stringify(document))
+    }
+    interruptedFinish.mockRestore()
+    manager.discardCurrentProject()
+    manager = new ProjectManager(git, logger as any)
+    expect((await manager.openProject(path)).ok).toBe(true)
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: true } })
+  })
+
+  it.each(['git', 'lineage'] as const)('does not auto-confirm when completed revert %s evidence disagrees', async disagreement => {
+    manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Later rack')
+    expect((await manager.snapshotCreate('later')).ok).toBe(true)
+    const interruptedFinish = vi.spyOn(HistoryOperationStore.prototype, 'finish')
+      .mockImplementation(() => { throw new Error('Injected process interruption') })
+    expect((await manager.snapshotRevert({ name: 'baseline', note: 'Return to baseline' })).ok).toBe(true)
+    if (disagreement === 'git') execFileSync('git', ['tag', '-f', 'snapshot/baseline', 'snapshot/later'], { cwd: path })
+    if (disagreement === 'lineage') {
+      const historyPath = join(path, '.manifest', 'history.json')
+      const history = JSON.parse(readFileSync(historyPath, 'utf8'))
+      history.pendingRevertEventId = null
+      writeFileSync(historyPath, JSON.stringify(history))
+    }
+    interruptedFinish.mockRestore()
+    manager.discardCurrentProject()
+    manager = new ProjectManager(git, logger as any)
+    expect((await manager.openProject(path)).ok).toBe(true)
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: true } })
+  })
+
   it('cleans temporary evidence after success', () => {
     expect(store.pending()).toBe(false)
     expect(readdirSync(store.recoveryPath)).toEqual([])
