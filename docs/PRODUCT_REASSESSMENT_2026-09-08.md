@@ -15,8 +15,10 @@ Portable archive export and verified restore to a new folder now preserve that
 inventory and history together. External project-file changes now pause saves
 and preserve both versions through explicit resolution. Interrupted snapshot,
 revert, and recovery operations now retain durable before-state evidence and
-require explicit continuation. Automatic completion/rollback and crash protection
-for the remaining metadata-only operations remain outside this increment.
+require explicit continuation. Fully completed operations are now recognized
+automatically from exact document, timeline, lineage, and Git evidence. Automatic
+rollback and crash protection for the remaining metadata-only operations remain
+outside this increment.
 
 ## Recommendation
 

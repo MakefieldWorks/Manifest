@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process'
+import { createHash } from 'crypto'
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
@@ -236,6 +237,34 @@ test('reviews unfinished history, preserves evidence on cancel, and explicitly r
   expect(readdirSync(store.recoveryPath).some(name => name.endsWith('-before.manifest.json'))).toBe(true)
   await addChildNode(appPage, 'Interrupted Lab', 'Resumed rack')
   await expect(treeRow(appPage, 'Resumed rack')).toBeVisible()
+})
+
+test('automatically accepts exact evidence that an interrupted snapshot completed', async ({ appPage, electronApp, workspaceDir }) => {
+  // Unit tests inject the interrupted finish into real operations. This UI
+  // smoke test constructs the equivalent durable record before reopening.
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Completed Interruption Lab')
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'completed')
+  const current = await appPage.evaluate(() => window.api.project.getCurrent())
+  if (!current.ok || !current.data?.path) throw new Error('Missing project')
+  const path = current.data.path
+  const document = readFileSync(join(path, 'Manifest.manifestproject'))
+  const history = readFileSync(join(path, '.manifest', 'history.json'))
+  const parsedHistory = JSON.parse(history.toString())
+  const event = parsedHistory.events.at(-1)
+  const store = new HistoryOperationStore(path, current.data.id)
+  store.begin('Create snapshot: completed', document.toString(), history.toString(), {
+    kind: 'snapshot-create', eventId: event.id, targetId: 'completed',
+    expectedDocumentHash: createHash('sha256').update(document).digest('hex'),
+  })
+  const reopened = await appPage.evaluate(projectPath => window.api.project.open(projectPath), path)
+  expect(reopened.ok).toBe(true)
+  await expect(appPage.getByTestId('interrupted-history')).toHaveCount(0)
+  expect(store.pending()).toBe(false)
+  expect(readdirSync(store.recoveryPath).some(name => name.endsWith('-operation.json'))).toBe(true)
+  await appPage.getByRole('button', { name: 'Close snapshots' }).click()
+  await addChildNode(appPage, 'Completed Interruption Lab', 'Editing resumed')
+  await expect(treeRow(appPage, 'Editing resumed')).toBeVisible()
 })
 
 for (const choice of ['keep-local', 'load-external'] as const) {

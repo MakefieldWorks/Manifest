@@ -376,7 +376,7 @@ describe('snapshot workflow', () => {
       .toBe('Rolled back from upgraded to retry failed test')
   })
 
-  it('caps stored recovery points at MAX_RECOVERY_POINTS and deletes the oldest files', async () => {
+  it('caps stored recovery points, deletes the oldest files, and retains an applied source', async () => {
     const rootId = manager.getCurrent()!.nodes.find((node) => node.parentId === null)!.id
     const baseline = await manager.snapshotCreate('baseline')
     expect(baseline.ok).toBe(true)
@@ -406,6 +406,20 @@ describe('snapshot workflow', () => {
     for (let i = 2; i < 12; i++) {
       expect(existsSync(join(projectDir, recoveryFiles[i]))).toBe(true)
     }
+
+    // Applying the oldest retained point creates another safety point. Keep
+    // the applied source available for interruption proof and prune the next
+    // oldest point instead.
+    const appliedId = timeline.data.recoveryPoints[0].id
+    expect(manager.nodeCreate(rootId, 'Unsaved before recovery').ok).toBe(true)
+    expect((await manager.recoveryPointApply({ id: appliedId })).ok).toBe(true)
+    const afterApply = await manager.snapshotTimeline()
+    expect(afterApply.ok).toBe(true)
+    if (!afterApply.ok) return
+    expect(afterApply.data.recoveryPoints).toHaveLength(10)
+    expect(afterApply.data.recoveryPoints.some(point => point.id === appliedId)).toBe(true)
+    expect(existsSync(join(projectDir, recoveryFiles[2]))).toBe(true)
+    expect(existsSync(join(projectDir, recoveryFiles[3]))).toBe(false)
   })
 
   it('keeps the current project editable after reopening with damaged metadata', async () => {
