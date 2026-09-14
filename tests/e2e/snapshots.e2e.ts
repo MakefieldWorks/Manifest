@@ -240,6 +240,8 @@ test('reviews unfinished history, preserves evidence on cancel, and explicitly r
 })
 
 test('automatically accepts exact evidence that an interrupted snapshot completed', async ({ appPage, electronApp, workspaceDir }) => {
+  // Unit tests inject the interrupted finish into real operations. This UI
+  // smoke test constructs the equivalent durable record before reopening.
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Completed Interruption Lab')
   await openSnapshotsPanel(appPage)
   await createSnapshot(appPage, 'completed')

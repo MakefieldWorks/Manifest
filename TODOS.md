@@ -1,5 +1,9 @@
 # TODOS
 
+## Next
+
+- Add a user-reviewed cleanup workflow for retained interrupted-operation recovery and audit evidence; automatic deletion remains disabled so the only surviving pre-operation inventory cannot be silently lost.
+
 ## Completed
 
 - Automatically recognize fully completed interrupted snapshot/revert/recovery operations from structured intent and exact document, timeline, lineage, and Git evidence, while retaining ambiguous and legacy records for manual review. **Implemented:** 2026-09-10

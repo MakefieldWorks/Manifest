@@ -169,6 +169,7 @@ export class ProjectManager {
   private currentProject: Project | null = null
   private readonly edits = new EditHistory()
   private historyOperationInProgress = false
+  private classifyingInterruptedHistory = false
   private archiveBusy = false
   private documentVersions = new Map<string, string | null>()
   private documentSaveError: { path: string; message: string } | null = null
@@ -1901,6 +1902,8 @@ export class ProjectManager {
     }
 
     const eventId = uuidv7()
+    // A completed flush updates documentVersions. The fallback covers an
+    // already-current document whose bytes did not need another write.
     const expectedDocumentHash = this.documentVersions.get(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE)) ??
       this.hashDocument(this.serializeProjectForPersistence(this.currentProject))
     this.beginHistoryOperation(`Create snapshot: ${name}`, {
@@ -2558,7 +2561,7 @@ export class ProjectManager {
       if (safetyRecoveryPoint) {
         history.recoveryPoints.push(safetyRecoveryPoint)
       }
-      this.pruneRecoveryPoints(history)
+      this.pruneRecoveryPoints(history, request.id)
       this.writeSnapshotHistory(history)
 
       this.logger.info('recovery point applied', { id: request.id, path: this.currentProject.path, eventId: event.id })
@@ -2583,7 +2586,7 @@ export class ProjectManager {
   }
 
   interruptedHistoryStatus(): Result<{ pending: boolean }> {
-    return ok({ pending: !this.historyOperationInProgress && this.hasInterruptedHistory() })
+    return ok({ pending: (!this.historyOperationInProgress || this.classifyingInterruptedHistory) && this.hasInterruptedHistory() })
   }
 
   private beginHistoryOperation(label: string, intent: HistoryOperationIntent): void {
@@ -2606,6 +2609,7 @@ export class ProjectManager {
     const projectPath = this.currentProject.path
     const alreadyBusy = this.historyOperationInProgress
     this.historyOperationInProgress = true
+    this.classifyingInterruptedHistory = true
     try {
       const { record } = store.candidate()
       if (record.version !== 2) return
@@ -2624,13 +2628,24 @@ export class ProjectManager {
       } else if (record.kind === 'snapshot-revert' && event.type === 'revert' && event.targetSnapshotId === record.targetId &&
           history.currentBaseSnapshotId === record.targetId && history.pendingRevertEventId === record.eventId) {
         const snapshotDocument = await this.git.readSnapshotManifest(projectPath, record.targetId)
+        // Revert rewrites a historical blob using the current serializer, so
+        // compare its canonical form. Snapshot creation records the raw bytes.
         complete = this.hashDocument(this.canonicalizeManifestJson(snapshotDocument)) === record.expectedDocumentHash
       } else if (record.kind === 'recovery-apply' && event.type === 'recover' && event.recoveryPointId === record.targetId &&
           history.currentBaseSnapshotId === null && history.pendingRevertEventId === record.eventId) {
-        complete = true
+        const recoveryPoint = history.recoveryPoints.find(point => point.id === record.targetId)
+        if (recoveryPoint) {
+          const recoveryDocument = store.read(join(projectPath, ...recoveryPoint.manifestPath.split(/[\\/]/)))
+          complete = this.hashDocument(this.canonicalizeManifestJson(recoveryDocument.toString('utf8'))) === record.expectedDocumentHash
+        }
       }
 
       if (!complete) return
+      // Recheck mutable evidence immediately before clearing the marker. This
+      // closes the external-writer window opened by the Git/payload read above.
+      const latestDocument = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
+      if (!latestDocument || this.hashDocument(latestDocument) !== record.expectedDocumentHash) return
+      if (JSON.stringify(this.readSnapshotHistory()) !== JSON.stringify(history)) return
       store.finish(true)
       this.logger.info('confirmed completed interrupted history operation', {
         path: projectPath, kind: record.kind, eventId: record.eventId,
@@ -2639,7 +2654,10 @@ export class ProjectManager {
       // Missing, altered, legacy, or unreadable evidence remains pending for
       // the explicit review flow. Automatic cleanup must never guess.
       this.logger.warn('could not prove interrupted history operation completed', { error: String(error) })
-    } finally { this.historyOperationInProgress = alreadyBusy }
+    } finally {
+      this.classifyingInterruptedHistory = false
+      this.historyOperationInProgress = alreadyBusy
+    }
   }
 
   private interruptedHistoryCandidate() {
@@ -3189,16 +3207,16 @@ export class ProjectManager {
 
   // Select retained entries. Physical deletion happens only after primary
   // metadata and its automatic backup both contain the retained registry.
-  private pruneRecoveryPoints(history: SnapshotHistoryState): void {
+  private pruneRecoveryPoints(history: SnapshotHistoryState, protectedId: string | null = null): void {
     const projectPath = this.currentProject?.path
     if (!projectPath) return
     const automatic = history.recoveryPoints.filter(point => point.reason !== 'reconciled')
     if (automatic.length <= MAX_RECOVERY_POINTS) return
 
-    const sorted = [...automatic].sort(
+    const sorted = automatic.filter(point => point.id !== protectedId).sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     )
-    const removeCount = sorted.length - MAX_RECOVERY_POINTS
+    const removeCount = automatic.length - MAX_RECOVERY_POINTS
     const toRemove = sorted.slice(0, removeCount)
     const removeIds = new Set(toRemove.map(p => p.id))
 

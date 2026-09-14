@@ -60,7 +60,7 @@ describe('interrupted history operations', () => {
     const record = store.candidate().record
     expect(record.version).toBe(2)
     const historyBeforeOpen = readFileSync(join(path, '.manifest', 'history.json'))
-    expect(JSON.parse(historyBeforeOpen.toString()).events.at(-1).id).toBe(record.version === 2 ? record.eventId : null)
+    expect(JSON.parse(historyBeforeOpen.toString()).events.at(-1).id).toBe(record.eventId)
     const snapshotsBeforeOpen = (await git.listSnapshots(path)).map(snapshot => snapshot.id)
     interruptedFinish.mockRestore()
     manager.discardCurrentProject()
@@ -142,7 +142,7 @@ describe('interrupted history operations', () => {
     expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: true } })
   })
 
-  it.each(['git', 'lineage'] as const)('does not auto-confirm when completed revert %s evidence disagrees', async disagreement => {
+  it.each(['git', 'lineage', 'document', 'timeline'] as const)('does not auto-confirm when completed revert %s evidence disagrees', async disagreement => {
     manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Later rack')
     expect((await manager.snapshotCreate('later')).ok).toBe(true)
     const interruptedFinish = vi.spyOn(HistoryOperationStore.prototype, 'finish')
@@ -154,6 +154,49 @@ describe('interrupted history operations', () => {
       const history = JSON.parse(readFileSync(historyPath, 'utf8'))
       history.pendingRevertEventId = null
       writeFileSync(historyPath, JSON.stringify(history))
+    }
+    if (disagreement === 'timeline') {
+      const historyPath = join(path, '.manifest', 'history.json')
+      const history = JSON.parse(readFileSync(historyPath, 'utf8'))
+      history.events.reverse()
+      writeFileSync(historyPath, JSON.stringify(history))
+    }
+    if (disagreement === 'document') {
+      const documentPath = join(path, PROJECT_DOCUMENT_FILE)
+      const document = JSON.parse(readFileSync(documentPath, 'utf8'))
+      document.nodes[0].name = 'Changed after completion'
+      writeFileSync(documentPath, JSON.stringify(document))
+    }
+    interruptedFinish.mockRestore()
+    manager.discardCurrentProject()
+    manager = new ProjectManager(git, logger as any)
+    expect((await manager.openProject(path)).ok).toBe(true)
+    expect(manager.interruptedHistoryStatus()).toEqual({ ok: true, data: { pending: true } })
+  })
+
+  it.each(['document', 'timeline', 'registry', 'payload'] as const)('does not auto-confirm when completed recovery %s evidence disagrees', async disagreement => {
+    manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Recovered rack')
+    const reverted = await manager.snapshotRevert({ name: 'baseline' })
+    if (!reverted.ok || !reverted.data.safetyRecoveryPoint) throw new Error('Missing recovery fixture')
+    const recoveryPoint = reverted.data.safetyRecoveryPoint
+    const interruptedFinish = vi.spyOn(HistoryOperationStore.prototype, 'finish')
+      .mockImplementation(() => { throw new Error('Injected process interruption') })
+    expect((await manager.recoveryPointApply({ id: recoveryPoint.id })).ok).toBe(true)
+    if (disagreement === 'document') {
+      const documentPath = join(path, PROJECT_DOCUMENT_FILE)
+      const document = JSON.parse(readFileSync(documentPath, 'utf8'))
+      document.nodes[0].name = 'Changed after completion'
+      writeFileSync(documentPath, JSON.stringify(document))
+    }
+    if (disagreement === 'timeline' || disagreement === 'registry') {
+      const historyPath = join(path, '.manifest', 'history.json')
+      const history = JSON.parse(readFileSync(historyPath, 'utf8'))
+      if (disagreement === 'timeline') history.events.reverse()
+      else history.recoveryPoints = history.recoveryPoints.filter((point: { id: string }) => point.id !== recoveryPoint.id)
+      writeFileSync(historyPath, JSON.stringify(history))
+    }
+    if (disagreement === 'payload') {
+      writeFileSync(join(path, ...recoveryPoint.manifestPath.split(/[\\/]/)), '{}')
     }
     interruptedFinish.mockRestore()
     manager.discardCurrentProject()

@@ -82,7 +82,7 @@ export class HistoryOperationStore {
         record.historyFile !== `recovery-${record.id}-history.json` ||
         (record.version === 2 && (!['snapshot-create', 'snapshot-revert', 'recovery-apply'].includes(record.kind) ||
           typeof record.eventId !== 'string' || !/^[0-9a-f-]{36}$/.test(record.eventId) ||
-          typeof record.targetId !== 'string' || record.targetId.length === 0 || record.targetId.length > 2_000 ||
+          typeof record.targetId !== 'string' || record.targetId.length === 0 || record.targetId.length > 2000 ||
           typeof record.expectedDocumentHash !== 'string' || !/^[0-9a-f]{64}$/.test(record.expectedDocumentHash)))) {
       throw new Error('Unsupported or invalid operation record. Preserve it for manual recovery.')
     }

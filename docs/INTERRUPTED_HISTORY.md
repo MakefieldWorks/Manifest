@@ -48,9 +48,12 @@ Neither action clears the unfinished-operation record. Missing, altered, linked,
 or unsupported evidence requires manual recovery and is never silently discarded.
 
 Normal successful operations remove their temporary before-state copies. Copies
-retained for interrupted operations are not automatically pruned. They use the
-existing recovery directory and are included in portable archives once the
-unfinished operation has been acknowledged.
+retained after an interrupted operation are deliberate recovery/audit evidence:
+Manifest does not expire or cap them because automatic deletion could remove the
+only surviving pre-operation inventory. They use the existing recovery directory
+and are included in portable archives once the unfinished operation has been
+acknowledged. A future user-reviewed cleanup workflow can provide safe retention
+management without silently deleting this evidence.
 
 ## Boundaries
 
@@ -67,5 +70,6 @@ Tests inject failures before metadata persistence and during completion for all
 three journaled operations, reopen the project, and verify write blocking,
 preserved inventories, unchanged Git refs, stale-token rejection, retry behavior,
 malformed evidence, backward-compatible version-1 records, automatic completion,
-and disagreement in document, lineage, and Git evidence. Electron coverage exercises the review, Cancel, explicit
-continuation, and resumed editing.
+and disagreement in document, timeline, lineage, Git, recovery registry, and
+recovery payload evidence. Electron coverage exercises the review, Cancel,
+explicit continuation, and resumed editing.
