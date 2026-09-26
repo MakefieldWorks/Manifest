@@ -257,6 +257,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.HISTORY_OPERATION_STATUS, () => projectManager.interruptedHistoryStatus())
   ipcMain.handle(IPC.HISTORY_OPERATION_REVIEW, () => projectManager.reviewInterruptedHistory())
   ipcMain.handle(IPC.HISTORY_OPERATION_ACKNOWLEDGE, (_, request: unknown) => projectManager.acknowledgeInterruptedHistory(request))
+  ipcMain.handle(IPC.HISTORY_OPERATION_EVIDENCE_PREVIEW, () => projectManager.interruptedHistoryEvidencePreview())
+  ipcMain.handle(IPC.HISTORY_OPERATION_EVIDENCE_DELETE, (_, request: unknown) => projectManager.deleteInterruptedHistoryEvidence(request))
   ipcMain.handle(IPC.DOCUMENT_SAVE_STATUS, () => projectManager.documentSaveStatus())
   ipcMain.handle(IPC.DOCUMENT_CONFLICT_REVIEW, () => projectManager.reviewExternalDocument())
   ipcMain.handle(IPC.DOCUMENT_CONFLICT_RESOLVE, (_, request: unknown) => projectManager.resolveExternalDocument(request))

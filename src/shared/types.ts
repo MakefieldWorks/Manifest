@@ -401,6 +401,31 @@ export interface InterruptedHistoryPreview {
   recoveryPath: string
 }
 
+export interface InterruptedHistoryEvidenceGroup {
+  id: string
+  token: string
+  label: string
+  startedAt: string
+  kind: 'snapshot-create' | 'snapshot-revert' | 'recovery-apply' | null
+  targetId: string | null
+  beforeNodeCount: number
+  currentNodeCount: number
+  sizeBytes: number
+  files: string[]
+  registeredAsRecoveryPoint: boolean
+}
+
+export interface InterruptedHistoryEvidencePreview {
+  groups: InterruptedHistoryEvidenceGroup[]
+  unavailableCount: number
+  uninspectedCount: number
+}
+
+export interface InterruptedHistoryEvidenceDeleteResult {
+  deletedFiles: string[]
+  remainingFiles: string[]
+}
+
 // Per-node history entry. One entry per transition (creation, change,
 // deletion, revert that changed this node, recover that changed this node).
 // Snapshots where the node did NOT change emit no entry — delta-encoded.

@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync } from 'fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { createHash, randomUUID } from 'crypto'
 import { writeHistoryFile } from './history-backup'
@@ -33,6 +33,15 @@ export interface PendingHistoryOperationV2 extends PendingHistoryOperationBase, 
 }
 
 export type PendingHistoryOperation = PendingHistoryOperationV1 | PendingHistoryOperationV2
+
+export interface RetainedHistoryOperationCandidate {
+  record: PendingHistoryOperation
+  recordFile: string
+  recordPath: string
+  bytes: Buffer
+  inventory: Buffer
+  history: Buffer
+}
 
 /** Durable evidence, not a transaction or a request to replay Git commands. */
 export class HistoryOperationStore {
@@ -70,12 +79,13 @@ export class HistoryOperationStore {
     return bytes
   }
 
-  candidate(): { record: PendingHistoryOperation; bytes: Buffer; inventory: Buffer; history: Buffer } {
+  private candidateAt(recordPath: string, retainedId?: string): RetainedHistoryOperationCandidate {
     this.directories()
-    const bytes = this.read(this.pendingPath)
+    const bytes = this.read(recordPath)
     const record = JSON.parse(bytes.toString('utf8')) as PendingHistoryOperation
     if ((record.version !== 1 && record.version !== 2) || record.projectId !== this.projectId ||
         typeof record.id !== 'string' || !/^[0-9a-f-]{36}$/.test(record.id) ||
+        (retainedId !== undefined && record.id !== retainedId) ||
         typeof record.label !== 'string' || record.label.length > 300 ||
         typeof record.startedAt !== 'string' || !Number.isFinite(Date.parse(record.startedAt)) ||
         record.inventoryFile !== `recovery-${record.id}-before.manifest.json` ||
@@ -89,7 +99,53 @@ export class HistoryOperationStore {
     const inventory = this.read(join(this.recoveryPath, record.inventoryFile))
     const history = this.read(join(this.recoveryPath, record.historyFile))
     if (record.inventoryHash !== this.fingerprint(inventory) || record.historyHash !== this.fingerprint(history)) throw new Error('Preserved operation evidence has changed. Keep the files for manual recovery.')
-    return { record, bytes, inventory, history }
+    return { record, recordFile: recordPath === this.pendingPath ? 'history-operation.json' : `recovery-${record.id}-operation.json`,
+      recordPath, bytes, inventory, history }
+  }
+
+  candidate(): RetainedHistoryOperationCandidate {
+    return this.candidateAt(this.pendingPath)
+  }
+
+  retainedCandidates(limit = 100): { candidates: RetainedHistoryOperationCandidate[]; unavailableCount: number; uninspectedCount: number } {
+    this.directories()
+    const recordFiles = readdirSync(this.recoveryPath)
+      .filter(name => /^recovery-([0-9a-f-]{36})-operation\.json$/.test(name))
+      .map(name => ({ name, modified: lstatSync(join(this.recoveryPath, name)).mtimeMs }))
+      .sort((a, b) => b.modified - a.modified || b.name.localeCompare(a.name))
+    const candidates: RetainedHistoryOperationCandidate[] = []
+    let unavailableCount = 0
+    for (const { name: recordFile } of recordFiles.slice(0, limit)) {
+      const id = /^recovery-([0-9a-f-]{36})-operation\.json$/.exec(recordFile)![1]
+      try { candidates.push(this.candidateAt(join(this.recoveryPath, recordFile), id)) }
+      catch { unavailableCount++ }
+    }
+    return { candidates, unavailableCount, uninspectedCount: Math.max(0, recordFiles.length - limit) }
+  }
+
+  removeRetained(candidate: RetainedHistoryOperationCandidate, remove: typeof unlinkSync = unlinkSync): { deletedFiles: string[]; remainingFiles: string[] } {
+    const current = this.candidateAt(candidate.recordPath, candidate.record.id)
+    if (!current.bytes.equals(candidate.bytes) || !current.inventory.equals(candidate.inventory) || !current.history.equals(candidate.history)) {
+      throw new Error('Operation evidence changed. Review it again before deleting.')
+    }
+    // Remove the index record first. If either payload unlink fails, the
+    // remaining file stays as ordinary recovery material and is never shown as
+    // a complete evidence group.
+    remove(candidate.recordPath)
+    const deletedFiles = [candidate.recordFile]
+    const remainingFiles: string[] = []
+    for (const file of [candidate.record.inventoryFile, candidate.record.historyFile]) {
+      let removed = false
+      for (let attempt = 0; attempt < 2 && !removed; attempt++) {
+        try { remove(join(this.recoveryPath, file)); removed = true }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') removed = true
+          else if (attempt === 1) remainingFiles.push(file)
+        }
+      }
+      if (removed) deletedFiles.push(file)
+    }
+    return { deletedFiles, remainingFiles }
   }
 
   begin(label: string, inventory: string, history: string, intent?: HistoryOperationIntent): void {

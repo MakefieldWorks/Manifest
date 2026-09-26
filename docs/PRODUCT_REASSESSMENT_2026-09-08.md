@@ -18,7 +18,9 @@ revert, and recovery operations now retain durable before-state evidence and
 require explicit continuation. Fully completed operations are now recognized
 automatically from exact document, timeline, lineage, and Git evidence. Automatic
 rollback and crash protection for the remaining metadata-only operations remain
-outside this increment.
+outside this increment. Retained interruption evidence now has an explicit,
+stale-safe cleanup workflow that blocks registered recovery inventories and
+never deletes unrelated files.
 
 ## Recommendation
 

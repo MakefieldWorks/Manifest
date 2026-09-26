@@ -52,8 +52,30 @@ retained after an interrupted operation are deliberate recovery/audit evidence:
 Manifest does not expire or cap them because automatic deletion could remove the
 only surviving pre-operation inventory. They use the existing recovery directory
 and are included in portable archives once the unfinished operation has been
-acknowledged. A future user-reviewed cleanup workflow can provide safe retention
-management without silently deleting this evidence.
+acknowledged. The user-reviewed cleanup workflow below provides explicit
+retention management without silently deleting this evidence.
+
+## Review and delete retained evidence
+
+The Snapshots panel lists verified retained evidence groups separately from
+Additional recovery files. Each review is limited to 100 groups and shows the
+operation, date, before/current node counts, combined size, and exact three
+filenames. Malformed, altered, incomplete, linked, or otherwise unverifiable
+groups are counted and left untouched.
+
+Deletion is available for one group at a time after an explicit permanent-action
+confirmation. Its token covers the exact operation record, both evidence files,
+and current history metadata. Manifest revalidates all of them immediately before
+deleting. If the before-state inventory is registered under Additional recovery
+files, deletion remains blocked until that registration is explicitly removed.
+An active pending operation also blocks the workflow.
+
+The archived operation record is removed first so an interrupted cleanup can
+never present a partial group as intact. The two linked payloads are then removed.
+If either payload cannot be deleted, it remains ordinary recovery material and
+Manifest reports its exact filename. Unrelated and unrecognized files are never
+deleted. Exporting a portable archive before cleanup is the safer choice when the
+evidence may still be useful.
 
 ## Boundaries
 
@@ -72,4 +94,4 @@ preserved inventories, unchanged Git refs, stale-token rejection, retry behavior
 malformed evidence, backward-compatible version-1 records, automatic completion,
 and disagreement in document, timeline, lineage, Git, recovery registry, and
 recovery payload evidence. Electron coverage exercises the review, Cancel,
-explicit continuation, and resumed editing.
+explicit continuation, retained-evidence deletion, and resumed editing.

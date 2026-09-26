@@ -13,6 +13,8 @@ const api: ManifestAPI = {
     status: () => ipcRenderer.invoke(IPC.HISTORY_OPERATION_STATUS),
     review: () => ipcRenderer.invoke(IPC.HISTORY_OPERATION_REVIEW),
     acknowledge: request => ipcRenderer.invoke(IPC.HISTORY_OPERATION_ACKNOWLEDGE, request),
+    evidencePreview: () => ipcRenderer.invoke(IPC.HISTORY_OPERATION_EVIDENCE_PREVIEW),
+    deleteEvidence: request => ipcRenderer.invoke(IPC.HISTORY_OPERATION_EVIDENCE_DELETE, request),
   },
   documentConflict: {
     status: () => ipcRenderer.invoke(IPC.DOCUMENT_SAVE_STATUS),
