@@ -277,6 +277,7 @@ test('automatically accepts exact evidence that an interrupted snapshot complete
   await confirmation.screenshot({ path: test.info().outputPath('interrupted-evidence-cleanup.png') })
   await confirmation.getByTestId('interrupted-evidence-delete').click()
   await expect(appPage.getByTestId('interrupted-evidence-cleanup').getByRole('status')).toContainText('Permanently deleted 3 evidence files')
+  await expect(evidence).toHaveCount(0)
   expect(evidenceFiles.every(file => !existsSync(file))).toBe(true)
   await appPage.getByRole('button', { name: 'Close snapshots' }).click()
   await addChildNode(appPage, 'Completed Interruption Lab', 'Editing resumed')

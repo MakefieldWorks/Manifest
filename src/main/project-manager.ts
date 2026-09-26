@@ -27,7 +27,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
 import { ProjectArchive } from './project-archive'
-import { HistoryOperationStore, type HistoryOperationIntent, type RetainedHistoryOperationCandidate } from './history-operation'
+import { HistoryOperationStore, RetainedEvidenceChangedError, type HistoryOperationIntent, type RetainedHistoryOperationCandidate } from './history-operation'
 import type { ProjectArchivePreview, ExternalDocumentPreview, InterruptedHistoryPreview,
   InterruptedHistoryEvidencePreview, InterruptedHistoryEvidenceDeleteResult } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
@@ -2601,7 +2601,7 @@ export class ProjectManager {
     }
     const historyPath = this.snapshotHistoryPath(this.currentProject.path)
     const historyBytes = readFileSync(historyPath)
-    const history = this.readSnapshotHistory()
+    const history = this.readSnapshotHistory(historyBytes)
     const retained = store.retainedCandidates()
     const candidates = new Map<string, RetainedHistoryOperationCandidate>()
     const groups: InterruptedHistoryEvidencePreview['groups'] = []
@@ -2668,7 +2668,8 @@ export class ProjectManager {
       }
       return ok(this.operationStore()!.removeRetained(candidate))
     } catch (error) {
-      return err(ErrorCode.SNAPSHOT_READ_FAILED, `Could not delete interrupted-operation evidence: ${error instanceof Error ? error.message : String(error)}`)
+      return err(error instanceof RetainedEvidenceChangedError ? ErrorCode.VALIDATION_FAILED : ErrorCode.SNAPSHOT_READ_FAILED,
+        `Could not delete interrupted-operation evidence: ${error instanceof Error ? error.message : String(error)}`)
     } finally { this.historyOperationInProgress = false }
   }
 
@@ -3306,13 +3307,13 @@ export class ProjectManager {
     history.recoveryPoints = history.recoveryPoints.filter(p => !removeIds.has(p.id))
   }
 
-  private readSnapshotHistory(): SnapshotHistoryState {
+  private readSnapshotHistory(bytes?: Buffer): SnapshotHistoryState {
     const projectPath = this.currentProject?.path
     if (!projectPath) return emptySnapshotHistory()
 
     const historyPath = this.snapshotHistoryPath(projectPath)
     try {
-      const parsed = JSON.parse(readFileSync(historyPath, 'utf8'))
+      const parsed = JSON.parse(bytes ? bytes.toString('utf8') : readFileSync(historyPath, 'utf8'))
       return migrateSnapshotHistory(parsed)
     } catch (e: unknown) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') {

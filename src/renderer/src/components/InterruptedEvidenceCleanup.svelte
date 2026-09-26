@@ -6,7 +6,8 @@
   let { disabled = false }: { disabled?: boolean } = $props()
   let preview: InterruptedHistoryEvidencePreview | null = $state(null)
   let selected: string | null = $state(null)
-  let busy = $state(false)
+  let activity: 'review' | 'delete' | null = $state(null)
+  let busy = $derived(activity !== null)
   let error: string | null = $state(null)
   let message: string | null = $state(null)
 
@@ -23,7 +24,8 @@
   }
 
   async function review() {
-    busy = true
+    if (busy || disabled) return
+    activity = 'review'
     error = null
     message = null
     selected = null
@@ -32,13 +34,14 @@
       if (result.ok) preview = result.data
       else { error = result.error.message; preview = null }
     } catch (failure) { error = String(failure); preview = null }
-    finally { busy = false }
+    finally { activity = null }
   }
 
   async function remove(id: string, token: string) {
     if (busy || disabled) return
-    busy = true
+    activity = 'delete'
     error = null
+    message = null
     try {
       const result = await window.api.historyOperation.deleteEvidence({ id, token })
       selected = null
@@ -46,15 +49,22 @@
         preview = null
         error = result.error.message
       } else {
-        preview = preview ? { ...preview, groups: preview.groups.filter(group => group.id !== id) } : null
         if (result.data.remainingFiles.length) {
           error = `The evidence record was removed, but these files could not be deleted and were kept in the project's recovery folder for manual handling: ${result.data.remainingFiles.join(', ')}`
         } else {
           message = `Permanently deleted ${result.data.deletedFiles.length} evidence files.`
         }
+        try {
+          const refreshed = await window.api.historyOperation.evidencePreview()
+          preview = refreshed.ok ? refreshed.data : null
+          if (!refreshed.ok) error = `${error ? `${error} ` : ''}Could not refresh retained evidence: ${refreshed.error.message}`
+        } catch (failure) {
+          preview = null
+          error = `${error ? `${error} ` : ''}Could not refresh retained evidence: ${String(failure)}`
+        }
       }
     } catch (failure) { preview = null; selected = null; error = String(failure) }
-    finally { busy = false }
+    finally { activity = null }
   }
 </script>
 
@@ -64,7 +74,7 @@
   {#if error}<p role="alert" class="break-words text-red-700">{error}</p>{/if}
   {#if message}<p role="status">{message}</p>{/if}
   <button disabled={busy || disabled} onclick={review} class="rounded border border-stone-300 px-2 py-1 disabled:opacity-50" data-testid="interrupted-evidence-review">
-    {busy ? 'Checking…' : 'Review retained evidence'}
+    {activity === 'review' ? 'Checking…' : activity === 'delete' ? 'Deleting…' : 'Review retained evidence'}
   </button>
   {#if preview}
     {#if preview.unavailableCount}<p>{preview.unavailableCount} evidence group{preview.unavailableCount === 1 ? '' : 's'} could not be verified and will be left untouched.</p>{/if}

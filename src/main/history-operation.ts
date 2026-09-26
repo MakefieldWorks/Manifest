@@ -43,6 +43,8 @@ export interface RetainedHistoryOperationCandidate {
   history: Buffer
 }
 
+export class RetainedEvidenceChangedError extends Error {}
+
 /** Durable evidence, not a transaction or a request to replay Git commands. */
 export class HistoryOperationStore {
   readonly pendingPath: string
@@ -109,12 +111,15 @@ export class HistoryOperationStore {
 
   retainedCandidates(limit = 100): { candidates: RetainedHistoryOperationCandidate[]; unavailableCount: number; uninspectedCount: number } {
     this.directories()
-    const recordFiles = readdirSync(this.recoveryPath)
-      .filter(name => /^recovery-([0-9a-f-]{36})-operation\.json$/.test(name))
-      .map(name => ({ name, modified: lstatSync(join(this.recoveryPath, name)).mtimeMs }))
-      .sort((a, b) => b.modified - a.modified || b.name.localeCompare(a.name))
-    const candidates: RetainedHistoryOperationCandidate[] = []
+    const recordFiles: { name: string; modified: number }[] = []
     let unavailableCount = 0
+    for (const name of readdirSync(this.recoveryPath)) {
+      if (!/^recovery-([0-9a-f-]{36})-operation\.json$/.test(name)) continue
+      try { recordFiles.push({ name, modified: lstatSync(join(this.recoveryPath, name)).mtimeMs }) }
+      catch { unavailableCount++ }
+    }
+    recordFiles.sort((a, b) => b.modified - a.modified || b.name.localeCompare(a.name))
+    const candidates: RetainedHistoryOperationCandidate[] = []
     for (const { name: recordFile } of recordFiles.slice(0, limit)) {
       const id = /^recovery-([0-9a-f-]{36})-operation\.json$/.exec(recordFile)![1]
       try { candidates.push(this.candidateAt(join(this.recoveryPath, recordFile), id)) }
@@ -124,9 +129,11 @@ export class HistoryOperationStore {
   }
 
   removeRetained(candidate: RetainedHistoryOperationCandidate, remove: typeof unlinkSync = unlinkSync): { deletedFiles: string[]; remainingFiles: string[] } {
-    const current = this.candidateAt(candidate.recordPath, candidate.record.id)
+    let current: RetainedHistoryOperationCandidate
+    try { current = this.candidateAt(candidate.recordPath, candidate.record.id) }
+    catch { throw new RetainedEvidenceChangedError('Operation evidence changed. Review it again before deleting.') }
     if (!current.bytes.equals(candidate.bytes) || !current.inventory.equals(candidate.inventory) || !current.history.equals(candidate.history)) {
-      throw new Error('Operation evidence changed. Review it again before deleting.')
+      throw new RetainedEvidenceChangedError('Operation evidence changed. Review it again before deleting.')
     }
     // Remove the index record first. If either payload unlink fails, the
     // remaining file stays as ordinary recovery material and is never shown as
@@ -136,12 +143,10 @@ export class HistoryOperationStore {
     const remainingFiles: string[] = []
     for (const file of [candidate.record.inventoryFile, candidate.record.historyFile]) {
       let removed = false
-      for (let attempt = 0; attempt < 2 && !removed; attempt++) {
-        try { remove(join(this.recoveryPath, file)); removed = true }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ENOENT') removed = true
-          else if (attempt === 1) remainingFiles.push(file)
-        }
+      try { remove(join(this.recoveryPath, file)); removed = true }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') removed = true
+        else remainingFiles.push(file)
       }
       if (removed) deletedFiles.push(file)
     }

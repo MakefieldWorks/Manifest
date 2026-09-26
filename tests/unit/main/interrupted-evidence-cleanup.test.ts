@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, utimesSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
 import { GitService } from '../../../src/main/git-service'
-import { HistoryOperationStore } from '../../../src/main/history-operation'
+import { HistoryOperationStore, RetainedEvidenceChangedError } from '../../../src/main/history-operation'
 
 const logger = { error() {}, warn() {}, info() {}, debug() {} }
 let root: string
@@ -28,6 +28,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   manager.discardCurrentProject()
   rmSync(root, { recursive: true, force: true })
 })
@@ -135,9 +136,22 @@ describe('retained interrupted-operation evidence cleanup', () => {
     })
     expect(result.deletedFiles).toEqual([candidate.recordFile, record.inventoryFile])
     expect(result.remainingFiles).toEqual([record.historyFile])
+    expect(call).toBe(3)
     expect(existsSync(candidate.recordPath)).toBe(false)
     expect(existsSync(join(recoveryPath, record.inventoryFile))).toBe(false)
     expect(existsSync(join(recoveryPath, record.historyFile))).toBe(true)
+  })
+
+  it('reports a changed evidence group during final revalidation as a stale review', () => {
+    const record = retainEvidence()
+    const preview = manager.interruptedHistoryEvidencePreview()
+    if (!preview.ok) throw new Error(preview.error.message)
+    vi.spyOn(HistoryOperationStore.prototype, 'removeRetained').mockImplementation(() => {
+      throw new RetainedEvidenceChangedError('Operation evidence changed. Review it again before deleting.')
+    })
+    expect(manager.deleteInterruptedHistoryEvidence({ id: record.id, token: preview.data.groups[0].token }))
+      .toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
+    expect(evidencePaths(record).every(file => existsSync(file))).toBe(true)
   })
 
   it('applies the inspection cap after ordering retained records by recency', () => {
