@@ -15,6 +15,9 @@
     'snapshot-create': 'Snapshot creation',
     'snapshot-revert': 'Snapshot revert',
     'recovery-apply': 'Recovery application',
+    'recovery-register': 'Recovery registration',
+    'recovery-forget': 'Recovery registration removal',
+    'history-backup-restore': 'History backup restoration',
   } as const
 
   function formatBytes(bytes: number): string {
@@ -98,7 +101,7 @@
         {/if}
         {#if selected === group.id}
           <div class="mt-2 space-y-2 rounded border border-red-200 bg-red-50 p-2" data-testid="interrupted-evidence-confirmation">
-            <p class="font-medium text-red-800">Permanently delete these three files?</p>
+            <p class="font-medium text-red-800">Permanently delete these {group.files.length} files?</p>
             <p>This removes the retained inventory and history for this operation. It cannot be undone.</p>
             <div class="flex flex-wrap gap-2">
               <button disabled={busy || disabled} onclick={() => remove(group.id, group.token)} class="rounded bg-red-700 px-2 py-1 text-white" data-testid="interrupted-evidence-delete">Delete evidence permanently</button>

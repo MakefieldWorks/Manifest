@@ -2,9 +2,11 @@
 
 ## Next
 
-- Extend interruption protection to metadata-only recovery registration and history-backup restoration, preserving exact before-state evidence and avoiding automatic rollback unless completion can be proven.
+- Complete the first-user dogfood pass with a packaged build and representative lab project, including the remaining manual macOS and Windows checks in `docs/PILOT_DOGFOOD.md`.
 
 ## Completed
+
+- Protect recovery-file registration/removal and history-backup restoration with durable before-state evidence, exact completed-state recognition, and explicit continuation for uncertain outcomes. **Implemented:** 2026-09-26
 
 - Review and permanently delete one verified retained interrupted-operation evidence group at a time, with exact stale-state revalidation, registered-recovery blocking, truthful partial cleanup, and no automatic or unrelated-file deletion. **Implemented:** 2026-09-14
 

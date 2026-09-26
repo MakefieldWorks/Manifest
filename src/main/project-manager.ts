@@ -27,7 +27,8 @@ import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
 import { ProjectArchive } from './project-archive'
-import { HistoryOperationStore, RetainedEvidenceChangedError, type HistoryOperationIntent, type RetainedHistoryOperationCandidate } from './history-operation'
+import { HistoryOperationStore, RetainedEvidenceChangedError, type HistoryOperationIntent,
+  type MetadataHistoryOperationIntent, type PendingHistoryOperationV3, type RetainedHistoryOperationCandidate } from './history-operation'
 import type { ProjectArchivePreview, ExternalDocumentPreview, InterruptedHistoryPreview,
   InterruptedHistoryEvidencePreview, InterruptedHistoryEvidenceDeleteResult } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
@@ -1745,14 +1746,28 @@ export class ProjectManager {
           id: `reconciled-${uuidv7()}`, createdAt: new Date().toISOString(),
           reason: 'reconciled', manifestPath: `.manifest/recovery/${file.name}`,
         }
+        if (this.scanRecoveryFiles().token !== request.token) {
+          return err(ErrorCode.VALIDATION_FAILED, 'Recovery files changed. Review them again.')
+        }
+        const payload = this.operationStore()!.read(join(this.currentProject!.path!, '.manifest', 'recovery', file.name))
+        const parsedPayload = this.parseManifestJson(payload.toString('utf8'))
+        if (!parsedPayload.ok || parsedPayload.data.id !== this.currentProject!.id) {
+          return err(ErrorCode.VALIDATION_FAILED, 'Recovery file changed. Review it again.')
+        }
         const history = structuredClone(this.historyBeforeOperation!)
         history.recoveryPoints.push(point)
         // Registration is not an inventory event. Never invent a revert or
         // recover event, change lineage, or prune files during reconciliation.
+        this.beginMetadataHistoryOperation(`Register recovery file: ${file.name}`, {
+          kind: 'recovery-register', targetId: point.id,
+          expectedHistoryHash: this.hashDocument(JSON.stringify(history, null, 2)),
+          targetPayloadHash: this.hashDocument(payload),
+        })
         this.writeSnapshotHistory(history)
         return ok(point)
       } catch (error) {
-        return err(error instanceof HistoryMetadataReadError ? ErrorCode.HISTORY_METADATA_UNAVAILABLE : ErrorCode.HISTORY_BACKUP_FAILED,
+        return err(this.hasInterruptedHistory() ? ErrorCode.HISTORY_OPERATION_PENDING :
+          error instanceof HistoryMetadataReadError ? ErrorCode.HISTORY_METADATA_UNAVAILABLE : ErrorCode.HISTORY_BACKUP_FAILED,
           `Could not add recovery file: ${error instanceof Error ? error.message : String(error)}`)
       }
     })
@@ -1763,17 +1778,23 @@ export class ProjectManager {
     if (!request || typeof request !== 'object' || !('id' in request) || typeof request.id !== 'string') {
       return err(ErrorCode.VALIDATION_FAILED, 'Choose an added recovery point to remove from the list.')
     }
+    const recoveryId = request.id
     return this.withHistoryOperation(async () => {
       const history = structuredClone(this.historyBeforeOperation!)
-      if (!history.recoveryPoints.some(point => point.id === request.id && point.reason === 'reconciled')) {
+      if (!history.recoveryPoints.some(point => point.id === recoveryId && point.reason === 'reconciled')) {
         return err(ErrorCode.VALIDATION_FAILED, 'Only explicitly added recovery points can be removed from this list.')
       }
-      history.recoveryPoints = history.recoveryPoints.filter(point => point.id !== request.id)
+      history.recoveryPoints = history.recoveryPoints.filter(point => point.id !== recoveryId)
       try {
+        this.beginMetadataHistoryOperation(`Remove recovery registration: ${recoveryId}`, {
+          kind: 'recovery-forget', targetId: recoveryId,
+          expectedHistoryHash: this.hashDocument(JSON.stringify(history, null, 2)),
+        })
         this.writeSnapshotHistory(history, { deleteRemovedPayloads: false })
         return ok(undefined)
       } catch (error) {
-        return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not remove recovery point: ${String(error)}`)
+        return err(this.hasInterruptedHistory() ? ErrorCode.HISTORY_OPERATION_PENDING : ErrorCode.HISTORY_BACKUP_FAILED,
+          `Could not remove recovery point: ${String(error)}`)
       }
     })
   }
@@ -1855,6 +1876,7 @@ export class ProjectManager {
 
   async restoreHistoryBackup(request: unknown): Promise<Result<HistoryBackupRestoreResult>> {
     if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
     if (this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
     if (!request || typeof request !== 'object' || !('token' in request) || typeof request.token !== 'string') {
       return err(ErrorCode.VALIDATION_FAILED, 'Review the history backup before restoring it.')
@@ -1863,11 +1885,25 @@ export class ProjectManager {
     try {
       const candidate = await this.validatedHistoryBackup()
       if (candidate.token !== request.token) return err(ErrorCode.VALIDATION_FAILED, 'History files changed. Review the backup again before restoring.')
-      const preservedPath = new HistoryBackupStore(this.currentProject.path, this.currentProject.id).restore(candidate)
+      const backupStore = new HistoryBackupStore(this.currentProject.path, this.currentProject.id)
+      const restored = migrateSnapshotHistory({
+        ...candidate.history, currentBaseSnapshotId: null, pendingRevertEventId: null,
+      })
+      const record = this.beginMetadataHistoryOperation('Restore history from automatic backup', {
+        kind: 'history-backup-restore', targetId: 'history.backup.json',
+        expectedHistoryHash: this.hashDocument(JSON.stringify(restored, null, 2)),
+      }, readFileSync(backupStore.backupPath))
+      const preservedPath = backupStore.restore(candidate, `${backupStore.historyPath}.damaged-${record.id}`)
+      try { this.operationStore()!.finish() }
+      catch (error) {
+        this.logger.warn('history backup restored; retrying evidence cleanup', { error: String(error) })
+        await this.finishProvenHistoryOperation()
+      }
       this.scheduleHistoryBackfill()
       return ok({ preservedPath })
     } catch (error) {
-      return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not restore history backup: ${error instanceof Error ? error.message : String(error)}`)
+      return err(this.hasInterruptedHistory() ? ErrorCode.HISTORY_OPERATION_PENDING : ErrorCode.HISTORY_BACKUP_FAILED,
+        `Could not restore history backup: ${error instanceof Error ? error.message : String(error)}`)
     } finally { this.historyOperationInProgress = false }
   }
 
@@ -2580,6 +2616,33 @@ export class ProjectManager {
     return this.currentProject?.path ? new HistoryOperationStore(this.currentProject.path, this.currentProject.id) : null
   }
 
+  private historyBytesOrNull(): Buffer | null {
+    const project = this.currentProject
+    if (!project?.path) throw new Error('No project open')
+    try { return this.operationStore()!.read(this.snapshotHistoryPath(project.path)) }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    }
+  }
+
+  private beginMetadataHistoryOperation(label: string,
+    intent: Omit<MetadataHistoryOperationIntent, 'expectedDocumentHash'>, source: Buffer | null = null): PendingHistoryOperationV3 {
+    const project = this.currentProject
+    if (!project?.path) throw new Error('No project open')
+    const document = this.documentBytes(join(project.path, PROJECT_DOCUMENT_FILE))
+    if (!document) throw new Error('The project document is missing.')
+    const beforeHistory = this.historyBytesOrNull()
+    if (intent.kind !== 'history-backup-restore') {
+      if (!beforeHistory || !this.historyBeforeOperation ||
+          JSON.stringify(migrateSnapshotHistory(JSON.parse(beforeHistory.toString('utf8')))) !== JSON.stringify(this.historyBeforeOperation)) {
+        throw new Error('History metadata changed. Review the operation again before changing it.')
+      }
+    }
+    return this.operationStore()!.beginMetadata(label, this.serializeProjectForPersistence(project), beforeHistory,
+      { ...intent, expectedDocumentHash: this.hashDocument(document) }, source)
+  }
+
   private hasInterruptedHistory(): boolean { return this.operationStore()?.pending() ?? false }
 
   private interruptedHistoryError<T>(): Result<T> {
@@ -2610,23 +2673,26 @@ export class ProjectManager {
       try {
         const before = this.parseManifestJson(candidate.inventory.toString('utf8'))
         if (!before.ok || before.data.id !== this.currentProject.id) throw new Error('Invalid before-state inventory.')
-        migrateSnapshotHistory(JSON.parse(candidate.history.toString('utf8')))
+        if (candidate.record.version !== 3 || candidate.record.kind !== 'history-backup-restore') {
+          migrateSnapshotHistory(JSON.parse(candidate.history.toString('utf8')))
+        }
         const registeredAsRecoveryPoint = history.recoveryPoints.some(point =>
           point.manifestPath.split(/[\\/]/).pop() === candidate.record.inventoryFile)
         const record = candidate.record
-        const token = store.fingerprint(candidate.bytes, candidate.inventory, candidate.history, historyBytes,
+        const token = store.fingerprint(candidate.bytes, candidate.inventory, candidate.history, candidate.source ?? '', historyBytes,
           JSON.stringify([record.id, candidate.recordFile, registeredAsRecoveryPoint]))
         groups.push({
           id: record.id,
           token,
           label: record.label,
           startedAt: record.startedAt,
-          kind: record.version === 2 ? record.kind : null,
-          targetId: record.version === 2 ? record.targetId : null,
+          kind: record.version === 1 ? null : record.kind,
+          targetId: record.version === 1 ? null : record.targetId,
           beforeNodeCount: before.data.nodes.length,
           currentNodeCount: this.currentProject.nodes.length,
-          sizeBytes: candidate.bytes.length + candidate.inventory.length + candidate.history.length,
-          files: [candidate.recordFile, record.inventoryFile, record.historyFile],
+          sizeBytes: candidate.bytes.length + candidate.inventory.length + candidate.history.length + (candidate.source?.length ?? 0),
+          files: [candidate.recordFile, record.inventoryFile, record.historyFile,
+            record.version === 3 ? record.sourceFile : undefined].filter((file): file is string => !!file),
           registeredAsRecoveryPoint,
         })
         candidates.set(record.id, candidate)
@@ -2695,7 +2761,36 @@ export class ProjectManager {
     this.historyOperationInProgress = true
     this.classifyingInterruptedHistory = true
     try {
-      const { record } = store.candidate()
+      const evidence = store.candidate()
+      const { record } = evidence
+      if (record.version === 3) {
+        const document = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
+        const historyBytes = this.historyBytesOrNull()
+        if (!document || !historyBytes || this.hashDocument(document) !== record.expectedDocumentHash ||
+            this.hashDocument(historyBytes) !== record.expectedHistoryHash) return
+        if (record.kind === 'recovery-register') {
+          const history = migrateSnapshotHistory(JSON.parse(historyBytes.toString('utf8')))
+          const point = history.recoveryPoints.find(point => point.id === record.targetId)
+          if (!point) return
+          const payload = store.read(join(projectPath, ...point.manifestPath.split(/[\\/]/)))
+          if (this.hashDocument(payload) !== record.targetPayloadHash) return
+        }
+        if (record.kind === 'history-backup-restore') {
+          const source = store.read(join(projectPath, '.manifest', 'history.backup.json'))
+          if (!evidence.source?.equals(source)) return
+          const preservedPath = `${this.snapshotHistoryPath(projectPath)}.damaged-${record.id}`
+          if (!record.historyMissing) {
+            const preserved = store.read(preservedPath)
+            if (!preserved.equals(evidence.history)) return
+          } else if (existsSync(preservedPath)) return
+        }
+        const latestDocument = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
+        const latestHistory = this.historyBytesOrNull()
+        if (!latestDocument?.equals(document) || !latestHistory?.equals(historyBytes)) return
+        store.finish(true)
+        this.logger.info('confirmed completed interrupted metadata operation', { path: projectPath, kind: record.kind })
+        return
+      }
       if (record.version !== 2) return
       const document = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
       if (!document || this.hashDocument(document) !== record.expectedDocumentHash) return
@@ -2750,13 +2845,27 @@ export class ProjectManager {
     const evidence = store.candidate()
     const before = this.parseManifestJson(evidence.inventory.toString('utf8'))
     if (!before.ok || before.data.id !== this.currentProject.id) throw new Error('The preserved inventory is invalid or belongs to another project.')
-    migrateSnapshotHistory(JSON.parse(evidence.history.toString('utf8')))
-    const history = this.readSnapshotHistory()
+    const metadataOnly = evidence.record.version === 3
+    if (!metadataOnly) migrateSnapshotHistory(JSON.parse(evidence.history.toString('utf8')))
+    const currentHistoryBytes = this.historyBytesOrNull()
+    let history: SnapshotHistoryState | null = null
+    let historyReadable = false
+    if (currentHistoryBytes !== null) {
+      try {
+        history = this.readSnapshotHistory(currentHistoryBytes)
+        historyReadable = true
+      } catch (error) {
+        if (!(error instanceof HistoryMetadataReadError)) throw error
+      }
+    }
     const current = this.serializeProjectForPersistence(this.currentProject)
     const disk = this.documentBytes(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE))
     if (!disk) throw new Error('Restore or resolve the missing project document before continuing.')
-    const token = store.fingerprint(evidence.bytes, evidence.inventory, evidence.history, JSON.stringify(history), current, disk)
-    return { store, evidence, before: before.data, history, current, token }
+    const token = metadataOnly || history === null ?
+      store.fingerprint(evidence.bytes, evidence.inventory, evidence.history, evidence.source ?? '',
+        currentHistoryBytes ?? 'missing-history', current, disk) :
+      store.fingerprint(evidence.bytes, evidence.inventory, evidence.history, JSON.stringify(history), current, disk)
+    return { store, evidence, before: before.data, history, currentHistoryBytes, metadataOnly, historyReadable, current, token }
   }
 
   reviewInterruptedHistory(): Result<InterruptedHistoryPreview> {
@@ -2765,7 +2874,9 @@ export class ProjectManager {
       const candidate = this.interruptedHistoryCandidate()
       return ok({ token: candidate.token, label: candidate.evidence.record.label, startedAt: candidate.evidence.record.startedAt,
         beforeNodeCount: candidate.before.nodes.length, currentNodeCount: this.currentProject!.nodes.length,
-        recoveryPath: join(candidate.store.recoveryPath, candidate.evidence.record.inventoryFile) })
+        recoveryPath: join(candidate.store.recoveryPath, candidate.evidence.record.inventoryFile),
+        metadataOnly: candidate.metadataOnly, currentHistoryAvailable: candidate.currentHistoryBytes !== null,
+        historyReadable: candidate.historyReadable })
     } catch (error) { return err(ErrorCode.HISTORY_OPERATION_PENDING, `Could not review unfinished history: ${String(error)}. Preserve ${this.operationStore()?.pendingPath} and its recovery files for manual recovery; restore readable history metadata if necessary.`) }
   }
 
@@ -2779,13 +2890,27 @@ export class ProjectManager {
       this.assertDocumentUnchanged(this.currentProject!.path!)
       const id = uuidv7()
       writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued.manifest.json`), candidate.current)
+      if (candidate.metadataOnly || candidate.history === null) {
+        if (candidate.currentHistoryBytes !== null) {
+          writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued-history.json`), candidate.currentHistoryBytes)
+        }
+        if (!candidate.metadataOnly) {
+          const saved = await this.writeManifest(this.currentProject!)
+          if (!saved.ok) return saved as Result<Project>
+        }
+        candidate.store.finish(true)
+        if (candidate.historyReadable) this.scheduleHistoryBackfill()
+        if (candidate.metadataOnly) this.scheduleAutosave()
+        else { this.cancelAutosave(); this.edits.clear() }
+        return ok(this.currentProject!)
+      }
       writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued-history.json`), JSON.stringify(candidate.history, null, 2))
       // No Git replay and no invented timeline event. Preserve the current
       // inventory and relinquish lineage assumptions that may be incomplete.
       const saved = await this.writeManifest(this.currentProject!)
       if (!saved.ok) return saved as Result<Project>
-      this.historyBeforeOperation = candidate.history
-      this.writeSnapshotHistory({ ...candidate.history, currentBaseSnapshotId: null, pendingRevertEventId: null }, { deleteRemovedPayloads: false })
+      this.historyBeforeOperation = candidate.history!
+      this.writeSnapshotHistory({ ...candidate.history!, currentBaseSnapshotId: null, pendingRevertEventId: null }, { deleteRemovedPayloads: false })
       candidate.store.finish(true)
       this.cancelAutosave()
       this.edits.clear()

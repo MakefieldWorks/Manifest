@@ -84,13 +84,13 @@ export class HistoryBackupStore {
     return { token, sourceToken: token, savedAt: backup.savedAt, history, damaged }
   }
 
-  restore(candidate: HistoryBackupCandidate): string | null {
+  restore(candidate: HistoryBackupCandidate, preservedPathOverride?: string): string | null {
     // Recheck both files immediately before preserving/replacing the original.
     if (this.candidate().token !== candidate.sourceToken) throw new Error('History files changed. Review the backup again before restoring.')
     const restored = migrateSnapshotHistory({
       ...candidate.history, currentBaseSnapshotId: null, pendingRevertEventId: null,
     })
-    const preservedPath = candidate.damaged === null ? null : `${this.historyPath}.damaged-${randomUUID()}`
+    const preservedPath = candidate.damaged === null ? null : preservedPathOverride ?? `${this.historyPath}.damaged-${randomUUID()}`
     if (preservedPath && candidate.damaged !== null) {
       const fd = openSync(preservedPath, 'wx')
       try {

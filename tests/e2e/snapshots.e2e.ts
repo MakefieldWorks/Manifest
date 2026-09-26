@@ -284,6 +284,41 @@ test('automatically accepts exact evidence that an interrupted snapshot complete
   await expect(treeRow(appPage, 'Editing resumed')).toBeVisible()
 })
 
+test('reviews an interrupted metadata restore while history is unreadable', async ({ appPage, electronApp, workspaceDir }) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Metadata Interruption Lab')
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'baseline')
+  const current = await appPage.evaluate(() => window.api.project.getCurrent())
+  if (!current.ok || !current.data?.path) throw new Error('Missing project')
+  const path = current.data.path
+  const document = readFileSync(join(path, 'Manifest.manifestproject'))
+  const backup = readFileSync(join(path, '.manifest', 'history.backup.json'))
+  const damaged = Buffer.from('{damaged history')
+  writeFileSync(join(path, '.manifest', 'history.json'), damaged)
+  const store = new HistoryOperationStore(path, current.data.id)
+  store.beginMetadata('Restore history from automatic backup', document.toString(), damaged, {
+    kind: 'history-backup-restore', targetId: 'history.backup.json',
+    expectedDocumentHash: createHash('sha256').update(document).digest('hex'),
+    expectedHistoryHash: '0'.repeat(64),
+  }, backup)
+
+  const reopened = await appPage.evaluate(projectPath => window.api.project.open(projectPath), path)
+  expect(reopened.ok).toBe(true)
+  const banner = appPage.getByTestId('interrupted-history')
+  await expect(banner).toBeVisible()
+  await banner.getByRole('button', { name: 'Review unfinished operation' }).click()
+  const review = appPage.getByTestId('interrupted-history-review')
+  await expect(review).toContainText('keeps the current inventory and history bytes as they are')
+  await review.getByRole('button', { name: 'Continue with current inventory' }).click()
+  await expect(banner).toHaveCount(0)
+  expect(readFileSync(join(path, '.manifest', 'history.json'))).toEqual(damaged)
+  expect(store.pending()).toBe(false)
+  const status = await appPage.evaluate(() => window.api.snapshot.historyBackupStatus())
+  if (!status.ok || !status.data.available) throw new Error(JSON.stringify(status))
+  const restored = await appPage.evaluate(token => window.api.snapshot.restoreHistoryBackup({ token }), status.data.token)
+  expect(restored.ok).toBe(true)
+})
+
 for (const choice of ['keep-local', 'load-external'] as const) {
   test(`preserves outside edits and resolves through ${choice}`, async ({ appPage, electronApp, workspaceDir }) => {
     await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Conflict Lab')
