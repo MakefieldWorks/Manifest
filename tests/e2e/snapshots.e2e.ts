@@ -1,6 +1,6 @@
 import { execFileSync } from 'child_process'
 import { createHash } from 'crypto'
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
 import { CURRENT_PROJECT_REF } from '../../src/shared/snapshot-ref'
@@ -257,11 +257,28 @@ test('automatically accepts exact evidence that an interrupted snapshot complete
     kind: 'snapshot-create', eventId: event.id, targetId: 'completed',
     expectedDocumentHash: createHash('sha256').update(document).digest('hex'),
   })
+  const record = store.candidate().record
+  const evidenceFiles = [
+    join(store.recoveryPath, `recovery-${record.id}-operation.json`),
+    join(store.recoveryPath, record.inventoryFile),
+    join(store.recoveryPath, record.historyFile),
+  ]
   const reopened = await appPage.evaluate(projectPath => window.api.project.open(projectPath), path)
   expect(reopened.ok).toBe(true)
   await expect(appPage.getByTestId('interrupted-history')).toHaveCount(0)
   expect(store.pending()).toBe(false)
   expect(readdirSync(store.recoveryPath).some(name => name.endsWith('-operation.json'))).toBe(true)
+  await appPage.getByTestId('interrupted-evidence-review').click()
+  const evidence = appPage.getByTestId('interrupted-evidence-row')
+  await expect(evidence).toContainText('Create snapshot: completed')
+  await evidence.getByRole('button', { name: 'Review permanent deletion' }).click()
+  const confirmation = appPage.getByTestId('interrupted-evidence-confirmation')
+  await expect(confirmation).toContainText('cannot be undone')
+  await confirmation.screenshot({ path: test.info().outputPath('interrupted-evidence-cleanup.png') })
+  await confirmation.getByTestId('interrupted-evidence-delete').click()
+  await expect(appPage.getByTestId('interrupted-evidence-cleanup').getByRole('status')).toContainText('Permanently deleted 3 evidence files')
+  await expect(evidence).toHaveCount(0)
+  expect(evidenceFiles.every(file => !existsSync(file))).toBe(true)
   await appPage.getByRole('button', { name: 'Close snapshots' }).click()
   await addChildNode(appPage, 'Completed Interruption Lab', 'Editing resumed')
   await expect(treeRow(appPage, 'Editing resumed')).toBeVisible()

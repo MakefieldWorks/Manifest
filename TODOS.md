@@ -2,9 +2,11 @@
 
 ## Next
 
-- Add a user-reviewed cleanup workflow for retained interrupted-operation recovery and audit evidence; automatic deletion remains disabled so the only surviving pre-operation inventory cannot be silently lost.
+- Extend interruption protection to metadata-only recovery registration and history-backup restoration, preserving exact before-state evidence and avoiding automatic rollback unless completion can be proven.
 
 ## Completed
+
+- Review and permanently delete one verified retained interrupted-operation evidence group at a time, with exact stale-state revalidation, registered-recovery blocking, truthful partial cleanup, and no automatic or unrelated-file deletion. **Implemented:** 2026-09-14
 
 - Automatically recognize fully completed interrupted snapshot/revert/recovery operations from structured intent and exact document, timeline, lineage, and Git evidence, while retaining ambiguous and legacy records for manual review. **Implemented:** 2026-09-10
 

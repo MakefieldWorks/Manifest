@@ -27,8 +27,9 @@ import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
 import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
 import { ProjectArchive } from './project-archive'
-import { HistoryOperationStore, type HistoryOperationIntent } from './history-operation'
-import type { ProjectArchivePreview, ExternalDocumentPreview, InterruptedHistoryPreview } from '../shared/types'
+import { HistoryOperationStore, RetainedEvidenceChangedError, type HistoryOperationIntent, type RetainedHistoryOperationCandidate } from './history-operation'
+import type { ProjectArchivePreview, ExternalDocumentPreview, InterruptedHistoryPreview,
+  InterruptedHistoryEvidencePreview, InterruptedHistoryEvidenceDeleteResult } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
 import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
 import {
@@ -2589,6 +2590,89 @@ export class ProjectManager {
     return ok({ pending: (!this.historyOperationInProgress || this.classifyingInterruptedHistory) && this.hasInterruptedHistory() })
   }
 
+  private scanInterruptedHistoryEvidence(): {
+    preview: InterruptedHistoryEvidencePreview
+    candidates: Map<string, RetainedHistoryOperationCandidate>
+  } {
+    if (!this.currentProject?.path) throw new Error('No project is currently open.')
+    const store = this.operationStore()!
+    if (!existsSync(store.recoveryPath)) {
+      return { preview: { groups: [], unavailableCount: 0, uninspectedCount: 0 }, candidates: new Map() }
+    }
+    const historyPath = this.snapshotHistoryPath(this.currentProject.path)
+    const historyBytes = readFileSync(historyPath)
+    const history = this.readSnapshotHistory(historyBytes)
+    const retained = store.retainedCandidates()
+    const candidates = new Map<string, RetainedHistoryOperationCandidate>()
+    const groups: InterruptedHistoryEvidencePreview['groups'] = []
+    let unavailableCount = retained.unavailableCount
+    for (const candidate of retained.candidates) {
+      try {
+        const before = this.parseManifestJson(candidate.inventory.toString('utf8'))
+        if (!before.ok || before.data.id !== this.currentProject.id) throw new Error('Invalid before-state inventory.')
+        migrateSnapshotHistory(JSON.parse(candidate.history.toString('utf8')))
+        const registeredAsRecoveryPoint = history.recoveryPoints.some(point =>
+          point.manifestPath.split(/[\\/]/).pop() === candidate.record.inventoryFile)
+        const record = candidate.record
+        const token = store.fingerprint(candidate.bytes, candidate.inventory, candidate.history, historyBytes,
+          JSON.stringify([record.id, candidate.recordFile, registeredAsRecoveryPoint]))
+        groups.push({
+          id: record.id,
+          token,
+          label: record.label,
+          startedAt: record.startedAt,
+          kind: record.version === 2 ? record.kind : null,
+          targetId: record.version === 2 ? record.targetId : null,
+          beforeNodeCount: before.data.nodes.length,
+          currentNodeCount: this.currentProject.nodes.length,
+          sizeBytes: candidate.bytes.length + candidate.inventory.length + candidate.history.length,
+          files: [candidate.recordFile, record.inventoryFile, record.historyFile],
+          registeredAsRecoveryPoint,
+        })
+        candidates.set(record.id, candidate)
+      } catch { unavailableCount++ }
+    }
+    groups.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+    return { preview: { groups, unavailableCount, uninspectedCount: retained.uninspectedCount }, candidates }
+  }
+
+  interruptedHistoryEvidencePreview(): Result<InterruptedHistoryEvidencePreview> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
+    if (this.historyOperationInProgress || this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current history or archive operation to finish.')
+    try { return ok(this.scanInterruptedHistoryEvidence().preview) }
+    catch (error) {
+      return err(error instanceof HistoryMetadataReadError ? ErrorCode.HISTORY_METADATA_UNAVAILABLE : ErrorCode.SNAPSHOT_READ_FAILED,
+        `Could not inspect interrupted-operation evidence: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  deleteInterruptedHistoryEvidence(request: unknown): Result<InterruptedHistoryEvidenceDeleteResult> {
+    if (!this.currentProject?.path) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    if (this.hasInterruptedHistory()) return this.interruptedHistoryError()
+    if (this.historyOperationInProgress || this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the current history or archive operation to finish.')
+    if (!request || typeof request !== 'object' || !('id' in request) || typeof request.id !== 'string' ||
+        !('token' in request) || typeof request.token !== 'string') {
+      return err(ErrorCode.VALIDATION_FAILED, 'Review retained evidence before deleting it.')
+    }
+    this.historyOperationInProgress = true
+    try {
+      const scanned = this.scanInterruptedHistoryEvidence()
+      const group = scanned.preview.groups.find(item => item.id === request.id)
+      const candidate = scanned.candidates.get(request.id)
+      if (!group || !candidate || group.token !== request.token) {
+        return err(ErrorCode.VALIDATION_FAILED, 'The evidence or recovery registrations changed. Review retained evidence again.')
+      }
+      if (group.registeredAsRecoveryPoint) {
+        return err(ErrorCode.VALIDATION_FAILED, 'Remove this inventory from Additional recovery files before deleting its evidence.')
+      }
+      return ok(this.operationStore()!.removeRetained(candidate))
+    } catch (error) {
+      return err(error instanceof RetainedEvidenceChangedError ? ErrorCode.VALIDATION_FAILED : ErrorCode.SNAPSHOT_READ_FAILED,
+        `Could not delete interrupted-operation evidence: ${error instanceof Error ? error.message : String(error)}`)
+    } finally { this.historyOperationInProgress = false }
+  }
+
   private beginHistoryOperation(label: string, intent: HistoryOperationIntent): void {
     const store = this.operationStore()
     if (!store || !this.currentProject) throw new Error('No project open')
@@ -3223,13 +3307,13 @@ export class ProjectManager {
     history.recoveryPoints = history.recoveryPoints.filter(p => !removeIds.has(p.id))
   }
 
-  private readSnapshotHistory(): SnapshotHistoryState {
+  private readSnapshotHistory(bytes?: Buffer): SnapshotHistoryState {
     const projectPath = this.currentProject?.path
     if (!projectPath) return emptySnapshotHistory()
 
     const historyPath = this.snapshotHistoryPath(projectPath)
     try {
-      const parsed = JSON.parse(readFileSync(historyPath, 'utf8'))
+      const parsed = JSON.parse(bytes ? bytes.toString('utf8') : readFileSync(historyPath, 'utf8'))
       return migrateSnapshotHistory(parsed)
     } catch (e: unknown) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') {

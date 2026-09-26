@@ -29,6 +29,8 @@ import type {
   ProjectArchivePreview,
   ExternalDocumentPreview,
   InterruptedHistoryPreview,
+  InterruptedHistoryEvidencePreview,
+  InterruptedHistoryEvidenceDeleteResult,
   RecoveryPoint,
   ImportMapping,
   ImportInspect,
@@ -53,6 +55,8 @@ export const IPC = {
   HISTORY_OPERATION_STATUS: 'historyOperation:status',
   HISTORY_OPERATION_REVIEW: 'historyOperation:review',
   HISTORY_OPERATION_ACKNOWLEDGE: 'historyOperation:acknowledge',
+  HISTORY_OPERATION_EVIDENCE_PREVIEW: 'historyOperation:evidencePreview',
+  HISTORY_OPERATION_EVIDENCE_DELETE: 'historyOperation:evidenceDelete',
   DOCUMENT_SAVE_STATUS: 'project:saveStatus',
   DOCUMENT_CONFLICT_REVIEW: 'project:reviewExternalChange',
   DOCUMENT_CONFLICT_RESOLVE: 'project:resolveExternalChange',
@@ -179,6 +183,8 @@ export interface ManifestAPI {
     status(): Promise<Result<{ pending: boolean }>>
     review(): Promise<Result<InterruptedHistoryPreview>>
     acknowledge(request: { token: string }): Promise<Result<Project>>
+    evidencePreview(): Promise<Result<InterruptedHistoryEvidencePreview>>
+    deleteEvidence(request: { id: string; token: string }): Promise<Result<InterruptedHistoryEvidenceDeleteResult>>
   }
   documentConflict: {
     status(): Promise<Result<{ message: string | null }>>
