@@ -56,7 +56,7 @@
 <div class="flex items-start justify-between gap-2" data-testid="snapshot-diff-row-header">
   <div class="min-w-0">
     <p class="text-xs font-medium text-stone-800">{formatChangeType(diff.changeType)}</p>
-    <p class="mt-0.5 text-xs text-stone-600 truncate">
+    <p class="mt-0.5 break-words text-xs text-stone-600" title={formatPath(diff.context.path, diff.context.nodeName)}>
       {formatPath(diff.context.path, diff.context.nodeName)}
     </p>
   </div>

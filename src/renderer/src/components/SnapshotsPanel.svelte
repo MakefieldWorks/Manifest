@@ -466,24 +466,8 @@
     ? 'flex flex-col items-stretch'
     : 'flex items-center justify-between'}">
     {#if compareLoaded && mergedTree}
-      <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0">
-          <h2 class="truncate text-sm font-semibold text-stone-900">
-            Comparing {snapshotRefLabel(mergedTree.fromSnapshot)} → {snapshotRefLabel(mergedTree.toSnapshot)}
-          </h2>
-          <p class="text-xs text-stone-400">{totalChanges} {totalChanges === 1 ? 'change' : 'changes'}</p>
-          {#if mergedTree.scope}
-            <p class="mt-1 inline-flex max-w-full truncate rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700"
-               data-testid="compare-scope-label">
-              Scope: {mergedTree.scope.path}
-            </p>
-          {/if}
-          {#each compareDescriptions as description (description.label)}
-            <p class="mt-0.5 max-w-96 line-clamp-2 text-[10px] text-stone-500" title={description.note}>
-              {description.label}: {description.note}
-            </p>
-          {/each}
-        </div>
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-stone-900" aria-label="Comparing {snapshotRefLabel(mergedTree.fromSnapshot)} to {snapshotRefLabel(mergedTree.toSnapshot)}">Comparing</h2>
         <div class="flex shrink-0 items-center gap-1">
           <button
             onclick={onExitCompare}
@@ -498,6 +482,21 @@
           >✕</button>
         </div>
       </div>
+      <p class="mt-1 break-words text-xs font-medium leading-snug text-stone-700" data-testid="compare-heading">
+        {snapshotRefLabel(mergedTree.fromSnapshot)} → {snapshotRefLabel(mergedTree.toSnapshot)}
+      </p>
+      <p class="text-xs text-stone-400">{totalChanges} {totalChanges === 1 ? 'change' : 'changes'}</p>
+      {#if mergedTree.scope}
+        <p class="mt-1 max-w-full break-words rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700"
+           data-testid="compare-scope-label">
+          Scope: {mergedTree.scope.path}
+        </p>
+      {/if}
+      {#each compareDescriptions as description (description.label)}
+        <p class="mt-0.5 max-w-96 line-clamp-2 text-[10px] text-stone-500" title={description.note}>
+          {description.label}: {description.note}
+        </p>
+      {/each}
       <div class="mt-2 flex flex-wrap items-center justify-end gap-1">
         <button
           onclick={() => runReport(() => onExportReport?.('html'))}
@@ -594,16 +593,14 @@
                     type="button"
                     aria-pressed={activeFocusId === insight.id}
                     onclick={() => toggleReviewFocus(insight.id)}
-                    class={`flex w-full items-start justify-between gap-2 rounded-lg border px-2 py-1.5
+                    class={`w-full rounded-lg border px-2 py-1.5
                             text-left transition-colors cursor-default ${focusButtonClass(insight)}`}
                     data-testid="review-focus-item"
                     data-focus-id={insight.id}
                   >
-                    <div class="min-w-0">
-                      <p class="truncate text-xs font-medium text-stone-700">{insight.label}</p>
-                      <p class="text-[11px] text-stone-500">{insight.detail}</p>
-                    </div>
-                    <div class="flex shrink-0 flex-wrap justify-end gap-1">
+                    <p class="break-words text-xs font-medium text-stone-700" data-testid="review-focus-title">{insight.label}</p>
+                    <p class="mt-0.5 break-words text-[11px] text-stone-500">{insight.detail}</p>
+                    <div class="mt-1 flex flex-wrap gap-1">
                       <span class={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold
                                     uppercase tracking-wide ${severityBadgeClass(insight.severity)}`}>
                         {insight.severity}

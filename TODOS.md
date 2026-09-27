@@ -4,15 +4,13 @@
 
 - Complete a clean-machine launch on macOS and the Windows dogfood pass in `docs/PILOT_DOGFOOD.md`. The local macOS packaged lab, first-run, file-open, and automated checks are recorded in `docs/PILOT_DOGFOOD_2026-09-26.md`.
 
-## Pilot UX follow-ups
-
-- Improve readability when the tree, details, and snapshot review panels are all open: snapshot heading, focus-card titles, and tree labels truncate heavily. Confirm priority with a real pilot task. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`.
-
 ## Test infrastructure follow-ups
 
 - After upgrading Electron from 39.8.10, retest the inventory property-key datalist in hidden macOS E2E runs and remove the popup suppression in `tests/e2e/fixtures.ts` if the native SIGSEGV is fixed. The default suite checks suggestion options and filtering, but does not open the native popup; check that interaction in a visible run.
 
 ## Completed
+
+- Improve readability when the tree, details, and snapshot review panels are all open: snapshot heading, focus-card titles, diff paths, and tree labels. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`. **Implemented:** 2026-09-27
 
 - Show readable previous and new parent paths on moved-node comparison cards instead of raw IDs. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`. **Implemented:** 2026-09-26
 

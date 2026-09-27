@@ -90,6 +90,8 @@
   }: Props = $props()
 
   const ROW_HEIGHT = 32
+  // Keep this in sync with the compare-only h-16 rows in TreeRow.svelte.
+  const COMPARE_ROW_HEIGHT = 64
   const MARKER_HEIGHT = 36
 
   // ─── DensityLayer ────────────────────────────────────────────────────────────
@@ -148,7 +150,7 @@
   }
 
   function fullSizeOf(item: RenderItem): number {
-    return item.kind === 'fold' ? MARKER_HEIGHT : ROW_HEIGHT
+    return item.kind === 'fold' ? MARKER_HEIGHT : mode === 'compare' ? COMPARE_ROW_HEIGHT : ROW_HEIGHT
   }
 
   // ─── Animation state ─────────────────────────────────────────────────────────
@@ -704,6 +706,7 @@
             {:else}
               <TreeRow
                 row={item.row}
+                compare={mode === 'compare'}
                 selected={selectedIds.has(item.row.node.id) || selectedId === item.row.node.id}
                 focused={focusedIndex === virt.index}
                 matched={matchedIds.has(item.row.node.id)}
