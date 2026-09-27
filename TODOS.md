@@ -2,7 +2,12 @@
 
 ## Next
 
-- Complete the first-user dogfood pass with a packaged build and representative lab project, including the remaining manual macOS and Windows checks in `docs/PILOT_DOGFOOD.md`.
+- Complete a clean-machine launch on macOS and the Windows dogfood pass in `docs/PILOT_DOGFOOD.md`. The local macOS packaged lab, first-run, file-open, and automated checks are recorded in `docs/PILOT_DOGFOOD_2026-09-26.md`.
+
+## Pilot UX follow-ups
+
+- Show readable before and after parent paths or names on moved-node comparison cards instead of raw IDs. Confirm priority with a real pilot task. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`.
+- Improve readability when the tree, details, and snapshot review panels are all open: snapshot heading, focus-card titles, and tree labels truncate heavily. Confirm priority with a real pilot task. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`.
 
 ## Completed
 
