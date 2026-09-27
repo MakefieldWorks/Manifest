@@ -93,7 +93,7 @@ test('keyboard shortcut opens a focused modal and Enter creates the copy', async
   await expect(appPage.getByTestId('name-input')).toBeFocused()
   await expect.poll(enabled).toBe(false)
   await electronApp.evaluate(({ BrowserWindow }) => {
-    const win = BrowserWindow.getFocusedWindow()!
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     const modifiers = process.platform === 'darwin' ? ['meta'] : ['control']
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D', modifiers })
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D', modifiers })
@@ -103,7 +103,7 @@ test('keyboard shortcut opens a focused modal and Enter creates the copy', async
   await appPage.locator('[data-testid="tree-node"]', { hasText: 'Device' }).focus()
   await expect.poll(enabled).toBe(true)
   await electronApp.evaluate(({ BrowserWindow }) => {
-    const win = BrowserWindow.getFocusedWindow()!
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     const modifiers = process.platform === 'darwin' ? ['meta'] : ['control']
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D', modifiers })
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D', modifiers })

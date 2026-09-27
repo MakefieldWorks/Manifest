@@ -288,6 +288,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
 })
 
 test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {
+  test.skip(process.env['MANIFEST_E2E_BACKGROUND'] === '1', 'Native focus requires a visible E2E run')
   await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
 
   await electronApp.evaluate(({ BrowserWindow }) => {
