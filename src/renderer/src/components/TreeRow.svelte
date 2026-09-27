@@ -69,6 +69,8 @@
   // stays put; the tree is still navigable but the deeper structure is
   // implied by status badges and the user's path through it, not pixels.
   const MAX_INDENT_DEPTH = 12
+  // Both compare row branches use h-16; keep them in sync with
+  // COMPARE_ROW_HEIGHT in ManifestView.svelte's virtualizer.
   const paddingLeft = $derived(`${Math.min(row.depth, MAX_INDENT_DEPTH) * (compare ? 10 : 16) + 8}px`)
 
   function getDecorationClass(): string {
@@ -105,7 +107,7 @@
     tabindex="-1"
     class="flex items-center gap-1 rounded select-none italic text-sm cursor-default
            focus:outline-none focus:ring-1 focus:ring-stone-400
-           {compare ? 'h-16' : 'h-8'}
+           {compare ? 'h-16 overflow-hidden' : 'h-8'}
            {selected
              ? 'opacity-70 ring-1 ring-red-300 text-stone-500'
              : 'opacity-40 text-stone-400 hover:opacity-60'}
@@ -143,7 +145,7 @@
     tabindex="-1"
     class="flex items-center gap-1 rounded cursor-default text-sm select-none
            hover:bg-stone-100 focus:outline-none focus:ring-1 focus:ring-stone-400
-           {compare ? 'h-16' : 'h-8'}
+           {compare ? 'h-16 overflow-hidden' : 'h-8'}
            {selected ? '!bg-stone-200 !text-stone-900' : 'text-stone-700'}
            {focused && !selected ? 'ring-1 ring-stone-300' : ''}
            {matched && !selected ? 'ring-1 ring-amber-300' : ''}

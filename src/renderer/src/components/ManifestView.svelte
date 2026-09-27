@@ -90,6 +90,7 @@
   }: Props = $props()
 
   const ROW_HEIGHT = 32
+  // Keep this in sync with the compare-only h-16 rows in TreeRow.svelte.
   const COMPARE_ROW_HEIGHT = 64
   const MARKER_HEIGHT = 36
 

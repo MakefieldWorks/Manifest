@@ -683,6 +683,7 @@ test('keeps compare headings, focus titles, and tree names readable with three p
   await createSnapshot(appPage, 'after-a-long-pilot-comparison')
   await compareSnapshots(appPage, 'baseline-before-a-long-pilot-comparison', 'after-a-long-pilot-comparison')
 
+  await expect(appPage.getByRole('heading', { name: 'Comparing baseline-before-a-long-pilot-comparison to after-a-long-pilot-comparison' })).toBeVisible()
   const heading = appPage.getByTestId('compare-heading')
   await expect(heading).toContainText('baseline-before-a-long-pilot-comparison')
   await expect(heading).toContainText('after-a-long-pilot-comparison')
@@ -694,6 +695,7 @@ test('keeps compare headings, focus titles, and tree names readable with three p
 
   const row = treeRow(appPage, longNodeName)
   await expect(row).toHaveCSS('height', '64px')
+  await expect(row).toHaveCSS('overflow', 'hidden')
   const name = row.getByTestId('tree-node-name')
   await expect.poll(() => name.evaluate(element => element.clientHeight)).toBeGreaterThan(16)
   expect(await name.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true)

@@ -467,7 +467,7 @@
     : 'flex items-center justify-between'}">
     {#if compareLoaded && mergedTree}
       <div class="flex items-center justify-between gap-2">
-        <h2 class="text-sm font-semibold text-stone-900">Comparing</h2>
+        <h2 class="text-sm font-semibold text-stone-900" aria-label="Comparing {snapshotRefLabel(mergedTree.fromSnapshot)} to {snapshotRefLabel(mergedTree.toSnapshot)}">Comparing</h2>
         <div class="flex shrink-0 items-center gap-1">
           <button
             onclick={onExitCompare}
