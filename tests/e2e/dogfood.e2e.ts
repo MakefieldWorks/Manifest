@@ -1,10 +1,12 @@
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { expect, test } from './fixtures'
 
 const ROOT_DIR = process.cwd()
 const MAIN_ENTRY = join(ROOT_DIR, 'out', 'main', 'index.js')
 const dogfoodProjectPath = process.env['MANIFEST_DOGFOOD_PROJECT']
+const packagedExecutable = process.env['MANIFEST_DOGFOOD_EXECUTABLE']
 
 test.skip(!dogfoodProjectPath, 'Set MANIFEST_DOGFOOD_PROJECT to run the generated project dogfood smoke coverage.')
 
@@ -14,17 +16,24 @@ async function firstAppWindow(electronApp: ElectronApplication): Promise<Page> {
   return page
 }
 
-test('opens and navigates the generated dogfood project', async () => {
+test('opens and navigates the generated dogfood project', async ({ workspaceDir }) => {
   if (!dogfoodProjectPath) throw new Error('Missing MANIFEST_DOGFOOD_PROJECT')
-  if (!existsSync(MAIN_ENTRY)) throw new Error(`Built Electron entrypoint not found: ${MAIN_ENTRY}`)
+  if (!packagedExecutable && !existsSync(MAIN_ENTRY)) throw new Error(`Built Electron entrypoint not found: ${MAIN_ENTRY}`)
+  if (packagedExecutable && !existsSync(packagedExecutable)) throw new Error(`Packaged Electron executable not found: ${packagedExecutable}`)
   if (!existsSync(dogfoodProjectPath)) throw new Error(`Dogfood project not found: ${dogfoodProjectPath}`)
 
   const electronApp = await electron.launch({
-    args: [MAIN_ENTRY, dogfoodProjectPath],
+    executablePath: packagedExecutable || undefined,
+    args: [
+      ...(packagedExecutable ? [] : [MAIN_ENTRY]),
+      `--user-data-dir=${join(workspaceDir, 'electron-user-data')}`,
+      dogfoodProjectPath,
+    ],
     cwd: ROOT_DIR,
     env: {
       ...process.env,
       NODE_ENV: 'test',
+      MANIFEST_EXAMPLE_PROJECTS_DIR: join(workspaceDir, 'example-projects'),
     },
   })
 

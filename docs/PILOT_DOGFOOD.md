@@ -29,8 +29,14 @@ bun run test:dogfood -- --project ./tmp/pilot-dogfood
 `package:verify` builds and inspects the host package. On macOS it also ad-hoc
 signs and verifies the local unsigned `.app` bundle so launch-blocking signature
 issues are caught before manual testing. `test:dogfood` then opens the generated
-project through the Electron E2E harness. The final OS shell launch still needs a
-manual Finder/Explorer pass.
+project through the Electron E2E harness. Add `--packaged` to the dogfood command
+after `package:verify` to open the packaged executable instead of the development
+Electron build.
+
+The `Pilot platform checks` GitHub Actions workflow runs these checks on fresh
+macOS and Windows runners, including the packaged-app dogfood smoke test. Its
+results provide automated clean-runner evidence; the final native shell launch
+still needs a manual Finder/Explorer pass.
 
 ## Core Workflow
 
