@@ -399,6 +399,9 @@ export interface InterruptedHistoryPreview {
   beforeNodeCount: number
   currentNodeCount: number
   recoveryPath: string
+  metadataOnly: boolean
+  currentHistoryAvailable: boolean
+  historyReadable: boolean
 }
 
 export interface InterruptedHistoryEvidenceGroup {
@@ -406,7 +409,7 @@ export interface InterruptedHistoryEvidenceGroup {
   token: string
   label: string
   startedAt: string
-  kind: 'snapshot-create' | 'snapshot-revert' | 'recovery-apply' | null
+  kind: 'snapshot-create' | 'snapshot-revert' | 'recovery-apply' | 'recovery-register' | 'recovery-forget' | 'history-backup-restore' | null
   targetId: string | null
   beforeNodeCount: number
   currentNodeCount: number
@@ -419,6 +422,7 @@ export interface InterruptedHistoryEvidencePreview {
   groups: InterruptedHistoryEvidenceGroup[]
   unavailableCount: number
   uninspectedCount: number
+  historyReadable: boolean
 }
 
 export interface InterruptedHistoryEvidenceDeleteResult {

@@ -71,6 +71,20 @@ describe('retained interrupted-operation evidence cleanup', () => {
     expect(readFileSync(unknown, 'utf8')).toBe('unrelated')
   })
 
+  it.each(['missing', 'damaged'] as const)('keeps retained groups inspectable with %s current history but blocks deletion', condition => {
+    const record = retainEvidence()
+    const paths = evidencePaths(record)
+    if (condition === 'missing') unlinkSync(historyPath)
+    else writeFileSync(historyPath, '{broken history')
+
+    const preview = manager.interruptedHistoryEvidencePreview()
+    expect(preview).toMatchObject({ ok: true, data: { historyReadable: false, groups: [{ id: record.id }] } })
+    if (!preview.ok) return
+    expect(manager.deleteInterruptedHistoryEvidence({ id: record.id, token: preview.data.groups[0].token }))
+      .toMatchObject({ ok: false, error: { code: 'HISTORY_METADATA_UNAVAILABLE' } })
+    expect(paths.every(file => existsSync(file))).toBe(true)
+  })
+
   it.each(['record', 'inventory', 'history-metadata'] as const)('rejects a stale preview after %s changes without deleting files', change => {
     const record = retainEvidence()
     const paths = evidencePaths(record)

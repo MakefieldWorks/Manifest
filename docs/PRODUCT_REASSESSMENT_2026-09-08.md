@@ -16,9 +16,10 @@ inventory and history together. External project-file changes now pause saves
 and preserve both versions through explicit resolution. Interrupted snapshot,
 revert, and recovery operations now retain durable before-state evidence and
 require explicit continuation. Fully completed operations are now recognized
-automatically from exact document, timeline, lineage, and Git evidence. Automatic
-rollback and crash protection for the remaining metadata-only operations remain
-outside this increment. Retained interruption evidence now has an explicit,
+automatically from exact document, timeline, lineage, and Git evidence. Metadata-only
+recovery registration and backup restoration now preserve before-state evidence,
+recognize exact completion, and require review when uncertain. Automatic rollback
+remains outside this increment. Retained interruption evidence now has an explicit,
 stale-safe cleanup workflow that blocks registered recovery inventories and
 never deletes unrelated files.
 

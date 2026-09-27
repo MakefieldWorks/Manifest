@@ -61,8 +61,15 @@
     <h2 class="text-lg font-semibold">Review unfinished history operation</h2>
     <p>{preview.label}</p>
     <p>Started {new Date(preview.startedAt).toLocaleString()}. Before: {preview.beforeNodeCount} nodes. Current inventory: {preview.currentNodeCount} nodes.</p>
-    <p>The operation may have changed the inventory or created a snapshot before stopping. Existing snapshots and history entries will remain; no operation will be replayed.</p>
-    <p>Continue saves the current inventory, clears Undo/Redo, and resets its snapshot association. Both the earlier inventory and current inventory are preserved. To restore the earlier inventory afterward, use Additional recovery files in the Snapshots panel.</p>
+    {#if preview.metadataOnly}
+      <p>This operation may have changed history metadata before stopping. No operation will be replayed.</p>
+      <p>Continue keeps the current inventory and history bytes as they are, and preserves copies of the earlier state. If history is still damaged or missing, review the automatic backup afterward.</p>
+    {:else if !preview.historyReadable}
+      <p>Current history metadata is unreadable. Continue saves the current inventory and preserves the exact damaged or missing history state without inventing timeline events. Review the automatic backup afterward to restore readable history.</p>
+    {:else}
+      <p>The operation may have changed the inventory or created a snapshot before stopping. Existing snapshots and history entries will remain; no operation will be replayed.</p>
+      <p>Continue saves the current inventory, clears Undo/Redo, and resets its snapshot association. Both the earlier inventory and current inventory are preserved. To restore the earlier inventory afterward, use Additional recovery files in the Snapshots panel.</p>
+    {/if}
     <p class="break-words selectable">Earlier inventory: {preview.recoveryPath}</p>
     <div class="flex flex-wrap gap-2">
       <button disabled={busy} onclick={acknowledge} class="rounded bg-stone-800 px-3 py-2 text-white">Continue with current inventory</button>
