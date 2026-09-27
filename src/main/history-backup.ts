@@ -32,6 +32,8 @@ export interface HistoryBackupCandidate {
   savedAt: string
   history: SnapshotHistoryState
   damaged: Buffer | null
+  // Exact validated source bytes used by the operation journal.
+  source: Buffer
 }
 
 export class HistoryBackupStore {
@@ -81,7 +83,7 @@ export class HistoryBackupStore {
     if (typeof backup.savedAt !== 'string' || !Number.isFinite(Date.parse(backup.savedAt))) throw new Error('The backup save date is invalid.')
     const history = migrateSnapshotHistory(backup.history)
     const token = createHash('sha256').update(damaged === null ? 'missing:' : `${damaged.length}:`).update(damaged ?? Buffer.alloc(0)).update(bytes).digest('hex')
-    return { token, sourceToken: token, savedAt: backup.savedAt, history, damaged }
+    return { token, sourceToken: token, savedAt: backup.savedAt, history, damaged, source: bytes }
   }
 
   restore(candidate: HistoryBackupCandidate, preservedPathOverride?: string): string | null {
@@ -92,6 +94,8 @@ export class HistoryBackupStore {
     })
     const preservedPath = candidate.damaged === null ? null : preservedPathOverride ?? `${this.historyPath}.damaged-${randomUUID()}`
     if (preservedPath && candidate.damaged !== null) {
+      // An interrupted retry can leave this exclusive-create path behind. Such
+      // an orphan is not used as evidence for another operation or restore.
       const fd = openSync(preservedPath, 'wx')
       try {
         writeFileSync(fd, candidate.damaged)

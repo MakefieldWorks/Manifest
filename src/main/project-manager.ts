@@ -1793,7 +1793,8 @@ export class ProjectManager {
         this.writeSnapshotHistory(history, { deleteRemovedPayloads: false })
         return ok(undefined)
       } catch (error) {
-        return err(this.hasInterruptedHistory() ? ErrorCode.HISTORY_OPERATION_PENDING : ErrorCode.HISTORY_BACKUP_FAILED,
+        return err(this.hasInterruptedHistory() ? ErrorCode.HISTORY_OPERATION_PENDING :
+          error instanceof HistoryMetadataReadError ? ErrorCode.HISTORY_METADATA_UNAVAILABLE : ErrorCode.HISTORY_BACKUP_FAILED,
           `Could not remove recovery point: ${String(error)}`)
       }
     })
@@ -1892,7 +1893,7 @@ export class ProjectManager {
       const record = this.beginMetadataHistoryOperation('Restore history from automatic backup', {
         kind: 'history-backup-restore', targetId: 'history.backup.json',
         expectedHistoryHash: this.hashDocument(JSON.stringify(restored, null, 2)),
-      }, readFileSync(backupStore.backupPath))
+      }, candidate.source)
       const preservedPath = backupStore.restore(candidate, `${backupStore.historyPath}.damaged-${record.id}`)
       try { this.operationStore()!.finish() }
       catch (error) {
@@ -2634,8 +2635,11 @@ export class ProjectManager {
     if (!document) throw new Error('The project document is missing.')
     const beforeHistory = this.historyBytesOrNull()
     if (intent.kind !== 'history-backup-restore') {
-      if (!beforeHistory || !this.historyBeforeOperation ||
-          JSON.stringify(migrateSnapshotHistory(JSON.parse(beforeHistory.toString('utf8')))) !== JSON.stringify(this.historyBeforeOperation)) {
+      if (!beforeHistory || !this.historyBeforeOperation) {
+        throw new Error('History metadata changed. Review the operation again before changing it.')
+      }
+      const currentHistory = this.readSnapshotHistory(beforeHistory)
+      if (JSON.stringify(currentHistory) !== JSON.stringify(this.historyBeforeOperation)) {
         throw new Error('History metadata changed. Review the operation again before changing it.')
       }
     }
@@ -2660,11 +2664,14 @@ export class ProjectManager {
     if (!this.currentProject?.path) throw new Error('No project is currently open.')
     const store = this.operationStore()!
     if (!existsSync(store.recoveryPath)) {
-      return { preview: { groups: [], unavailableCount: 0, uninspectedCount: 0 }, candidates: new Map() }
+      return { preview: { groups: [], unavailableCount: 0, uninspectedCount: 0, historyReadable: true }, candidates: new Map() }
     }
-    const historyPath = this.snapshotHistoryPath(this.currentProject.path)
-    const historyBytes = readFileSync(historyPath)
-    const history = this.readSnapshotHistory(historyBytes)
+    const historyBytes = this.historyBytesOrNull()
+    let history: SnapshotHistoryState | null = null
+    if (historyBytes !== null) {
+      try { history = this.readSnapshotHistory(historyBytes) }
+      catch (error) { if (!(error instanceof HistoryMetadataReadError)) throw error }
+    }
     const retained = store.retainedCandidates()
     const candidates = new Map<string, RetainedHistoryOperationCandidate>()
     const groups: InterruptedHistoryEvidencePreview['groups'] = []
@@ -2676,10 +2683,10 @@ export class ProjectManager {
         if (candidate.record.version !== 3 || candidate.record.kind !== 'history-backup-restore') {
           migrateSnapshotHistory(JSON.parse(candidate.history.toString('utf8')))
         }
-        const registeredAsRecoveryPoint = history.recoveryPoints.some(point =>
+        const registeredAsRecoveryPoint = history?.recoveryPoints.some(point =>
           point.manifestPath.split(/[\\/]/).pop() === candidate.record.inventoryFile)
         const record = candidate.record
-        const token = store.fingerprint(candidate.bytes, candidate.inventory, candidate.history, candidate.source ?? '', historyBytes,
+        const token = store.fingerprint(candidate.bytes, candidate.inventory, candidate.history, candidate.source ?? '', historyBytes ?? 'missing-history',
           JSON.stringify([record.id, candidate.recordFile, registeredAsRecoveryPoint]))
         groups.push({
           id: record.id,
@@ -2693,13 +2700,14 @@ export class ProjectManager {
           sizeBytes: candidate.bytes.length + candidate.inventory.length + candidate.history.length + (candidate.source?.length ?? 0),
           files: [candidate.recordFile, record.inventoryFile, record.historyFile,
             record.version === 3 ? record.sourceFile : undefined].filter((file): file is string => !!file),
-          registeredAsRecoveryPoint,
+          registeredAsRecoveryPoint: registeredAsRecoveryPoint ?? false,
         })
         candidates.set(record.id, candidate)
       } catch { unavailableCount++ }
     }
     groups.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-    return { preview: { groups, unavailableCount, uninspectedCount: retained.uninspectedCount }, candidates }
+    return { preview: { groups, unavailableCount, uninspectedCount: retained.uninspectedCount,
+      historyReadable: history !== null }, candidates }
   }
 
   interruptedHistoryEvidencePreview(): Result<InterruptedHistoryEvidencePreview> {
@@ -2724,6 +2732,9 @@ export class ProjectManager {
     this.historyOperationInProgress = true
     try {
       const scanned = this.scanInterruptedHistoryEvidence()
+      if (!scanned.preview.historyReadable) {
+        return err(ErrorCode.HISTORY_METADATA_UNAVAILABLE, 'Restore readable history metadata before deleting retained evidence.')
+      }
       const group = scanned.preview.groups.find(item => item.id === request.id)
       const candidate = scanned.candidates.get(request.id)
       if (!group || !candidate || group.token !== request.token) {
@@ -2774,6 +2785,10 @@ export class ProjectManager {
           if (!point) return
           const payload = store.read(join(projectPath, ...point.manifestPath.split(/[\\/]/)))
           if (this.hashDocument(payload) !== record.targetPayloadHash) return
+        }
+        if (record.kind === 'recovery-forget') {
+          const history = migrateSnapshotHistory(JSON.parse(historyBytes.toString('utf8')))
+          if (history.recoveryPoints.some(point => point.id === record.targetId)) return
         }
         if (record.kind === 'history-backup-restore') {
           const source = store.read(join(projectPath, '.manifest', 'history.backup.json'))

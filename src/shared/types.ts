@@ -422,6 +422,7 @@ export interface InterruptedHistoryEvidencePreview {
   groups: InterruptedHistoryEvidenceGroup[]
   unavailableCount: number
   uninspectedCount: number
+  historyReadable: boolean
 }
 
 export interface InterruptedHistoryEvidenceDeleteResult {

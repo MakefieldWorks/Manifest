@@ -107,6 +107,22 @@ describe('metadata-only history interruption protection', () => {
     expect(store.retainedCandidates().candidates[0].record.kind).toBe('recovery-forget')
   })
 
+  it('does not auto-confirm a removal record while its target remains registered', async () => {
+    const point = await register()
+    const history = readFileSync(historyPath)
+    const document = readFileSync(join(path, PROJECT_DOCUMENT_FILE))
+    const { path: _path, ...project } = manager.getCurrent()!
+    store.beginMetadata('Remove recovery registration', JSON.stringify(project), history, {
+      kind: 'recovery-forget', targetId: point.id,
+      expectedDocumentHash: createHash('sha256').update(document).digest('hex'),
+      expectedHistoryHash: createHash('sha256').update(history).digest('hex'),
+    })
+
+    await reopen()
+    expect(store.pending()).toBe(true)
+    expect(manager.interruptedHistoryStatus()).toMatchObject({ ok: true, data: { pending: true } })
+  })
+
   it('does not auto-confirm registration when its recovery payload changes', async () => {
     const interrupted = interruptCleanup()
     await register()
@@ -134,6 +150,38 @@ describe('metadata-only history interruption protection', () => {
     expect(store.pending()).toBe(false)
     const history = JSON.parse(readFileSync(historyPath, 'utf8'))
     expect(history.recoveryPoints.map((entry: { id: string }) => entry.id)).toEqual([point.id, 'reconciled-outside-change'])
+  })
+
+  it('reports damaged history found after a recovery preview without publishing a journal', async () => {
+    const save = HistoryBackupStore.prototype.save
+    vi.spyOn(HistoryBackupStore.prototype, 'save').mockImplementation(function (history) {
+      save.call(this, history)
+      writeFileSync(historyPath, '{broken history')
+    })
+    const preview = await manager.recoveryFilesPreview()
+    if (!preview.ok) throw new Error(preview.error.message)
+    expect(await manager.adoptRecoveryFile({ token: preview.data.token, name: recoveryName })).toMatchObject({
+      ok: false, error: { code: 'HISTORY_METADATA_UNAVAILABLE', message: expect.stringContaining('History metadata could not be read') },
+    })
+    expect(store.pending()).toBe(false)
+  })
+
+  it('journals the validated source bytes if the backup changes before restoration', async () => {
+    writeFileSync(historyPath, '{broken history')
+    const status = await manager.historyBackupStatus()
+    if (!status.ok || !status.data.available) throw new Error(JSON.stringify(status))
+    const source = readFileSync(backupPath)
+    const candidate = HistoryBackupStore.prototype.candidate
+    let calls = 0
+    vi.spyOn(HistoryBackupStore.prototype, 'candidate').mockImplementation(function () {
+      const result = candidate.call(this)
+      if (++calls === 1) writeFileSync(backupPath, Buffer.concat([source, Buffer.from('\n')]))
+      return result
+    })
+    expect(await manager.restoreHistoryBackup({ token: status.data.token }))
+      .toMatchObject({ ok: false, error: { code: 'HISTORY_OPERATION_PENDING' } })
+    expect(store.candidate().source).toEqual(source)
+    expect(store.pending()).toBe(true)
   })
 
   it.each(['damaged', 'missing'] as const)('recognizes a completed backup restore from %s history', async original => {

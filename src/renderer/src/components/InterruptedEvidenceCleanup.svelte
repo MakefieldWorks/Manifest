@@ -80,6 +80,7 @@
     {activity === 'review' ? 'Checking…' : activity === 'delete' ? 'Deleting…' : 'Review retained evidence'}
   </button>
   {#if preview}
+    {#if !preview.historyReadable}<p>History metadata is missing or unreadable. Retained evidence is available for review, but restore history before deleting it.</p>{/if}
     {#if preview.unavailableCount}<p>{preview.unavailableCount} evidence group{preview.unavailableCount === 1 ? '' : 's'} could not be verified and will be left untouched.</p>{/if}
     {#if preview.uninspectedCount}<p>{preview.uninspectedCount} more evidence group{preview.uninspectedCount === 1 ? '' : 's'} were not inspected. Each review lists at most 100.</p>{/if}
     {#if !preview.groups.length}<p>No verified retained evidence found.</p>{/if}
@@ -96,7 +97,7 @@
         </details>
         {#if group.registeredAsRecoveryPoint}
           <p>This before-state inventory is listed under Additional recovery files. Remove it from that list before deleting this evidence.</p>
-        {:else}
+        {:else if preview.historyReadable}
           <button disabled={busy || disabled} onclick={() => { selected = group.id }} class="rounded border border-red-300 px-2 py-1 text-red-700">Review permanent deletion</button>
         {/if}
         {#if selected === group.id}

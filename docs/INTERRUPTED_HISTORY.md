@@ -49,6 +49,8 @@ an interruption may exist without its original note or timeline event; Manifest
 does not invent those. The pending record is moved to the recovery directory,
 retaining all evidence. The earlier inventory can subsequently be reviewed and
 added through **Additional recovery files**, then applied through normal recovery.
+If current history is missing, no continued-history copy is written; the retained
+before-state history evidence remains in the recovery directory after continuation.
 
 For a metadata-only operation, **Continue** keeps the current inventory and
 history bytes as they are. It preserves the earlier inventory, exact earlier
@@ -81,6 +83,8 @@ Additional recovery files. Each review is limited to 100 groups and shows the
 operation, date, before/current node counts, combined size, and exact three or four
 filenames. Malformed, altered, incomplete, linked, or otherwise unverifiable
 groups are counted and left untouched.
+When current history is missing or unreadable, groups remain inspectable, but
+deletion waits until readable history is restored so recovery registrations can be checked.
 
 Deletion is available for one group at a time after an explicit permanent-action
 confirmation. Its token covers the exact operation record, its evidence files,
