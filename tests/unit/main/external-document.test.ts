@@ -28,6 +28,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks()
   manager.cancelAutosave()
+  await manager.waitForHistoryBackfill()
   manager.discardCurrentProject()
   rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
@@ -77,6 +78,7 @@ describe('external project document preservation', () => {
     expect([...versions.keys()]).toEqual([file])
     outside()
     manager.checkExternalDocument()
+    await manager.waitForHistoryBackfill()
     manager.discardCurrentProject()
     expect(versions.size).toBe(0)
     expect((manager as any).conflictLocalCopy).toBeNull()
@@ -103,6 +105,7 @@ describe('external project document preservation', () => {
   })
 
   it('can create a new project at a previously used location', async () => {
+    await manager.waitForHistoryBackfill()
     manager.discardCurrentProject()
     rmSync(path, { recursive: true })
     expect((await manager.createProject('External Lab', root)).ok).toBe(true)
