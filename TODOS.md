@@ -6,10 +6,11 @@
 
 ## Pilot UX follow-ups
 
-- Show readable before and after parent paths or names on moved-node comparison cards instead of raw IDs. Confirm priority with a real pilot task. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`.
 - Improve readability when the tree, details, and snapshot review panels are all open: snapshot heading, focus-card titles, and tree labels truncate heavily. Confirm priority with a real pilot task. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`.
 
 ## Completed
+
+- Show readable previous and new parent paths on moved-node comparison cards instead of raw IDs. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`. **Implemented:** 2026-09-26
 
 - Protect recovery-file registration/removal and history-backup restoration with durable before-state evidence, exact completed-state recognition, and explicit continuation for uncertain outcomes. **Implemented:** 2026-09-26
 

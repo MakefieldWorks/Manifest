@@ -39,7 +39,16 @@
             "parentName": "Diff Lab",
             "path": [
               "Diff Lab"
-            ]
+            ],
+            "moveParentPaths": {
+              "before": [
+                "Diff Lab",
+                "Keep"
+              ],
+              "after": [
+                "Diff Lab"
+              ]
+            }
           },
           "classification": "structural"
         },

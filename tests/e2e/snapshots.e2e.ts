@@ -614,6 +614,8 @@ test('surfaces move and rename snapshot diffs for the same node', async ({ appPa
   const renamedRow = appPage.getByTestId('snapshot-diff-row').filter({ hasText: 'Renamed' }).filter({ hasText: 'Alpha Prime' })
 
   await expect(movedRow).toBeVisible()
+  await expect(movedRow.getByTestId('move-parent-before')).toHaveText('Move Rename Lab')
+  await expect(movedRow.getByTestId('move-parent-after')).toHaveText('Move Rename Lab / Beta')
   await expect(renamedRow).toBeVisible()
   await expect(appPage.getByTestId('compare-filter-all')).toHaveText('All 3')
   await expect(appPage.getByTestId('compare-filter-high')).toHaveText('High 1')

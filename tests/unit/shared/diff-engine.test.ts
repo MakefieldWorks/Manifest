@@ -162,6 +162,10 @@ describe('diffProjects', () => {
     expect(diffs[0].classification).toBe('structural')
     expect(diffs[0].context.parentName).toBe('Rack B')
     expect(diffs[0].context.path).toEqual(['Root', 'Rack B'])
+    expect(diffs[0].context.moveParentPaths).toEqual({
+      before: ['Root', 'Rack A'],
+      after: ['Root', 'Rack B'],
+    })
   })
 
   it('adds display labels for changed reference properties', () => {

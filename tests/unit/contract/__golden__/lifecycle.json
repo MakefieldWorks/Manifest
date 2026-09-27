@@ -563,7 +563,16 @@
             "path": [
               "Contract Lab",
               "Rack B"
-            ]
+            ],
+            "moveParentPaths": {
+              "before": [
+                "Contract Lab"
+              ],
+              "after": [
+                "Contract Lab",
+                "Rack B"
+              ]
+            }
           },
           "classification": "structural"
         }
@@ -664,7 +673,16 @@
                   "path": [
                     "Contract Lab",
                     "Rack B"
-                  ]
+                  ],
+                  "moveParentPaths": {
+                    "before": [
+                      "Contract Lab"
+                    ],
+                    "after": [
+                      "Contract Lab",
+                      "Rack B"
+                    ]
+                  }
                 },
                 "classification": "structural"
               }
