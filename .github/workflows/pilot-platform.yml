@@ -1,0 +1,60 @@
+name: Pilot platform checks
+
+"on":
+  pull_request:
+    types: [opened, reopened, synchronize, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pilot-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packaged-dogfood:
+    name: Packaged dogfood (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install locked dependencies
+        run: bun ci
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Unit tests
+        run: bun run test
+      - name: Verify host package
+        run: bun run package:verify
+      - name: Generate pilot fixture
+        run: bun run generate:project -- --output ./tmp/pilot-dogfood --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424
+      - name: Open pilot fixture in packaged app
+        run: bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged
+      - name: Electron E2E tests
+        # The full suite launches the development Electron build; packaged launch
+        # is covered by the preceding dogfood smoke test.
+        run: bun run test:e2e
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.os }}
+          path: .playwright-artifacts/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7

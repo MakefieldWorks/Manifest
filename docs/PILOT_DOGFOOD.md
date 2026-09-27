@@ -23,14 +23,22 @@ bun run typecheck
 bun run test
 bun run test:e2e
 bun run package:verify
-bun run test:dogfood -- --project ./tmp/pilot-dogfood
+bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged
 ```
 
 `package:verify` builds and inspects the host package. On macOS it also ad-hoc
 signs and verifies the local unsigned `.app` bundle so launch-blocking signature
-issues are caught before manual testing. `test:dogfood` then opens the generated
-project through the Electron E2E harness. The final OS shell launch still needs a
-manual Finder/Explorer pass.
+issues are caught before manual testing. `test:dogfood -- --packaged` opens the
+generated project through the packaged executable. Omit `--packaged` to test the
+development Electron build instead. The full `test:e2e` suite also uses that
+development build.
+
+Add the `ci:full` label to a PR, or dispatch `Pilot platform checks` manually,
+to run these checks on fresh macOS and Windows runners. The workflow generates
+the fixture without `--force` because each runner starts clean; use `--force`
+when repeating the local command above. Its results provide automated
+clean-runner evidence; the final native shell launch still needs a manual
+Finder/Explorer pass.
 
 ## Core Workflow
 
@@ -63,13 +71,14 @@ bun run test
 bun run test:e2e
 bun run package:verify
 bun run generate:project -- --output ./tmp/pilot-dogfood --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424 --force
-bun run test:dogfood -- --project ./tmp/pilot-dogfood
+bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged
 ```
 
 After the automated checks pass, manually open `dist\win-unpacked\Manifest.exe`
 and verify the native Windows frame, taskbar icon, Open Recent menu, file-open
-flow, close/quit save behavior, and snapshot compare readability on the packaged
-build.
+flow, close/quit save behavior, snapshot compare readability, and the
+`.manifestproject` document icon in Explorer. On macOS, also inspect the
+`.manifestproject` document icon in Finder.
 
 ## Notes To Capture
 

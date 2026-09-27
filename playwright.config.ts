@@ -11,9 +11,12 @@ export default defineConfig({
   testMatch: '*.e2e.ts',
   fullyParallel: false,
   workers: 1,
-  timeout: 30_000,
+  // Windows CI runners can be much slower when Electron, SQLite, and the UI
+  // share a busy host. Keep local and macOS failures fast while allowing the
+  // Windows pilot run enough time for real UI work to complete.
+  timeout: process.env['CI'] && process.platform === 'win32' ? 90_000 : 30_000,
   expect: {
-    timeout: 5_000,
+    timeout: process.env['CI'] && process.platform === 'win32' ? 15_000 : 5_000,
   },
   forbidOnly: !!process.env['CI'],
   reporter: 'list',

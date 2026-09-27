@@ -78,6 +78,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   manager.cancelAutosave()
+  await manager.waitForHistoryBackfill()
   await manager.flushAndClose()
   await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
@@ -139,6 +140,8 @@ describe('nodeCreate', () => {
 
 describe('project document migration', () => {
   it('replaces a legacy manifest and its launcher after a successful open', async () => {
+    await manager.waitForHistoryBackfill()
+    manager.discardCurrentProject()
     const canonicalPath = join(tmpDir, 'Manifest.manifestproject')
     const legacyPath = join(tmpDir, 'manifest.json')
     rmSync(canonicalPath)
@@ -148,12 +151,13 @@ describe('project document migration', () => {
 
     const legacyManager = makeManager()
     const opened = await legacyManager.openProject(tmpDir)
+    // Teardown must close the manager that now owns the migrated project's indexes.
+    manager = legacyManager
 
     expect(opened.ok).toBe(true)
     expect(existsSync(canonicalPath)).toBe(true)
     expect(existsSync(legacyPath)).toBe(false)
     expect(JSON.parse(readFileSync(canonicalPath, 'utf8'))).toMatchObject({ name: 'Test Project' })
-    await legacyManager.flushAndClose()
   })
 })
 

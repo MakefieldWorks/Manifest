@@ -34,10 +34,11 @@ beforeEach(async () => {
   writeFileSync(join(store.recoveryPath, recoveryName), JSON.stringify(manager.getCurrent()))
 })
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks()
+  await manager.waitForHistoryBackfill()
   manager.discardCurrentProject()
-  rmSync(root, { recursive: true, force: true })
+  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
 async function reopen() {

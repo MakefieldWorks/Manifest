@@ -52,6 +52,14 @@ async function createProjectThroughUi(
   return join(parentDir, projectName)
 }
 
+async function closeProjectViaMenu(page: Page, electronApp: ElectronApplication): Promise<void> {
+  await expect.poll(() => electronApp.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()?.getMenuItemById('project:close')?.enabled ?? false,
+  )).toBe(true)
+  await clickNativeMenuCommand(electronApp, 'project:close')
+  await expect(page.getByTestId('recent-project-list')).toBeVisible()
+}
+
 async function openProjectThroughUi(
   appPage: Page,
   electronApp: ElectronApplication,
@@ -329,8 +337,7 @@ test('adds opened projects to native Open Recent and OS recent documents', async
 test('opens the most recent project from the project hub', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Welcome Back')
 
-  await clickNativeMenuCommand(electronApp, 'project:close')
-  await expect(appPage.getByTestId('recent-project-list')).toBeVisible()
+  await closeProjectViaMenu(appPage, electronApp)
   await expect(appPage.getByTestId('reopen-last-project-btn')).toContainText('Welcome Back')
 
   await appPage.getByTestId('reopen-last-project-btn').click()
@@ -342,11 +349,10 @@ test('opens the most recent project from the project hub', async ({ appPage, ele
 
 test('lists recent projects in most-recent-first order on the project hub', async ({ appPage, electronApp, workspaceDir }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub First')
-  await clickNativeMenuCommand(electronApp, 'project:close')
+  await closeProjectViaMenu(appPage, electronApp)
 
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub Second')
-  await clickNativeMenuCommand(electronApp, 'project:close')
-
+  await closeProjectViaMenu(appPage, electronApp)
   const projects = appPage.getByTestId('recent-project-list').getByRole('button')
   await expect(projects.first()).toContainText('Hub Second')
   await expect(projects.filter({ hasText: 'Hub First' })).toHaveCount(1)

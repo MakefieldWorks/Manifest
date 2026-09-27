@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { pathToFileURL } from 'url'
 import { isTrustedRendererNavigationUrl } from '../../../src/main/renderer-navigation'
 
-const rendererDirectory = '/Applications/Manifest.app/Contents/Resources/app.asar/out/renderer'
+const rendererDirectory = join(tmpdir(), 'Manifest.app', 'Contents', 'Resources', 'app.asar', 'out', 'renderer')
 
 describe('isTrustedRendererNavigationUrl', () => {
   it('allows packaged renderer resources but rejects other local files', () => {
     expect(isTrustedRendererNavigationUrl(
-      'file:///Applications/Manifest.app/Contents/Resources/app.asar/out/renderer/index.html',
+      pathToFileURL(join(rendererDirectory, 'index.html')).href,
       { rendererDirectory },
     )).toBe(true)
-    expect(isTrustedRendererNavigationUrl('file:///tmp/untrusted.html', { rendererDirectory })).toBe(false)
+    expect(isTrustedRendererNavigationUrl(pathToFileURL(join(tmpdir(), 'untrusted.html')).href, { rendererDirectory })).toBe(false)
   })
 
   it('allows only the configured development-server origin', () => {

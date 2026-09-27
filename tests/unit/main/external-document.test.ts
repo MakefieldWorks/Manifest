@@ -28,8 +28,9 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks()
   manager.cancelAutosave()
+  await manager.waitForHistoryBackfill()
   manager.discardCurrentProject()
-  rmSync(root, { recursive: true, force: true })
+  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 function outside() {
   const data = JSON.parse(baseline.toString())
@@ -77,6 +78,7 @@ describe('external project document preservation', () => {
     expect([...versions.keys()]).toEqual([file])
     outside()
     manager.checkExternalDocument()
+    await manager.waitForHistoryBackfill()
     manager.discardCurrentProject()
     expect(versions.size).toBe(0)
     expect((manager as any).conflictLocalCopy).toBeNull()
@@ -92,6 +94,11 @@ describe('external project document preservation', () => {
   })
 
   it('does not recreate a moved project folder while preserving a conflict', () => {
+    // Keep the manager's conflict state, but close its indexes so Windows can
+    // rename the folder. Discarding the project would clear the state under test.
+    const internals = manager as any
+    internals.search.close()
+    internals.history.close()
     renameSync(path, `${path}-moved`)
     manager.checkExternalDocument()
     expect(existsSync(path)).toBe(false)
@@ -99,6 +106,7 @@ describe('external project document preservation', () => {
   })
 
   it('can create a new project at a previously used location', async () => {
+    await manager.waitForHistoryBackfill()
     manager.discardCurrentProject()
     rmSync(path, { recursive: true })
     expect((await manager.createProject('External Lab', root)).ok).toBe(true)

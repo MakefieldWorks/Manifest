@@ -28,8 +28,9 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   vi.restoreAllMocks()
+  await manager.waitForHistoryBackfill()
   await manager.flushAndClose()
-  rmSync(root, { recursive: true, force: true })
+  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 async function preview() {
   const result = await manager.recoveryFilesPreview()

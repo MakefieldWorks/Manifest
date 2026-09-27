@@ -28,8 +28,11 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   vi.restoreAllMocks()
+  await manager.waitForHistoryBackfill()
   await manager.flushAndClose()
-  rmSync(root, { recursive: true, force: true })
+  // Safe if flushAndClose already discarded; also closes indexes after a failed save.
+  manager.discardCurrentProject()
+  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 async function exportArchive() {
   const result = await manager.exportProjectArchive(archive)
@@ -87,7 +90,11 @@ describe('portable project archives', () => {
       expect((await other.recoveryPointApply({ id: history.recoveryPoints[0].id })).ok).toBe(true)
       expect(other.getCurrent()!.nodes.some(node => node.name === 'Safety rack')).toBe(true)
       expect((await other.snapshotCreate('after-restore')).ok).toBe(true)
-    } finally { await other.flushAndClose() }
+    } finally {
+      await other.waitForHistoryBackfill()
+      await other.flushAndClose()
+      other.discardCurrentProject()
+    }
   })
 
   it('supports legacy absent history and restores repeatedly to distinct new folders', async () => {
