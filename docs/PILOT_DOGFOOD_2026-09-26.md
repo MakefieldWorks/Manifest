@@ -15,19 +15,36 @@ distribution test.
   754 nodes, 564 leaves, and four Git snapshots. Separate ignored copies under
   `tmp/` were used for the automated and packaged-app runs.
 
+From the repository root, I generated the automated-run fixture with:
+
+```sh
+bun run generate:project -- --output ./tmp/pilot-dogfood-2026-09-26 --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424
+```
+
+For the packaged-app run I used the same command with
+`--output ./tmp/pilot-dogfood-packaged-2026-09-26`. Both output directories
+were new, so `--force` was unnecessary.
+
 ## Checks performed
 
 | Check | Result |
 | --- | --- |
 | `bun run typecheck` | Passed; no Svelte errors or warnings |
 | `bun run test` | 898 passed |
-| `bun run package:verify` | Passed; macOS bundle, branding, ad-hoc signature, and strict signature verification |
+| `bun run package:verify` | Passed; macOS bundle, branding, ad-hoc signature, and `codesign --verify --deep --strict --verbose=2 dist/mac-arm64/Manifest.app` |
 | `bun run test:e2e` | 85 passed, 1 expected dogfood skip |
 | `bun run test:dogfood -- --project ./tmp/pilot-dogfood-2026-09-26` | Passed |
 
-I launched the packaged `.app` through the macOS shell with an isolated user-data
-directory and opened a separate disposable copy of the fixture. The packaged UI
-showed the project and 754 nodes. Searching `active` returned 149 matches, with
+From the repository root, I launched the packaged `.app` through the macOS shell
+with an isolated user-data directory and a separate disposable fixture copy:
+
+```sh
+open -n -a ./dist/mac-arm64/Manifest.app --args \
+  --user-data-dir=/private/tmp/manifest-packaged-dogfood-2026-09-26 \
+  "$PWD/tmp/pilot-dogfood-packaged-2026-09-26"
+```
+
+The packaged UI showed the project and 754 nodes. Searching `active` returned 149 matches, with
 50 loaded initially; the selected result appeared in the tree with its matching
 property. Comparing `generated-01` to `generated-04` showed 33 changes, including
 modified, added, removed, moved, renamed, and ordering changes.
@@ -41,7 +58,15 @@ project document on disk contained the restored node, destination, and both
 properties after quitting the app.
 
 I also launched the packaged app with fresh user data and an isolated example
-directory. The empty hub offered **Open Example Project**; using it created
+directory using:
+
+```sh
+MANIFEST_EXAMPLE_PROJECTS_DIR=/private/tmp/manifest-packaged-examples-2026-09-26 \
+  open -n -a ./dist/mac-arm64/Manifest.app --args \
+  --user-data-dir=/private/tmp/manifest-packaged-first-run-2026-09-26
+```
+
+The empty hub offered **Open Example Project**; using it created
 `Manifest Sample Lab` with six nodes and two snapshots. Comparing `baseline-lab`
 to `firmware-update` showed the firmware/status change and the added telemetry
 gateway. The native **Open Project** file picker opened the generated 754-node
@@ -66,7 +91,7 @@ copy. Both cold and running-app document routes were observed.
 
 No data-loss or workflow-blocking failure was observed in this run. These are
 usability observations from one synthetic fixture; priority should be confirmed
-with a real pilot task.
+with a real pilot task. Both findings are tracked in [TODOS.md](../TODOS.md).
 
 ## Remaining before marking the roadmap item complete
 
