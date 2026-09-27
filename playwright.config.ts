@@ -2,7 +2,9 @@ import { defineConfig } from '@playwright/test'
 
 // Each E2E test launches Electron. Keep its native windows out of the foreground
 // by default; set MANIFEST_E2E_VISIBLE=1 to watch a run.
-process.env['MANIFEST_E2E_BACKGROUND'] ??= process.env['MANIFEST_E2E_VISIBLE'] === '1' ? '0' : '1'
+process.env['MANIFEST_E2E_BACKGROUND'] = process.env['MANIFEST_E2E_VISIBLE'] === '1'
+  ? '0'
+  : (process.env['MANIFEST_E2E_BACKGROUND'] ?? '1')
 
 export default defineConfig({
   testDir: './tests/e2e',

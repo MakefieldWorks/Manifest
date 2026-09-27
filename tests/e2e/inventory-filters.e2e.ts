@@ -61,6 +61,7 @@ test('filters inventory by template, missing required values, subtree, and prope
   await expect(appPage.getByText('Result 1 of 3', { exact: false })).toBeVisible()
 
   await appPage.getByRole('button', { name: 'Entire project' }).click()
+  await expect(appPage.locator('#inventory-property-keys option[value="firmware"]')).toHaveCount(1)
   await fillPropertyKey(appPage, 'firmware')
   await appPage.getByTestId('inventory-filter-property-operator').selectOption('contains')
   await expect(appPage.getByTestId('inventory-filter-toggle')).toHaveText('Filter')

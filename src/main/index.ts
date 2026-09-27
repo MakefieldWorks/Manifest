@@ -93,6 +93,7 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Hidden E2E windows need timers; these runs do not cover production timer throttling.
       backgroundThrottling: !e2eBackground,
     },
   })

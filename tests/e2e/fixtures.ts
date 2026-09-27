@@ -58,9 +58,9 @@ export const test = base.extend<ManifestFixtures>({
 
 export { expect }
 
-// Chromium's native datalist popup crashes a hidden macOS Electron window.
-// These tests exercise filtering, so suppress only that popup while keeping
-// Playwright's normal input events and the app's filter behavior under test.
+// Electron 39.8.10 on macOS exits with SIGSEGV when a hidden window opens the
+// native datalist popup. Recheck after upgrading Electron. These tests exercise
+// filtering, so suppress only the popup and keep normal input events.
 export async function fillPropertyKey(page: Page, value: string): Promise<void> {
   const input = page.getByTestId('inventory-filter-property-key')
   if (process.env['MANIFEST_E2E_BACKGROUND'] === '1') {
