@@ -1,5 +1,8 @@
 # Pilot Dogfood Checklist
 
+The [2026-09-26 macOS dogfood record](PILOT_DOGFOOD_2026-09-26.md) contains
+completed local checks, observed friction, and the remaining platform handoff.
+
 Use this checklist to test Manifest as a first user would: with enough data,
 history, and change volume to reveal workflow friction. CSV and NetBox JSON
 imports are already shipped; use the notes to decide whether a *refinement*,

@@ -2,7 +2,7 @@
 
 ## Next
 
-- Complete the first-user dogfood pass with a packaged build and representative lab project, including the remaining manual macOS and Windows checks in `docs/PILOT_DOGFOOD.md`.
+- Complete the remaining packaged first-run and native file-open checks on macOS, then the Windows dogfood pass in `docs/PILOT_DOGFOOD.md`. The local macOS lab exercise and automated checks are recorded in `docs/PILOT_DOGFOOD_2026-09-26.md`.
 
 ## Completed
 

@@ -12,7 +12,7 @@ Deferred work from CEO review (2026-04-07).
 ## P1 — Pilot readiness
 
 ### First-User Dogfood Pass
-**Status:** IN PROGRESS — Manifest now provides a user-owned example project from the empty project hub. Automated package and generated-project checks are part of this branch; a final manual Mac/Windows pass remains.
+**Status:** IN PROGRESS — The local packaged macOS lab exercise and automated checks are recorded in [the 2026-09-26 dogfood report](PILOT_DOGFOOD_2026-09-26.md). Packaged first-run/native file-open checks on Mac and the Windows pass remain.
 **What:** Package the app and run a realistic project through create/open/edit/search/snapshot/compare/restore using a generated or hand-authored pilot-style hierarchy.
 **Why:** The core v1 surface now exists and passes unit, E2E, typecheck, and packaging verification. The highest-value next signal is whether the workflows feel clear and durable for a real first user.
 **Pros:** Finds UX friction before adding features. Produces concrete evidence for the import/schema roadmap.

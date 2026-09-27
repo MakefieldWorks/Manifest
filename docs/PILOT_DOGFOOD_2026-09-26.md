@@ -1,0 +1,71 @@
+# Pilot dogfood record — macOS, 2026-09-26
+
+Status: **macOS local pass recorded; Windows and clean-machine checks remain.**
+This is a synthetic first-user exercise, not customer validation or a signed
+distribution test.
+
+## Environment and fixture
+
+- Host: Apple Silicon Mac, Darwin 27.0.0.
+- Commit: `383faac` (`main` at the start of this pass).
+- Package: `dist/mac-arm64/Manifest.app`, built with `package:verify` and
+  ad-hoc signed locally. It is not Developer ID signed or notarized.
+- Fixture: `generate:project` with seed `20260424`, requested 750 nodes,
+  depth 6, branching 4, and four snapshots. The generated project contained
+  754 nodes, 564 leaves, and four Git snapshots. Separate ignored copies under
+  `tmp/` were used for the automated and packaged-app runs.
+
+## Checks performed
+
+| Check | Result |
+| --- | --- |
+| `bun run typecheck` | Passed; no Svelte errors or warnings |
+| `bun run test` | 898 passed |
+| `bun run package:verify` | Passed; macOS bundle, branding, ad-hoc signature, and strict signature verification |
+| `bun run test:e2e` | 85 passed, 1 expected dogfood skip |
+| `bun run test:dogfood -- --project ./tmp/pilot-dogfood-2026-09-26` | Passed |
+
+I launched the packaged `.app` through the macOS shell with an isolated user-data
+directory and opened a separate disposable copy of the fixture. The packaged UI
+showed the project and 754 nodes. Searching `active` returned 149 matches, with
+50 loaded initially; the selected result appeared in the tree with its matching
+property. Comparing `generated-01` to `generated-04` showed 33 changes, including
+modified, added, removed, moved, renamed, and ordering changes.
+
+In the packaged app I renamed `Device 00345` to `Device 00345 QA`, saved
+`dogfood-edit-pass`, and compared it to `generated-04`. The rename appeared in
+the comparison. I reverted to `generated-04` and saw the original name return.
+I then added `QA Sensor` with `serial=QA-001` and `status=active`, moved it from
+`Device 00345` to `Shelf 00087`, deleted it, and used Undo to restore it. The
+project document on disk contained the restored node, destination, and both
+properties after quitting the app.
+
+## Observed friction
+
+1. A moved-node comparison card displayed the **before** and **after** parent
+   as raw internal IDs (for example, UUID-style values) rather than readable
+   paths or names. This makes a structural change hard to understand from the
+   review panel alone. The tree does mark the moved node, but the card should
+   identify both locations in user terms.
+2. With the tree, details, and snapshot review all open, the snapshot heading,
+   focus-card titles, and tree labels truncate heavily even at a large window
+   size. The full path remains available in the accessibility text, but a
+   first user may need repeated selection or panel resizing to read it.
+
+No data-loss or workflow-blocking failure was observed in this run. These are
+usability observations from one synthetic fixture; priority should be confirmed
+with a real pilot task.
+
+## Remaining before marking the roadmap item complete
+
+- On macOS, exercise the packaged first-run **Open Example Project**, native
+  Open Recent and file-open routes, and a clean-machine launch. The automated
+  Electron suite covers these workflows in the development build, but this
+  packaged manual pass did not repeat them.
+- On Windows, run the commands and native-shell checklist in
+  [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md). No Windows machine was available in this
+  session.
+- Try a real import file and capture its column shape before deciding whether
+  saved mappings or a different import refinement is needed.
+- Verify a signed and notarized distribution separately from the local
+  ad-hoc-signed package before making a release-readiness claim.
