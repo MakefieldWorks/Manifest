@@ -37,7 +37,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks()
   manager.discardCurrentProject()
-  rmSync(root, { recursive: true, force: true })
+  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
 async function reopen() {

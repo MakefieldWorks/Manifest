@@ -29,7 +29,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   manager.cancelAutosave()
   manager.discardCurrentProject()
-  rmSync(root, { recursive: true, force: true })
+  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 function outside() {
   const data = JSON.parse(baseline.toString())
@@ -92,6 +92,10 @@ describe('external project document preservation', () => {
   })
 
   it('does not recreate a moved project folder while preserving a conflict', () => {
+    // Windows cannot rename a folder while its SQLite indexes are open.
+    const internals = manager as any
+    internals.search.close()
+    internals.history.close()
     renameSync(path, `${path}-moved`)
     manager.checkExternalDocument()
     expect(existsSync(path)).toBe(false)

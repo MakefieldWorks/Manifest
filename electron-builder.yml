@@ -14,7 +14,6 @@ fileAssociations:
     name: Manifest Project
     description: Manifest project document
     role: Editor
-    icon: resources/icon
 
 mac:
   category: public.app-category.productivity
