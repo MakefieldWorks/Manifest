@@ -40,6 +40,18 @@ I then added `QA Sensor` with `serial=QA-001` and `status=active`, moved it from
 project document on disk contained the restored node, destination, and both
 properties after quitting the app.
 
+I also launched the packaged app with fresh user data and an isolated example
+directory. The empty hub offered **Open Example Project**; using it created
+`Manifest Sample Lab` with six nodes and two snapshots. Comparing `baseline-lab`
+to `firmware-update` showed the firmware/status change and the added telemetry
+gateway. The native **Open Project** file picker opened the generated 754-node
+project. Native **Open Recent** listed both projects and reopened the example.
+Finder identified `Manifest.manifestproject` as a **Manifest Project** with
+Manifest as the default app. Opening the document from Finder cold-launched the
+packaged app into the 755-node edited copy. Opening another selected project
+document from Finder while Manifest was running switched it to the 754-node
+copy. Both cold and running-app document routes were observed.
+
 ## Observed friction
 
 1. A moved-node comparison card displayed the **before** and **after** parent
@@ -58,10 +70,9 @@ with a real pilot task.
 
 ## Remaining before marking the roadmap item complete
 
-- On macOS, exercise the packaged first-run **Open Example Project**, native
-  Open Recent and file-open routes, and a clean-machine launch. The automated
-  Electron suite covers these workflows in the development build, but this
-  packaged manual pass did not repeat them.
+- On macOS, launch on a clean machine. The local shell launch, first-run
+  example, native file picker, Open Recent, and Finder document routes passed
+  on this host.
 - On Windows, run the commands and native-shell checklist in
   [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md). No Windows machine was available in this
   session.
