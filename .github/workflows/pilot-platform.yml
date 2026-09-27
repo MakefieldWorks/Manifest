@@ -36,14 +36,14 @@ jobs:
         run: bun run typecheck
       - name: Unit tests
         run: bun run test
-      - name: Electron E2E tests
-        run: bun run test:e2e
       - name: Verify host package
         run: bun run package:verify
       - name: Generate pilot fixture
         run: bun run generate:project -- --output ./tmp/pilot-dogfood --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424
       - name: Open pilot fixture in packaged app
         run: bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged
+      - name: Electron E2E tests
+        run: bun run test:e2e
 
       - name: Upload Playwright diagnostics
         if: failure()
