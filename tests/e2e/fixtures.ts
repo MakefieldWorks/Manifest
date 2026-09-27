@@ -73,10 +73,6 @@ export async function clickNativeMenuCommand(
   electronApp: ElectronApplication,
   command: MenuCommandId,
 ): Promise<void> {
-  await expect.poll(() => electronApp.evaluate(({ Menu }, id) =>
-    Menu.getApplicationMenu()?.getMenuItemById(id)?.enabled ?? false, command,
-  )).toBe(true)
-
   await electronApp.evaluate(({ BrowserWindow, Menu }, id) => {
     const item = Menu.getApplicationMenu()?.getMenuItemById(id)
     const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]

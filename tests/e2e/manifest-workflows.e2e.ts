@@ -342,9 +342,16 @@ test('opens the most recent project from the project hub', async ({ appPage, ele
 
 test('lists recent projects in most-recent-first order on the project hub', async ({ appPage, electronApp, workspaceDir }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub First')
+  await expect.poll(() => electronApp.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()?.getMenuItemById('project:close')?.enabled ?? false,
+  )).toBe(true)
   await clickNativeMenuCommand(electronApp, 'project:close')
+  await expect(appPage.getByTestId('recent-project-list')).toBeVisible()
 
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub Second')
+  await expect.poll(() => electronApp.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()?.getMenuItemById('project:close')?.enabled ?? false,
+  )).toBe(true)
   await clickNativeMenuCommand(electronApp, 'project:close')
 
   await expect(appPage.getByTestId('recent-project-list')).toBeVisible()
