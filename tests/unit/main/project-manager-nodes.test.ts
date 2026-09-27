@@ -78,6 +78,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   manager.cancelAutosave()
+  await manager.waitForHistoryBackfill()
   await manager.flushAndClose()
   await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })

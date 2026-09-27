@@ -24,10 +24,11 @@ beforeEach(async () => {
   store = new HistoryOperationStore(path, created.data.id)
   expect((await manager.snapshotCreate('baseline')).ok).toBe(true)
 })
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks()
+  await manager.waitForHistoryBackfill()
   manager.discardCurrentProject()
-  rmSync(root, { recursive: true, force: true })
+  rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 function review() {
   const result = manager.reviewInterruptedHistory()

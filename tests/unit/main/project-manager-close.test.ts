@@ -33,6 +33,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   manager.cancelAutosave()
+  await manager.waitForHistoryBackfill()
   manager.discardCurrentProject()
   await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })

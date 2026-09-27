@@ -30,8 +30,8 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   vi.restoreAllMocks()
-  manager.discardCurrentProject()
   await manager.waitForHistoryBackfill()
+  manager.discardCurrentProject()
   await rm(directory, { recursive: true, force: true })
 })
 

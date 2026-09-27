@@ -28,9 +28,9 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   vi.restoreAllMocks()
+  await manager.waitForHistoryBackfill()
   await manager.flushAndClose()
   manager.discardCurrentProject()
-  await manager.waitForHistoryBackfill()
   rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 async function exportArchive() {
