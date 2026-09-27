@@ -37,6 +37,7 @@ import {
 import type { Project, Result, NodeTemplate, ImportMapping, NetboxImportOptions } from '../shared/types'
 import type { BatchPropertyUpdateRequest } from '../shared/batch-properties'
 import { isReportFormat } from '../shared/report'
+import { isE2eBackground } from './e2e-background'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ const DOCUMENTATION_URL = 'https://github.com/rgehrsitz/Manifest#readme'
 const REPORT_ISSUE_URL = 'https://github.com/rgehrsitz/Manifest/issues/new'
 const SETTINGS_WINDOW_WIDTH = 760
 const SETTINGS_WINDOW_HEIGHT = 560
+const e2eBackground = isE2eBackground(process.env)
 
 // ─── Window ──────────────────────────────────────────────────────────────────
 
@@ -91,17 +93,19 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Hidden E2E windows need timers; these runs do not cover production timer throttling.
+      backgroundThrottling: !e2eBackground,
     },
   })
 
-  if (storedWindowState?.isMaximized) {
+  if (!e2eBackground && storedWindowState?.isMaximized) {
     win.maximize()
   }
-  if (storedWindowState?.isFullScreen) {
+  if (!e2eBackground && storedWindowState?.isFullScreen) {
     win.setFullScreen(true)
   }
 
-  win.once('ready-to-show', () => win.show())
+  if (!e2eBackground) win.once('ready-to-show', () => win.show())
   configureRendererNavigation(win)
   win.on('focus', () => { projectManager.checkExternalDocument(); notifyWindowFocusChanged(win, true) })
   win.on('blur', () => notifyWindowFocusChanged(win, false))
@@ -134,9 +138,11 @@ function createWindow(): BrowserWindow {
 
 function createSettingsWindow(): BrowserWindow {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
-    if (settingsWindow.isMinimized()) settingsWindow.restore()
-    settingsWindow.show()
-    settingsWindow.focus()
+    if (!e2eBackground) {
+      if (settingsWindow.isMinimized()) settingsWindow.restore()
+      settingsWindow.show()
+      settingsWindow.focus()
+    }
     return settingsWindow
   }
 
@@ -165,10 +171,11 @@ function createSettingsWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: !e2eBackground,
     },
   })
 
-  win.once('ready-to-show', () => win.show())
+  if (!e2eBackground) win.once('ready-to-show', () => win.show())
   configureRendererNavigation(win)
   win.on('focus', () => notifyWindowFocusChanged(win, true))
   win.on('blur', () => notifyWindowFocusChanged(win, false))
@@ -628,6 +635,10 @@ function registerIpcHandlers(): void {
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  if (e2eBackground && process.platform === 'darwin') {
+    app.setActivationPolicy('accessory')
+    app.dock?.hide()
+  }
   appLogger.info('app starting', { version: app.getVersion(), platform: process.platform })
   synchronizeNativeAppearance()
 
@@ -1103,6 +1114,7 @@ function notifyProjectOpenFromOs(
 }
 
 function focusMainWindow(): void {
+  if (e2eBackground) return
   const win = mainWindow ?? BrowserWindow.getAllWindows()[0]
   if (!win || win.isDestroyed()) return
   if (win.isMinimized()) win.restore()

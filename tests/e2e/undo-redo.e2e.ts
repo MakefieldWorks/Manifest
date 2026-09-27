@@ -72,7 +72,7 @@ test('native keyboard accelerators undo and redo when the tree owns focus', asyn
   await addDevice(appPage, electronApp)
   await appPage.locator('[data-testid="tree-node"]', { hasText: 'Device' }).click()
   await electronApp.evaluate(({ BrowserWindow }) => {
-    const win = BrowserWindow.getFocusedWindow()!
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     const modifiers = process.platform === 'darwin' ? ['meta'] : ['control']
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Z', modifiers })
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Z', modifiers })
@@ -80,7 +80,7 @@ test('native keyboard accelerators undo and redo when the tree owns focus', asyn
   await expect(appPage.locator('[data-testid="tree-node"]', { hasText: 'Device' })).toHaveCount(0)
   await expect(appPage.getByTestId('project-redo-btn')).toBeEnabled()
   await electronApp.evaluate(({ BrowserWindow }) => {
-    const win = BrowserWindow.getFocusedWindow()!
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     const keyCode = process.platform === 'win32' ? 'Y' : 'Z'
     const modifiers = process.platform === 'darwin' ? ['meta', 'shift'] : process.platform === 'win32' ? ['control'] : ['control', 'shift']
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers })

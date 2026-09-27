@@ -58,15 +58,26 @@ export const test = base.extend<ManifestFixtures>({
 
 export { expect }
 
+// Electron 39.8.10 on macOS exits with SIGSEGV when a hidden window opens the
+// native datalist popup. Recheck after upgrading Electron. These tests exercise
+// filtering, so suppress only the popup and keep normal input events.
+export async function fillPropertyKey(page: Page, value: string): Promise<void> {
+  const input = page.getByTestId('inventory-filter-property-key')
+  if (process.env['MANIFEST_E2E_BACKGROUND'] === '1') {
+    await input.evaluate(element => element.removeAttribute('list'))
+  }
+  await input.fill(value)
+}
+
 export async function clickNativeMenuCommand(
   electronApp: ElectronApplication,
   command: MenuCommandId,
 ): Promise<void> {
   await electronApp.evaluate(({ BrowserWindow, Menu }, id) => {
     const item = Menu.getApplicationMenu()?.getMenuItemById(id)
-    const window = BrowserWindow.getFocusedWindow()
+    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (!item) throw new Error(`Native menu command not found: ${id}`)
-    if (!window) throw new Error(`No focused native window for menu command: ${id}`)
+    if (!window) throw new Error(`No native window for menu command: ${id}`)
     item.click(item, window, undefined as never)
   }, command)
 }

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { expect, test } from './fixtures'
+import { expect, fillPropertyKey, test } from './fixtures'
 
 const timestamp = '2026-01-01T00:00:00.000Z'
 
@@ -61,7 +61,8 @@ test('filters inventory by template, missing required values, subtree, and prope
   await expect(appPage.getByText('Result 1 of 3', { exact: false })).toBeVisible()
 
   await appPage.getByRole('button', { name: 'Entire project' }).click()
-  await appPage.getByTestId('inventory-filter-property-key').fill('firmware')
+  await expect(appPage.locator('#inventory-property-keys option[value="firmware"]')).toHaveCount(1)
+  await fillPropertyKey(appPage, 'firmware')
   await appPage.getByTestId('inventory-filter-property-operator').selectOption('contains')
   await expect(appPage.getByTestId('inventory-filter-toggle')).toHaveText('Filter')
   await appPage.getByTestId('inventory-filter-property-value').fill('v3')

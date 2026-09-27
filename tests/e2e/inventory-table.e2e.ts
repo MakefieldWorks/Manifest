@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { expect, test } from './fixtures'
+import { expect, fillPropertyKey, test } from './fixtures'
 
 const timestamp = '2026-01-01T00:00:00.000Z'
 
@@ -34,7 +34,7 @@ test('table view sorts, selects columns, preserves node identity, and exports th
   await expect(appPage.getByTestId('project-view')).toBeVisible()
 
   await appPage.getByTestId('inventory-filter-toggle').click()
-  await appPage.getByTestId('inventory-filter-property-key').fill('firmware')
+  await fillPropertyKey(appPage, 'firmware')
   await appPage.getByTestId('inventory-filter-property-operator').selectOption('contains')
   await appPage.getByTestId('inventory-filter-property-value').fill('v3')
   await expect(appPage.getByText('Result 1 of 2', { exact: false })).toBeVisible()
