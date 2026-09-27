@@ -347,6 +347,7 @@ test('lists recent projects in most-recent-first order on the project hub', asyn
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Hub Second')
   await clickNativeMenuCommand(electronApp, 'project:close')
 
+  await expect(appPage.getByTestId('recent-project-list')).toBeVisible()
   const projects = appPage.getByTestId('recent-project-list').getByRole('button')
   await expect(projects.first()).toContainText('Hub Second')
   await expect(projects.filter({ hasText: 'Hub First' })).toHaveCount(1)
