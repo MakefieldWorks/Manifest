@@ -311,7 +311,10 @@ export function diffProjects(projectA: Project, projectB: Project): DiffEntry[] 
         severityReason: 'High: node moved to a different parent.',
         oldValue: nodeA.parentId,
         newValue: nodeB.parentId,
-        context: makeContext(nodeB, nodesB),
+        context: {
+          ...makeContext(nodeB, nodesB),
+          moveParentPaths: { before: getPath(nodeA, nodesA), after: getPath(nodeB, nodesB) },
+        },
       })
     }
 

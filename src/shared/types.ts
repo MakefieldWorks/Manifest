@@ -269,6 +269,7 @@ export interface DiffEntry {
     nodeName: string
     parentName: string | null
     path: string[]
+    moveParentPaths?: { before: string[]; after: string[] }
     propertyValueLabels?: Record<string, { old?: string; new?: string }>
     propertyImportance?: Record<string, Severity>
     removalImpact?: {

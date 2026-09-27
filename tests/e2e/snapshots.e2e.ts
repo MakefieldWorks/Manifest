@@ -614,6 +614,8 @@ test('surfaces move and rename snapshot diffs for the same node', async ({ appPa
   const renamedRow = appPage.getByTestId('snapshot-diff-row').filter({ hasText: 'Renamed' }).filter({ hasText: 'Alpha Prime' })
 
   await expect(movedRow).toBeVisible()
+  await expect(movedRow.getByTestId('move-parent-before')).toHaveText('Move Rename Lab')
+  await expect(movedRow.getByTestId('move-parent-after')).toHaveText('Move Rename Lab / Beta')
   await expect(renamedRow).toBeVisible()
   await expect(appPage.getByTestId('compare-filter-all')).toHaveText('All 3')
   await expect(appPage.getByTestId('compare-filter-high')).toHaveText('High 1')
@@ -666,6 +668,26 @@ test('surfaces move and rename snapshot diffs for the same node', async ({ appPa
 
   await renamedRow.click()
   await expect(appPage.locator('[data-testid="tree-node"][data-row-status="mixed"]', { hasText: 'Alpha Prime' })).toBeVisible()
+})
+
+test('shows the project name when a node moves back to the root', async ({ appPage, electronApp, workspaceDir }) => {
+  const projectName = 'Root Move Lab'
+
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, projectName)
+  await addChildNode(appPage, projectName, 'Beta')
+  await addChildNode(appPage, 'Beta', 'Alpha')
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'nested')
+
+  await openContextMenuAction(appPage, 'Alpha', 'Move To…')
+  await appPage.getByRole('button', { name: `${projectName} (root)`, exact: true }).click()
+  await appPage.getByTestId('move-confirm').click()
+  await createSnapshot(appPage, 'at-root')
+  await compareSnapshots(appPage, 'nested', 'at-root')
+
+  const movedRow = appPage.getByTestId('snapshot-diff-row').filter({ hasText: 'Moved' }).filter({ hasText: 'Alpha' })
+  await expect(movedRow.getByTestId('move-parent-before')).toHaveText('Root Move Lab / Beta')
+  await expect(movedRow.getByTestId('move-parent-after')).toHaveText(projectName)
 })
 
 test('compares generated snapshot fixtures without dropping the diff list', async ({ appPage, electronApp, workspaceDir }) => {
