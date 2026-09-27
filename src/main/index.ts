@@ -54,8 +54,9 @@ const gitService     = new GitService(gitLogger)
 const projectManager = new ProjectManager(gitService, projectLogger)
 const recentProjects = new RecentProjectsStore(join(userData, 'recent-projects.json'))
 const appSettings = new AppSettingsStore(join(userData, 'app-settings.json'))
-const DOCUMENTATION_URL = 'https://github.com/rgehrsitz/Manifest#readme'
-const REPORT_ISSUE_URL = 'https://github.com/rgehrsitz/Manifest/issues/new'
+const DOCUMENTATION_URL = 'https://github.com/MakefieldWorks/Manifest#readme'
+const REPORT_ISSUE_URL = 'https://github.com/MakefieldWorks/Manifest/issues/new'
+const RELEASES_URL = 'https://github.com/MakefieldWorks/Manifest/releases'
 const SETTINGS_WINDOW_WIDTH = 760
 const SETTINGS_WINDOW_HEIGHT = 560
 const e2eBackground = isE2eBackground(process.env)
@@ -681,6 +682,7 @@ app.whenReady().then(async () => {
     clearRecentProjects: clearRecentProjects,
     openPreferences: openPreferences,
     openDocumentation: openDocumentation,
+    checkForUpdates: checkForUpdates,
     reportIssue: reportIssue,
     copyDiagnostics: copyDiagnostics,
   })
@@ -920,6 +922,11 @@ function openPreferences(): void {
 
 function openDocumentation(): void {
   openExternalSafely(DOCUMENTATION_URL, 'documentation link')
+}
+
+function checkForUpdates(): void {
+  // Only the user's menu action opens a browser; no update request runs in the background.
+  openExternalSafely(RELEASES_URL, 'releases page')
 }
 
 function reportIssue(): void {

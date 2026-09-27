@@ -148,6 +148,32 @@ test('creates a new project from the welcome flow', async ({ appPage, electronAp
   expect(document.nodes[0]?.parentId).toBeNull()
 })
 
+test('opens the releases page from Help → Check for Updates', async ({ electronApp }) => {
+  await expect.poll(() => electronApp.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()?.items.some(item =>
+      item.label === 'Help' && item.submenu?.items.some(child => child.label === 'Check for Updates...'),
+    ) ?? false,
+  )).toBe(true)
+
+  const openedUrl = await electronApp.evaluate(({ Menu, shell }) => {
+    const helpMenu = Menu.getApplicationMenu()?.items.find(item => item.label === 'Help')
+    const updateItem = helpMenu?.submenu?.items.find(item => item.label === 'Check for Updates...')
+    if (!updateItem) throw new Error('Check for Updates menu item was not found')
+
+    const originalOpenExternal = shell.openExternal
+    let url: string | null = null
+    shell.openExternal = async (target) => { url = target }
+    try {
+      updateItem.click?.()
+      return url
+    } finally {
+      shell.openExternal = originalOpenExternal
+    }
+  })
+
+  expect(openedUrl).toBe('https://github.com/MakefieldWorks/Manifest/releases')
+})
+
 test('creates and opens an example project from the empty project hub', async ({ appPage, workspaceDir }) => {
   await appPage.getByTestId('open-example-project-btn').click()
   await expect(appPage.getByTestId('project-view')).toBeVisible()
