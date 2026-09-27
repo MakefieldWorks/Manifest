@@ -670,6 +670,36 @@ test('surfaces move and rename snapshot diffs for the same node', async ({ appPa
   await expect(appPage.locator('[data-testid="tree-node"][data-row-status="mixed"]', { hasText: 'Alpha Prime' })).toBeVisible()
 })
 
+test('keeps compare headings, focus titles, and tree names readable with three panes open', async ({ appPage, electronApp, workspaceDir }, testInfo) => {
+  const projectName = 'Pilot Lab With A Deliberately Long Branch Name'
+  const longNodeName = 'Device With A Descriptive Name That Needs Two Lines'
+
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, projectName)
+  await openSnapshotsPanel(appPage)
+  await createSnapshot(appPage, 'baseline-before-a-long-pilot-comparison')
+  await addChildNode(appPage, projectName, longNodeName)
+  await addChildNode(appPage, projectName, 'Second Device')
+  await addChildNode(appPage, projectName, 'Third Device')
+  await createSnapshot(appPage, 'after-a-long-pilot-comparison')
+  await compareSnapshots(appPage, 'baseline-before-a-long-pilot-comparison', 'after-a-long-pilot-comparison')
+
+  const heading = appPage.getByTestId('compare-heading')
+  await expect(heading).toContainText('baseline-before-a-long-pilot-comparison')
+  await expect(heading).toContainText('after-a-long-pilot-comparison')
+  await expect.poll(() => heading.evaluate(element => element.clientHeight)).toBeGreaterThan(20)
+
+  const focusTitle = appPage.getByTestId('review-focus-title').filter({ hasText: `changes under ${projectName}` })
+  await expect(focusTitle).toBeVisible()
+  await expect.poll(() => focusTitle.evaluate(element => element.clientHeight)).toBeGreaterThan(16)
+
+  const row = treeRow(appPage, longNodeName)
+  await expect(row).toHaveCSS('height', '64px')
+  const name = row.getByTestId('tree-node-name')
+  await expect.poll(() => name.evaluate(element => element.clientHeight)).toBeGreaterThan(16)
+  expect(await name.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true)
+  await appPage.screenshot({ path: testInfo.outputPath('readable-three-pane-compare.png') })
+})
+
 test('shows the project name when a node moves back to the root', async ({ appPage, electronApp, workspaceDir }) => {
   const projectName = 'Root Move Lab'
 
