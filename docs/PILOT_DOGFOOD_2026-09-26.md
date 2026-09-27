@@ -105,3 +105,24 @@ with a real pilot task. Both findings are tracked in [TODOS.md](../TODOS.md).
   saved mappings or a different import refinement is needed.
 - Verify a signed and notarized distribution separately from the local
   ad-hoc-signed package before making a release-readiness claim.
+
+## Follow-up verification — 2026-09-27
+
+After the comparison-readability work merged, I verified `main` at `cfc05d9`
+on the same Apple Silicon Mac:
+
+| Check | Result |
+| --- | --- |
+| `bun run package:verify` | Passed; rebuilt the current macOS package, ad-hoc signed it, and verified its signature and branding assets |
+| `bun run generate:project -- --output ./tmp/pilot-dogfood-2026-09-27 --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424` | Generated 754 nodes and four snapshots |
+| `bun run test:dogfood -- --project ./tmp/pilot-dogfood-2026-09-27` | Passed with host-level permission; project opening, search, and snapshot comparison completed |
+
+The first dogfood launch inside the restricted execution sandbox aborted in
+macOS application registration before Manifest code ran. Giving the E2E process
+an isolated user-data directory did not change that result, so that trial edit
+was discarded. The same unmodified test passed with host-level launch permission;
+a regular hidden-window E2E test also passed inside the sandbox. This is a test
+environment limitation, not evidence of a packaged-app failure.
+
+This recheck is still on the development Mac. The separate clean-machine macOS,
+Windows, real import-data, and signed-distribution checks above remain open.
