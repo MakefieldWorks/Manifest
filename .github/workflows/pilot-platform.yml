@@ -15,7 +15,7 @@ jobs:
   packaged-dogfood:
     name: Packaged dogfood (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -52,3 +52,4 @@ jobs:
           name: playwright-${{ matrix.os }}
           path: .playwright-artifacts/
           if-no-files-found: ignore
+          include-hidden-files: true
