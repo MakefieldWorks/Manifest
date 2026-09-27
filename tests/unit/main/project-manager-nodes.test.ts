@@ -139,6 +139,8 @@ describe('nodeCreate', () => {
 
 describe('project document migration', () => {
   it('replaces a legacy manifest and its launcher after a successful open', async () => {
+    manager.discardCurrentProject()
+    await manager.waitForHistoryBackfill()
     const canonicalPath = join(tmpDir, 'Manifest.manifestproject')
     const legacyPath = join(tmpDir, 'manifest.json')
     rmSync(canonicalPath)
@@ -148,12 +150,12 @@ describe('project document migration', () => {
 
     const legacyManager = makeManager()
     const opened = await legacyManager.openProject(tmpDir)
+    manager = legacyManager
 
     expect(opened.ok).toBe(true)
     expect(existsSync(canonicalPath)).toBe(true)
     expect(existsSync(legacyPath)).toBe(false)
     expect(JSON.parse(readFileSync(canonicalPath, 'utf8'))).toMatchObject({ name: 'Test Project' })
-    await legacyManager.flushAndClose()
   })
 })
 

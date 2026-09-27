@@ -33,6 +33,8 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks()
   await manager.flushAndClose()
+  manager.discardCurrentProject()
+  await manager.waitForHistoryBackfill()
   rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
