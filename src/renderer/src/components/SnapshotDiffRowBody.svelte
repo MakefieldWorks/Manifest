@@ -134,18 +134,18 @@
   </details>
 {/if}
 
-{#if diff.changeType === 'moved'}
+{#if diff.changeType === 'moved' && diff.context.moveParentPaths}
   <div class="mt-2 grid grid-cols-2 gap-1.5">
     <div class="min-w-0 rounded bg-white/80 px-2 py-1.5 ring-1 ring-black/5">
       <p class="text-[9px] font-semibold uppercase tracking-wide text-stone-400">Previous parent</p>
       <p class="mt-0.5 break-words text-xs text-stone-700" data-testid="move-parent-before">
-        {diff.context.moveParentPaths?.before.join(' / ') || 'Project root'}
+        {diff.context.moveParentPaths.before.join(' / ')}
       </p>
     </div>
     <div class="min-w-0 rounded bg-white/80 px-2 py-1.5 ring-1 ring-black/5">
       <p class="text-[9px] font-semibold uppercase tracking-wide text-stone-400">New parent</p>
       <p class="mt-0.5 break-words text-xs text-stone-700" data-testid="move-parent-after">
-        {diff.context.moveParentPaths?.after.join(' / ') || 'Project root'}
+        {diff.context.moveParentPaths.after.join(' / ')}
       </p>
     </div>
   </div>
