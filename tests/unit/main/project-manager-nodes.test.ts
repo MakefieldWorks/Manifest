@@ -140,8 +140,8 @@ describe('nodeCreate', () => {
 
 describe('project document migration', () => {
   it('replaces a legacy manifest and its launcher after a successful open', async () => {
-    manager.discardCurrentProject()
     await manager.waitForHistoryBackfill()
+    manager.discardCurrentProject()
     const canonicalPath = join(tmpDir, 'Manifest.manifestproject')
     const legacyPath = join(tmpDir, 'manifest.json')
     rmSync(canonicalPath)
@@ -151,6 +151,7 @@ describe('project document migration', () => {
 
     const legacyManager = makeManager()
     const opened = await legacyManager.openProject(tmpDir)
+    // Teardown must close the manager that now owns the migrated project's indexes.
     manager = legacyManager
 
     expect(opened.ok).toBe(true)

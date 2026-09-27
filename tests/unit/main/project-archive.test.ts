@@ -30,6 +30,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   await manager.waitForHistoryBackfill()
   await manager.flushAndClose()
+  // Safe if flushAndClose already discarded; also closes indexes after a failed save.
   manager.discardCurrentProject()
   rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
@@ -90,9 +91,9 @@ describe('portable project archives', () => {
       expect(other.getCurrent()!.nodes.some(node => node.name === 'Safety rack')).toBe(true)
       expect((await other.snapshotCreate('after-restore')).ok).toBe(true)
     } finally {
+      await other.waitForHistoryBackfill()
       await other.flushAndClose()
       other.discardCurrentProject()
-      await other.waitForHistoryBackfill()
     }
   })
 

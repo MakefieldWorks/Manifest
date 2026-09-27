@@ -94,7 +94,8 @@ describe('external project document preservation', () => {
   })
 
   it('does not recreate a moved project folder while preserving a conflict', () => {
-    // Windows cannot rename a folder while its SQLite indexes are open.
+    // Keep the manager's conflict state, but close its indexes so Windows can
+    // rename the folder. Discarding the project would clear the state under test.
     const internals = manager as any
     internals.search.close()
     internals.history.close()

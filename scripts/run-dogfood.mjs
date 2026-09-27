@@ -54,7 +54,9 @@ function packagedExecutablePath() {
   if (process.platform === 'win32') {
     return join(ROOT_DIR, 'dist', 'win-unpacked', 'Manifest.exe')
   }
-  throw new Error(`Packaged dogfood launch is not configured for ${process.platform}`)
+  console.error(`Packaged dogfood launch is supported on macOS and Windows, not ${process.platform}.`)
+  usage()
+  process.exit(1)
 }
 
 const packagedExecutable = args.packaged ? packagedExecutablePath() : ''
@@ -63,16 +65,16 @@ if (packagedExecutable && !existsSync(packagedExecutable)) {
   process.exit(1)
 }
 
+const dogfoodEnv = { ...process.env, MANIFEST_DOGFOOD_PROJECT: projectPath }
+if (packagedExecutable) dogfoodEnv.MANIFEST_DOGFOOD_EXECUTABLE = packagedExecutable
+else delete dogfoodEnv.MANIFEST_DOGFOOD_EXECUTABLE
+
 execFileSync(
   join(ROOT_DIR, 'node_modules', '.bin', 'playwright'),
   ['test', 'tests/e2e/dogfood.e2e.ts'],
   {
     cwd: ROOT_DIR,
-    env: {
-      ...process.env,
-      MANIFEST_DOGFOOD_PROJECT: projectPath,
-      MANIFEST_DOGFOOD_EXECUTABLE: packagedExecutable,
-    },
+    env: dogfoodEnv,
     stdio: 'inherit',
   },
 )

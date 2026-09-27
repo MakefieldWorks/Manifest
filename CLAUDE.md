@@ -48,7 +48,7 @@ Framework: **Vitest** (unit + integration) + **Playwright** (E2E)
 
 ## CI policy (read before adding `.github/workflows/`)
 
-No CI is configured yet. When it is, do not let Windows or macOS jobs
+Do not let Windows or macOS jobs
 (`windows-*`, `macos-*` runners) trigger automatically on every push or PR —
 GitHub bills those at 2x/10x the Linux rate, and `vpp3_electron` blew through
 its monthly Actions-minutes allowance in ~12 days doing exactly that (daily

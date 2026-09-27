@@ -35,7 +35,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   await manager.waitForHistoryBackfill()
   manager.discardCurrentProject()
-  await rm(directory, { recursive: true, force: true })
+  await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
 describe('project editing history', () => {

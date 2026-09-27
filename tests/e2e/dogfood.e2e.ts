@@ -1,7 +1,8 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
+import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
 
 const ROOT_DIR = process.cwd()
 const MAIN_ENTRY = join(ROOT_DIR, 'out', 'main', 'index.js')
@@ -21,6 +22,8 @@ test('opens and navigates the generated dogfood project', async ({ workspaceDir 
   if (!packagedExecutable && !existsSync(MAIN_ENTRY)) throw new Error(`Built Electron entrypoint not found: ${MAIN_ENTRY}`)
   if (packagedExecutable && !existsSync(packagedExecutable)) throw new Error(`Packaged Electron executable not found: ${packagedExecutable}`)
   if (!existsSync(dogfoodProjectPath)) throw new Error(`Dogfood project not found: ${dogfoodProjectPath}`)
+  const projectDocument = JSON.parse(readFileSync(join(dogfoodProjectPath, PROJECT_DOCUMENT_FILE), 'utf8')) as { name: string }
+  const expectedName = projectDocument.name
 
   const electronApp = await electron.launch({
     executablePath: packagedExecutable || undefined,
@@ -41,7 +44,7 @@ test('opens and navigates the generated dogfood project', async ({ workspaceDir 
     const page = await firstAppWindow(electronApp)
 
     await expect(page.getByTestId('project-view')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByTestId('project-titlebar')).toContainText('Pilot Lab Inventory')
+    await expect(page.getByTestId('project-titlebar')).toContainText(expectedName)
 
     const chrome = await page.evaluate(() => window.api.platform)
     const titlebarClass = await page.getByTestId('project-titlebar').getAttribute('class')
@@ -51,7 +54,7 @@ test('opens and navigates the generated dogfood project', async ({ workspaceDir 
     await page.getByTestId('search-input').fill('active')
     await expect(page.getByTestId('tree-node').first()).toBeVisible()
     await page.getByTestId('search-input').press('Enter')
-    await expect(page.getByTestId('node-name')).not.toHaveText('Pilot Lab Inventory')
+    await expect(page.getByTestId('node-name')).not.toHaveText(expectedName)
 
     await page.getByTestId('open-snapshots-btn').click()
     await expect(page.getByTestId('snapshots-panel')).toBeVisible()
