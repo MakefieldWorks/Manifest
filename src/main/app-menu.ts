@@ -22,7 +22,7 @@ let installOptions: {
   clearRecentProjects(): void
   openPreferences(): void
   openDocumentation(): void
-  checkForUpdates(): void
+  openReleasesPage(): void
   reportIssue(): void
   copyDiagnostics(): void
 } | null = null
@@ -42,7 +42,7 @@ export function installApplicationMenu(options: {
   clearRecentProjects(): void
   openPreferences(): void
   openDocumentation(): void
-  checkForUpdates(): void
+  openReleasesPage(): void
   reportIssue(): void
   copyDiagnostics(): void
 }): void {
@@ -56,7 +56,7 @@ export function installApplicationMenu(options: {
     clearRecentProjects: options.clearRecentProjects,
     openPreferences: options.openPreferences,
     openDocumentation: options.openDocumentation,
-    checkForUpdates: options.checkForUpdates,
+    openReleasesPage: options.openReleasesPage,
     reportIssue: options.reportIssue,
     copyDiagnostics: options.copyDiagnostics,
   }
@@ -82,7 +82,7 @@ function rebuildApplicationMenu(): void {
     clearRecentProjects: options.clearRecentProjects,
     openPreferences: options.openPreferences,
     openDocumentation: options.openDocumentation,
-    checkForUpdates: options.checkForUpdates,
+    openReleasesPage: options.openReleasesPage,
     reportIssue: options.reportIssue,
     openLogsFolder: () => {
       shell.openPath(options.logsPath).catch((error: unknown) => {

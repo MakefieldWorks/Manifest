@@ -19,7 +19,7 @@ function templateFor(
     clearRecentProjects: () => {},
     openPreferences: () => {},
     openDocumentation: () => {},
-    checkForUpdates: () => {},
+    openReleasesPage: () => {},
     reportIssue: () => {},
     openLogsFolder: () => {},
     copyDiagnostics: () => {},

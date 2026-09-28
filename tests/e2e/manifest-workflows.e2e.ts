@@ -3,6 +3,7 @@ import { join } from 'path'
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { clickNativeMenuCommand, expect, test } from './fixtures'
 import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
+import { RELEASES_URL } from '../../src/shared/external-links'
 
 type PersistedProject = {
   name: string
@@ -155,7 +156,7 @@ test('opens the releases page from Help → Check for Updates', async ({ electro
     ) ?? false,
   )).toBe(true)
 
-  const openedUrl = await electronApp.evaluate(({ Menu, shell }) => {
+  const openedUrl = await electronApp.evaluate(async ({ Menu, shell }) => {
     const helpMenu = Menu.getApplicationMenu()?.items.find(item => item.label === 'Help')
     const updateItem = helpMenu?.submenu?.items.find(item => item.label === 'Check for Updates...')
     if (!updateItem) throw new Error('Check for Updates menu item was not found')
@@ -164,14 +165,46 @@ test('opens the releases page from Help → Check for Updates', async ({ electro
     let url: string | null = null
     shell.openExternal = async (target) => { url = target }
     try {
-      updateItem.click?.()
+      await updateItem.click?.()
       return url
     } finally {
       shell.openExternal = originalOpenExternal
     }
   })
 
-  expect(openedUrl).toBe('https://github.com/MakefieldWorks/Manifest/releases')
+  expect(openedUrl).toBe(RELEASES_URL)
+})
+
+test('explains how to view releases when the browser cannot open', async ({ appPage, electronApp }) => {
+  await expect(appPage.getByTestId('create-project-btn')).toBeVisible()
+  const message = await electronApp.evaluate(async ({ Menu, shell, dialog }) => {
+    const helpMenu = Menu.getApplicationMenu()?.items.find(item => item.label === 'Help')
+    const updateItem = helpMenu?.submenu?.items.find(item => item.label === 'Check for Updates...')
+    if (!updateItem) throw new Error('Check for Updates menu item was not found')
+
+    const originalOpenExternal = shell.openExternal
+    const originalShowMessageBox = dialog.showMessageBox
+    let capture!: (options: Electron.MessageBoxOptions) => void
+    const shown = new Promise<Electron.MessageBoxOptions>(resolve => { capture = resolve })
+    shell.openExternal = async () => { throw new Error('No browser is available') }
+    dialog.showMessageBox = async (...args) => {
+      capture(args[args.length - 1] as Electron.MessageBoxOptions)
+      return { response: 0, checkboxChecked: false }
+    }
+    try {
+      updateItem.click?.()
+      const options = await shown
+      return { type: options.type, message: options.message, detail: options.detail }
+    } finally {
+      shell.openExternal = originalOpenExternal
+      dialog.showMessageBox = originalShowMessageBox
+    }
+  })
+
+  expect(message.type).toBe('error')
+  expect(message.message).toContain('could not open the releases page')
+  expect(message.detail).toContain(RELEASES_URL)
+  expect(message.detail).toContain('local projects can still be used without internet access')
 })
 
 test('creates and opens an example project from the empty project hub', async ({ appPage, workspaceDir }) => {

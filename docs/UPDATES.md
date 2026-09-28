@@ -17,17 +17,17 @@ access; the app and local projects continue working without it.
   release is ready.
 
 There is no automatic channel setting or background download. Choose a release
-on the releases page and install its asset for your operating system. The
-current repository has no published releases; development packages built with
-`bun run package:verify` are local test artifacts, not an update feed.
+on the releases page and install its asset for your operating system. If no
+releases are listed yet, use the local pilot build. Development packages built
+with `bun run package:verify` are local test artifacts, not an update feed.
 
 ## Installing with or without internet on the target computer
 
 Download the appropriate release asset on a connected computer, transfer it
 to the target computer if necessary, close Manifest, and install it manually:
 
-1. **macOS:** Open the DMG for the computer's architecture and replace the
-   existing Manifest app in Applications.
+1. **macOS:** Open the DMG for the computer's architecture (arm64 for Apple
+   silicon, x64 for Intel) and replace the existing Manifest app in Applications.
 2. **Windows:** Run the x64 NSIS installer. Keep the project folders where they
    are; the installer is separate from project data.
 3. **Linux:** Replace the x64 AppImage with the new file, make it executable if

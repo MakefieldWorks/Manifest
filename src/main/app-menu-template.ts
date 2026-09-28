@@ -12,7 +12,7 @@ export interface AppMenuTemplateOptions {
   clearRecentProjects(): void
   openPreferences(): void
   openDocumentation(): void
-  checkForUpdates(): void
+  openReleasesPage(): void
   reportIssue(): void
   openLogsFolder(): void
   copyDiagnostics(): void
@@ -202,7 +202,7 @@ export function buildAppMenuTemplate(options: AppMenuTemplateOptions): MenuItemC
     submenu: [
       {
         label: 'Check for Updates...',
-        click: options.checkForUpdates,
+        click: options.openReleasesPage,
       },
       separator(),
       {
