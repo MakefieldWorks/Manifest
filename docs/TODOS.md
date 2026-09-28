@@ -12,7 +12,7 @@ Deferred work from CEO review (2026-04-07).
 ## P1 — Pilot readiness
 
 ### First-User Dogfood Pass
-**Status:** IN PROGRESS — The local packaged macOS lab, first-run, Finder file-open, and automated checks are recorded in [the 2026-09-26 dogfood report](PILOT_DOGFOOD_2026-09-26.md). Clean-machine and Windows checks remain.
+**Status:** IN PROGRESS — The local packaged macOS lab, first-run, Finder file-open, and automated checks are recorded in [the dogfood report](PILOT_DOGFOOD_2026-09-26.md). Automated clean-runner checks passed on macOS and Windows. Expanded edit/restart/revert/recovery coverage passed locally on the macOS package; it still needs to run on Windows. Native-shell clean-machine and manual Windows checks remain.
 **What:** Package the app and run a realistic project through create/open/edit/search/snapshot/compare/restore using a generated or hand-authored pilot-style hierarchy.
 **Why:** The core v1 surface now exists and passes unit, E2E, typecheck, and packaging verification. The highest-value next signal is whether the workflows feel clear and durable for a real first user.
 **Pros:** Finds UX friction before adding features. Produces concrete evidence for the import/schema roadmap.

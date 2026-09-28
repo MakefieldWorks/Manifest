@@ -129,3 +129,38 @@ failure.
 
 This recheck is still on the development Mac. The separate clean-machine macOS,
 Windows, real import-data, and signed-distribution checks above remain open.
+
+## Automated platform and durability follow-up — 2026-09-27
+
+The opt-in [clean-runner workflow run](https://github.com/MakefieldWorks/Manifest/actions/runs/36351084927)
+passed on macOS 15 and Windows 2022 before PR #98 merged. It ran typechecking,
+unit tests, host packaging verification, the original packaged open/search/compare
+smoke test, and the development-build Electron E2E suite. This supplies automated
+clean-runner evidence; it does not complete the manual Finder/Explorer checklist.
+
+After PR #99 merged (`ac8b07a`), the pilot test was extended locally to use a
+disposable copy of the 754-node fixture and exercise editing and durability:
+
+- Add and rename a node, set serial/status properties, and verify autosave.
+- Relaunch the process and find the persisted node by its serial value.
+- Save and compare the edited snapshot against a baseline.
+- Make an unsnapshotted rename, then revert with a note.
+- Relaunch again, verify the baseline inventory and absent probe search result,
+  and confirm the later snapshot and revert event remain in the timeline.
+- Apply the retained recovery point and verify the unsnapshotted name and both
+  properties return. Verify the supplied project document stayed byte-identical.
+
+`bun run typecheck`, `bun run build`, and `bun run package:verify` passed.
+`bun run test:dogfood -- --project ./tmp/pilot-durability-check --packaged`
+passed against the rebuilt, ad-hoc-signed macOS package (8.9 seconds), with
+host-level launch permission. The sandbox launch again aborted with SIGABRT
+before opening a window. The development-build run also passed with host-level
+permission (8.5 seconds). Its first host-level attempt stalled while macOS
+displayed Electron's "unexpectedly quit while reopening windows" recovery
+prompt after the sandbox crash; that run was stopped and rerun after the prompt
+cleared. Each test launch now has a 30-second timeout so a blocked launch fails
+promptly. The expanded test has not yet run on Windows or a separate clean Mac;
+the earlier workflow run covered the original smoke test.
+
+Manual native-shell checks, representative real import data, and signed/notarized
+distribution verification remain open.

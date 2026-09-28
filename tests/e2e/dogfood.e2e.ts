@@ -1,8 +1,9 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { existsSync, readFileSync } from 'fs'
+import { cpSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
 import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
+import type { Project } from '../../src/shared/types'
 
 const ROOT_DIR = process.cwd()
 const MAIN_ENTRY = join(ROOT_DIR, 'out', 'main', 'index.js')
@@ -17,20 +18,30 @@ async function firstAppWindow(electronApp: ElectronApplication): Promise<Page> {
   return page
 }
 
-test('opens and navigates the generated dogfood project', async ({ workspaceDir }) => {
+test('edits, snapshots, reverts, and reopens the generated dogfood project', async ({ workspaceDir }) => {
+  // Includes three real process launches, including on slower Windows runners.
+  test.setTimeout(120_000)
   if (!dogfoodProjectPath) throw new Error('Missing MANIFEST_DOGFOOD_PROJECT')
   if (!packagedExecutable && !existsSync(MAIN_ENTRY)) throw new Error(`Built Electron entrypoint not found: ${MAIN_ENTRY}`)
   if (packagedExecutable && !existsSync(packagedExecutable)) throw new Error(`Packaged Electron executable not found: ${packagedExecutable}`)
   if (!existsSync(dogfoodProjectPath)) throw new Error(`Dogfood project not found: ${dogfoodProjectPath}`)
-  const projectDocument = JSON.parse(readFileSync(join(dogfoodProjectPath, PROJECT_DOCUMENT_FILE), 'utf8')) as { name: string }
+  // Keep the supplied pilot project reusable, including its Git and recovery
+  // history. All mutations and process restarts operate on a disposable copy.
+  const originalBytes = readFileSync(join(dogfoodProjectPath, PROJECT_DOCUMENT_FILE))
+  const projectPath = join(workspaceDir, 'pilot-project')
+  cpSync(dogfoodProjectPath, projectPath, { recursive: true })
+  const documentPath = join(projectPath, PROJECT_DOCUMENT_FILE)
+  const readProject = () => JSON.parse(readFileSync(documentPath, 'utf8')) as Project
+  const projectDocument = readProject()
   const expectedName = projectDocument.name
 
-  const electronApp = await electron.launch({
+  const launch = () => electron.launch({
+    timeout: 30_000,
     executablePath: packagedExecutable || undefined,
     args: [
       ...(packagedExecutable ? [] : [MAIN_ENTRY]),
       `--user-data-dir=${join(workspaceDir, 'electron-user-data')}`,
-      dogfoodProjectPath,
+      projectPath,
     ],
     cwd: ROOT_DIR,
     env: {
@@ -40,8 +51,9 @@ test('opens and navigates the generated dogfood project', async ({ workspaceDir 
     },
   })
 
+  let electronApp = await launch()
   try {
-    const page = await firstAppWindow(electronApp)
+    let page = await firstAppWindow(electronApp)
 
     await expect(page.getByTestId('project-view')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('project-titlebar')).toContainText(expectedName)
@@ -54,7 +66,7 @@ test('opens and navigates the generated dogfood project', async ({ workspaceDir 
     await page.getByTestId('search-input').fill('active')
     await expect(page.getByTestId('tree-node').first()).toBeVisible()
     await page.getByTestId('search-input').press('Enter')
-    await expect(page.getByTestId('node-name')).not.toHaveText(expectedName)
+    await expect(page.getByTestId('node-name').getByRole('heading')).not.toHaveText(expectedName)
 
     await page.getByTestId('open-snapshots-btn').click()
     await expect(page.getByTestId('snapshots-panel')).toBeVisible()
@@ -64,6 +76,93 @@ test('opens and navigates the generated dogfood project', async ({ workspaceDir 
     await page.getByTestId('compare-snapshots-btn').click()
     await expect(page.getByTestId('snapshot-diff-list')).toBeVisible({ timeout: 10_000 })
     await expect.poll(async () => page.getByTestId('snapshot-diff-row').count()).toBeGreaterThan(0)
+
+    await page.getByTestId('exit-compare-btn').click()
+    const saveSnapshot = async (name: string) => {
+      await page.getByTestId('snapshot-name-input').fill(name)
+      await page.getByTestId('create-snapshot-btn').click()
+      await expect(page.getByTestId('snapshot-row').filter({ hasText: name })).toBeVisible()
+    }
+    await saveSnapshot('dogfood-baseline')
+    const baseline = readProject()
+    await page.getByRole('button', { name: 'Close snapshots' }).click()
+    await page.getByTestId('search-input').fill('')
+
+    const root = baseline.nodes.find(node => node.parentId === null)
+    if (!root) throw new Error('Pilot project has no root node')
+    const rootRow = page.getByTestId('tree-node').filter({ hasText: root.name }).first()
+    await rootRow.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Add Child', exact: true }).click()
+    await page.getByTestId('add-child-input').fill('Dogfood Probe')
+    await page.getByTestId('add-child-commit').click()
+    await expect(page.getByTestId('node-name').getByRole('heading')).toHaveText('Dogfood Probe')
+    await page.getByTestId('node-name').click()
+    await page.getByTestId('name-input').fill('Dogfood Probe Renamed')
+    await page.getByTestId('name-input').press('Enter')
+    await expect(page.getByTestId('node-name').getByRole('heading')).toHaveText('Dogfood Probe Renamed')
+
+    for (const [key, value] of [['serial', 'DOGFOOD-REOPEN-001'], ['status', 'active']]) {
+      await page.getByTestId('new-prop-key').fill(key)
+      await page.getByTestId('new-prop-value').fill(value)
+      await page.getByTestId('add-prop-btn').click()
+      await expect(page.getByTestId('prop-value').filter({ hasText: value })).toBeVisible()
+    }
+    await expect.poll(() => readProject().nodes.find(node => node.name === 'Dogfood Probe Renamed')?.properties)
+      .toEqual({ serial: 'DOGFOOD-REOPEN-001', status: 'active' })
+    const edited = readProject()
+
+    // A fresh process must rebuild search and show the persisted property edits.
+    await electronApp.close()
+    electronApp = await launch()
+    page = await firstAppWindow(electronApp)
+    await expect(page.getByTestId('project-view')).toBeVisible()
+    await page.getByTestId('search-input').fill('DOGFOOD-REOPEN-001')
+    await expect(page.getByTestId('node-name').getByRole('heading')).toHaveText('Dogfood Probe Renamed')
+    await expect(page.getByTestId('prop-value').filter({ hasText: 'DOGFOOD-REOPEN-001' })).toBeVisible()
+    expect(readProject().nodes).toEqual(edited.nodes)
+    await page.getByTestId('open-snapshots-btn').click()
+    await saveSnapshot('dogfood-edit-pass')
+    await page.getByTestId('compare-from-select').selectOption('dogfood-baseline')
+    await page.getByTestId('compare-to-select').selectOption('dogfood-edit-pass')
+    await page.getByTestId('compare-snapshots-btn').click()
+    await expect(page.getByTestId('snapshot-diff-row').filter({ hasText: 'Dogfood Probe Renamed' })).toBeVisible()
+    await page.getByTestId('exit-compare-btn').click()
+
+    // Revert must retain the later snapshot and recover unsnapshotted work.
+    await page.getByRole('button', { name: 'Close snapshots' }).click()
+    await page.getByTestId('node-name').click()
+    await page.getByTestId('name-input').fill('Dogfood Unsnapshotted Probe')
+    await page.getByTestId('name-input').press('Enter')
+    await expect(page.getByTestId('node-name').getByRole('heading')).toHaveText('Dogfood Unsnapshotted Probe')
+    await page.getByTestId('open-snapshots-btn').click()
+    await page.getByRole('button', { name: 'Revert Current Project to This Snapshot: dogfood-baseline', exact: true }).click()
+    await page.getByTestId('revert-note-input').fill('Packaged pilot rollback verification')
+    await page.getByTestId('revert-confirm-btn').click()
+    await expect(page.getByTestId('revert-dialog')).toHaveCount(0)
+    await expect(page.getByTestId('project-mode-badge')).toHaveText('Current project matches dogfood-baseline')
+    expect(readProject().nodes).toEqual(baseline.nodes)
+
+    await electronApp.close()
+    electronApp = await launch()
+    page = await firstAppWindow(electronApp)
+    await expect(page.getByTestId('project-view')).toBeVisible()
+    expect(readProject().nodes).toEqual(baseline.nodes)
+    await page.getByTestId('search-input').fill('DOGFOOD-REOPEN-001')
+    await expect(page.getByTestId('search-no-results')).toBeVisible()
+    await page.getByTestId('search-input').fill('')
+    await page.getByTestId('open-snapshots-btn').click()
+    await expect(page.getByTestId('snapshot-row').filter({ hasText: 'dogfood-edit-pass' })).toBeVisible()
+    const revertEvent = page.getByTestId('snapshot-timeline-event')
+      .filter({ hasText: 'Reverted current project to "dogfood-baseline"' })
+    await expect(revertEvent).toContainText('Packaged pilot rollback verification')
+    await revertEvent.getByTestId('apply-recovery-btn').click()
+    await page.getByTestId('recovery-confirm-btn').click()
+    await expect(page.getByTestId('recovery-dialog')).toHaveCount(0)
+    await page.getByTestId('search-input').fill('DOGFOOD-REOPEN-001')
+    await expect(page.getByTestId('node-name').getByRole('heading')).toHaveText('Dogfood Unsnapshotted Probe')
+    expect(readProject().nodes.find(node => node.name === 'Dogfood Unsnapshotted Probe')?.properties)
+      .toEqual({ serial: 'DOGFOOD-REOPEN-001', status: 'active' })
+    expect(readFileSync(join(dogfoodProjectPath, PROJECT_DOCUMENT_FILE))).toEqual(originalBytes)
   } finally {
     await electronApp.close()
   }
