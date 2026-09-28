@@ -10,17 +10,18 @@ const MAIN_ENTRY = join(ROOT_DIR, 'out', 'main', 'index.js')
 const dogfoodProjectPath = process.env['MANIFEST_DOGFOOD_PROJECT']
 const packagedExecutable = process.env['MANIFEST_DOGFOOD_EXECUTABLE']
 
-test.skip(!dogfoodProjectPath, 'Set MANIFEST_DOGFOOD_PROJECT to run the generated project dogfood smoke coverage.')
+test.skip(!dogfoodProjectPath, 'Set MANIFEST_DOGFOOD_PROJECT to run the generated project durability coverage.')
 
 async function firstAppWindow(electronApp: ElectronApplication): Promise<Page> {
-  const page = await electronApp.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  const page = await electronApp.firstWindow({ timeout: 30_000 })
+  await page.waitForLoadState('domcontentloaded', { timeout: 30_000 })
+  await expect(page.getByTestId('project-view')).toBeVisible({ timeout: 30_000 })
   return page
 }
 
 test('edits, snapshots, reverts, and reopens the generated dogfood project', async ({ workspaceDir }) => {
   // Includes three real process launches, including on slower Windows runners.
-  test.setTimeout(120_000)
+  test.setTimeout(process.platform === 'win32' ? 180_000 : 120_000)
   if (!dogfoodProjectPath) throw new Error('Missing MANIFEST_DOGFOOD_PROJECT')
   if (!packagedExecutable && !existsSync(MAIN_ENTRY)) throw new Error(`Built Electron entrypoint not found: ${MAIN_ENTRY}`)
   if (packagedExecutable && !existsSync(packagedExecutable)) throw new Error(`Packaged Electron executable not found: ${packagedExecutable}`)
@@ -51,11 +52,24 @@ test('edits, snapshots, reverts, and reopens the generated dogfood project', asy
     },
   })
 
-  let electronApp = await launch()
+  let electronApp: ElectronApplication | null = null
+  let workflowFailed = false
+  const restart = async (phase: string): Promise<Page> => {
+    console.info(`[dogfood] Closing app before ${phase}`)
+    const previousApp = electronApp
+    // Clear ownership before closing so a close/relaunch failure cannot cause
+    // teardown to close the old handle and mask the original error.
+    electronApp = null
+    await previousApp?.close()
+    console.info(`[dogfood] Launching app for ${phase}`)
+    electronApp = await launch()
+    return firstAppWindow(electronApp)
+  }
   try {
+    console.info('[dogfood] Launching pilot project')
+    electronApp = await launch()
     let page = await firstAppWindow(electronApp)
 
-    await expect(page.getByTestId('project-view')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('project-titlebar')).toContainText(expectedName)
 
     const chrome = await page.evaluate(() => window.api.platform)
@@ -91,6 +105,7 @@ test('edits, snapshots, reverts, and reopens the generated dogfood project', asy
     const root = baseline.nodes.find(node => node.parentId === null)
     if (!root) throw new Error('Pilot project has no root node')
     const rootRow = page.getByTestId('tree-node').filter({ hasText: root.name }).first()
+    await expect(rootRow).toBeVisible()
     await rootRow.click({ button: 'right' })
     await page.getByRole('menuitem', { name: 'Add Child', exact: true }).click()
     await page.getByTestId('add-child-input').fill('Dogfood Probe')
@@ -107,15 +122,12 @@ test('edits, snapshots, reverts, and reopens the generated dogfood project', asy
       await page.getByTestId('add-prop-btn').click()
       await expect(page.getByTestId('prop-value').filter({ hasText: value })).toBeVisible()
     }
-    await expect.poll(() => readProject().nodes.find(node => node.name === 'Dogfood Probe Renamed')?.properties)
+    await expect.poll(() => readProject().nodes.find(node => node.name === 'Dogfood Probe Renamed')?.properties, { timeout: 15_000 })
       .toEqual({ serial: 'DOGFOOD-REOPEN-001', status: 'active' })
     const edited = readProject()
 
     // A fresh process must rebuild search and show the persisted property edits.
-    await electronApp.close()
-    electronApp = await launch()
-    page = await firstAppWindow(electronApp)
-    await expect(page.getByTestId('project-view')).toBeVisible()
+    page = await restart('persisted edit verification')
     await page.getByTestId('search-input').fill('DOGFOOD-REOPEN-001')
     await expect(page.getByTestId('node-name').getByRole('heading')).toHaveText('Dogfood Probe Renamed')
     await expect(page.getByTestId('prop-value').filter({ hasText: 'DOGFOOD-REOPEN-001' })).toBeVisible()
@@ -134,6 +146,7 @@ test('edits, snapshots, reverts, and reopens the generated dogfood project', asy
     await page.getByTestId('name-input').fill('Dogfood Unsnapshotted Probe')
     await page.getByTestId('name-input').press('Enter')
     await expect(page.getByTestId('node-name').getByRole('heading')).toHaveText('Dogfood Unsnapshotted Probe')
+    // Revert captures safety recovery from in-memory edits, before autosave.
     await page.getByTestId('open-snapshots-btn').click()
     await page.getByRole('button', { name: 'Revert Current Project to This Snapshot: dogfood-baseline', exact: true }).click()
     await page.getByTestId('revert-note-input').fill('Packaged pilot rollback verification')
@@ -142,10 +155,7 @@ test('edits, snapshots, reverts, and reopens the generated dogfood project', asy
     await expect(page.getByTestId('project-mode-badge')).toHaveText('Current project matches dogfood-baseline')
     expect(readProject().nodes).toEqual(baseline.nodes)
 
-    await electronApp.close()
-    electronApp = await launch()
-    page = await firstAppWindow(electronApp)
-    await expect(page.getByTestId('project-view')).toBeVisible()
+    page = await restart('revert and recovery verification')
     expect(readProject().nodes).toEqual(baseline.nodes)
     await page.getByTestId('search-input').fill('DOGFOOD-REOPEN-001')
     await expect(page.getByTestId('search-no-results')).toBeVisible()
@@ -163,7 +173,18 @@ test('edits, snapshots, reverts, and reopens the generated dogfood project', asy
     expect(readProject().nodes.find(node => node.name === 'Dogfood Unsnapshotted Probe')?.properties)
       .toEqual({ serial: 'DOGFOOD-REOPEN-001', status: 'active' })
     expect(readFileSync(join(dogfoodProjectPath, PROJECT_DOCUMENT_FILE))).toEqual(originalBytes)
+  } catch (error) {
+    workflowFailed = true
+    throw error
   } finally {
-    await electronApp.close()
+    if (electronApp) {
+      console.info('[dogfood] Closing final app')
+      try {
+        await electronApp.close()
+      } catch (error) {
+        if (!workflowFailed) throw error
+        console.error('[dogfood] Cleanup failed after workflow failure:', error)
+      }
+    }
   }
 })

@@ -46,7 +46,7 @@ jobs:
         run: bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged
       - name: Electron E2E tests
         # The full suite launches the development Electron build; packaged launch
-        # is covered by the preceding dogfood smoke test.
+        # and durability are covered by the preceding packaged dogfood test.
         run: bun run test:e2e
 
       - name: Upload Playwright diagnostics

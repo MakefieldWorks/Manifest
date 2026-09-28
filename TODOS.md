@@ -2,7 +2,7 @@
 
 ## Next
 
-- Complete a native-shell clean-machine launch on macOS and the manual Windows dogfood pass in `docs/PILOT_DOGFOOD.md`. Automated clean-runner checks passed on both platforms; the expanded edit/restart/revert/recovery test has also passed locally on the macOS package. Evidence and remaining checks are recorded in `docs/PILOT_DOGFOOD_2026-09-26.md`.
+- Complete a native-shell clean-machine launch on macOS and the manual Windows dogfood pass in `docs/PILOT_DOGFOOD.md`. Automated clean-runner checks passed on both platforms, including the expanded packaged edit/restart/revert/recovery test in PR #100. Evidence and remaining checks are recorded in `docs/PILOT_DOGFOOD_2026-09-26.md`.
 
 ## Test infrastructure follow-ups
 

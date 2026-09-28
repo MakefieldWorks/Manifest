@@ -158,9 +158,19 @@ before opening a window. The development-build run also passed with host-level
 permission (8.5 seconds). Its first host-level attempt stalled while macOS
 displayed Electron's "unexpectedly quit while reopening windows" recovery
 prompt after the sandbox crash; that run was stopped and rerun after the prompt
-cleared. Each test launch now has a 30-second timeout so a blocked launch fails
-promptly. The expanded test has not yet run on Windows or a separate clean Mac;
-the earlier workflow run covered the original smoke test.
+cleared. Process launch, first-window acquisition, DOM loading, and project
+visibility each have explicit 30-second limits. The overall test budget is
+180 seconds on Windows and 120 seconds on other platforms. Restart phase logs
+identify a stalled close or launch, and cleanup preserves the original failure.
+
+The [PR #100 platform run](https://github.com/MakefieldWorks/Manifest/actions/runs/36368235037)
+passed the expanded packaged durability test on fresh macOS 15 and Windows 2022
+runners at commit `83404c1`. The macOS job also passed the full development E2E
+suite. At the time of this review update, the Windows E2E suite was still running;
+its typecheck, unit tests, packaging verification, and packaged durability test
+had passed. This is automated clean-runner evidence, not a manual native-shell
+pass on a separate machine. Validation of the subsequent review fixes is tracked
+in [PR #100's checks](https://github.com/MakefieldWorks/Manifest/pull/100/checks).
 
 Manual native-shell checks, representative real import data, and signed/notarized
 distribution verification remain open.
