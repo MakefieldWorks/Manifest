@@ -19,6 +19,7 @@ function templateFor(
     clearRecentProjects: () => {},
     openPreferences: () => {},
     openDocumentation: () => {},
+    openReleasesPage: () => {},
     reportIssue: () => {},
     openLogsFolder: () => {},
     copyDiagnostics: () => {},
@@ -134,6 +135,8 @@ describe('buildAppMenuTemplate', () => {
     if (!helpMenu) throw new Error('Help menu not found')
 
     expect(submenu(helpMenu).map(item => item.label)).toEqual([
+      'Check for Updates...',
+      undefined,
       'Manifest Documentation',
       'Report an Issue...',
       undefined,

@@ -38,6 +38,7 @@ import type { Project, Result, NodeTemplate, ImportMapping, NetboxImportOptions 
 import type { BatchPropertyUpdateRequest } from '../shared/batch-properties'
 import { isReportFormat } from '../shared/report'
 import { isE2eBackground } from './e2e-background'
+import { DOCUMENTATION_URL, REPORT_ISSUE_URL, RELEASES_URL } from '../shared/external-links'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -54,8 +55,6 @@ const gitService     = new GitService(gitLogger)
 const projectManager = new ProjectManager(gitService, projectLogger)
 const recentProjects = new RecentProjectsStore(join(userData, 'recent-projects.json'))
 const appSettings = new AppSettingsStore(join(userData, 'app-settings.json'))
-const DOCUMENTATION_URL = 'https://github.com/rgehrsitz/Manifest#readme'
-const REPORT_ISSUE_URL = 'https://github.com/rgehrsitz/Manifest/issues/new'
 const SETTINGS_WINDOW_WIDTH = 760
 const SETTINGS_WINDOW_HEIGHT = 560
 const e2eBackground = isE2eBackground(process.env)
@@ -681,6 +680,7 @@ app.whenReady().then(async () => {
     clearRecentProjects: clearRecentProjects,
     openPreferences: openPreferences,
     openDocumentation: openDocumentation,
+    openReleasesPage: openReleasesPage,
     reportIssue: reportIssue,
     copyDiagnostics: copyDiagnostics,
   })
@@ -920,6 +920,22 @@ function openPreferences(): void {
 
 function openDocumentation(): void {
   openExternalSafely(DOCUMENTATION_URL, 'documentation link')
+}
+
+async function openReleasesPage(): Promise<void> {
+  // Only the user's menu action opens a browser; no update request runs in the background.
+  try {
+    await shell.openExternal(RELEASES_URL)
+  } catch (error: unknown) {
+    appLogger.error('failed to open releases page', { error: errorMessage(error), url: RELEASES_URL })
+    await showMessageBoxSafely('releases page error dialog', mainWindow ?? BrowserWindow.getFocusedWindow(), {
+      type: 'error',
+      title: 'Could Not Open Releases',
+      message: 'Manifest could not open the releases page in your browser.',
+      detail: `Open this address in a browser to view available releases:\n${RELEASES_URL}\n\nYour local projects can still be used without internet access.`,
+      buttons: ['OK'],
+    })
+  }
 }
 
 function reportIssue(): void {

@@ -12,6 +12,7 @@ export interface AppMenuTemplateOptions {
   clearRecentProjects(): void
   openPreferences(): void
   openDocumentation(): void
+  openReleasesPage(): void
   reportIssue(): void
   openLogsFolder(): void
   copyDiagnostics(): void
@@ -199,6 +200,11 @@ export function buildAppMenuTemplate(options: AppMenuTemplateOptions): MenuItemC
   template.push({
     label: 'Help',
     submenu: [
+      {
+        label: 'Check for Updates...',
+        click: options.openReleasesPage,
+      },
+      separator(),
       {
         label: 'Manifest Documentation',
         click: options.openDocumentation,
