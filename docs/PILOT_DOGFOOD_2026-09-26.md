@@ -129,3 +129,48 @@ failure.
 
 This recheck is still on the development Mac. The separate clean-machine macOS,
 Windows, real import-data, and signed-distribution checks above remain open.
+
+## Automated platform and durability follow-up — 2026-09-27
+
+The opt-in [clean-runner workflow run](https://github.com/MakefieldWorks/Manifest/actions/runs/36351084927)
+passed on macOS 15 and Windows 2022 before PR #98 merged. It ran typechecking,
+unit tests, host packaging verification, the original packaged open/search/compare
+smoke test, and the development-build Electron E2E suite. This supplies automated
+clean-runner evidence; it does not complete the manual Finder/Explorer checklist.
+
+After PR #99 merged (`ac8b07a`), the pilot test was extended locally to use a
+disposable copy of the 754-node fixture and exercise editing and durability:
+
+- Add and rename a node, set serial/status properties, and verify autosave.
+- Relaunch the process and find the persisted node by its serial value.
+- Save and compare the edited snapshot against a baseline.
+- Make an unsnapshotted rename, then revert with a note.
+- Relaunch again, verify the baseline inventory and absent probe search result,
+  and confirm the later snapshot and revert event remain in the timeline.
+- Apply the retained recovery point and verify the unsnapshotted name and both
+  properties return. Verify the supplied project document stayed byte-identical.
+
+`bun run typecheck`, `bun run build`, and `bun run package:verify` passed.
+`bun run test:dogfood -- --project ./tmp/pilot-durability-check --packaged`
+passed against the rebuilt, ad-hoc-signed macOS package (8.9 seconds), with
+host-level launch permission. The sandbox launch again aborted with SIGABRT
+before opening a window. The development-build run also passed with host-level
+permission (8.5 seconds). Its first host-level attempt stalled while macOS
+displayed Electron's "unexpectedly quit while reopening windows" recovery
+prompt after the sandbox crash; that run was stopped and rerun after the prompt
+cleared. Process launch, first-window acquisition, DOM loading, and project
+visibility each have explicit 30-second limits. The overall test budget is
+180 seconds on Windows and 120 seconds on other platforms. Restart phase logs
+identify a stalled close or launch, and cleanup preserves the original failure.
+
+The [PR #100 platform run](https://github.com/MakefieldWorks/Manifest/actions/runs/36368235037)
+passed the expanded packaged durability test on fresh macOS 15 and Windows 2022
+runners at commit `83404c1`. The macOS job also passed the full development E2E
+suite. At the time of this review update, the Windows E2E suite was still running;
+its typecheck, unit tests, packaging verification, and packaged durability test
+had passed. This is automated clean-runner evidence, not a manual native-shell
+pass on a separate machine. Validation of the subsequent review fixes is tracked
+in [PR #100's checks](https://github.com/MakefieldWorks/Manifest/pull/100/checks).
+
+Manual native-shell checks, representative real import data, and signed/notarized
+distribution verification remain open.

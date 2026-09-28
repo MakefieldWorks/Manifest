@@ -2,13 +2,15 @@
 
 ## Next
 
-- Complete a clean-machine launch on macOS and the Windows dogfood pass in `docs/PILOT_DOGFOOD.md`. The local macOS packaged lab, first-run, file-open, and automated checks are recorded in `docs/PILOT_DOGFOOD_2026-09-26.md`.
+- Complete a native-shell clean-machine launch on macOS and the manual Windows dogfood pass in `docs/PILOT_DOGFOOD.md`. Automated clean-runner checks passed on both platforms, including the expanded packaged edit/restart/revert/recovery test in PR #100. Evidence and remaining checks are recorded in `docs/PILOT_DOGFOOD_2026-09-26.md`.
 
 ## Test infrastructure follow-ups
 
 - After upgrading Electron from 39.8.10, retest the inventory property-key datalist in hidden macOS E2E runs and remove the popup suppression in `tests/e2e/fixtures.ts` if the native SIGSEGV is fixed. The default suite checks suggestion options and filtering, but does not open the native popup; check that interaction in a visible run.
 
 ## Completed
+
+- Extend packaged pilot coverage to edits, autosave persistence across process restarts, saved-snapshot comparison, revert, retained timeline, and recovery of unsnapshotted work using a disposable project copy. **Implemented:** 2026-09-27
 
 - Improve readability when the tree, details, and snapshot review panels are all open: snapshot heading, focus-card titles, diff paths, and tree labels. Observed in `docs/PILOT_DOGFOOD_2026-09-26.md`. **Implemented:** 2026-09-27
 

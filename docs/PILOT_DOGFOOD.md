@@ -29,9 +29,14 @@ bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged
 `package:verify` builds and inspects the host package. On macOS it also ad-hoc
 signs and verifies the local unsigned `.app` bundle so launch-blocking signature
 issues are caught before manual testing. `test:dogfood -- --packaged` opens the
-generated project through the packaged executable. Omit `--packaged` to test the
-development Electron build instead. The full `test:e2e` suite also uses that
-development build.
+generated project through the packaged executable. The test copies the supplied
+project, including its Git history, to a disposable workspace before editing.
+It checks search and comparison, adds and renames a node, edits two properties,
+relaunches to verify persistence and search, saves and compares a snapshot,
+reverts, and relaunches again to verify the retained timeline and recovery of
+unsnapshotted work. The supplied project is left unchanged. Omit `--packaged`
+to test the development Electron build instead. The full `test:e2e` suite also
+uses that development build.
 
 Add the `ci:full` label to a PR, or dispatch `Pilot platform checks` manually,
 to run these checks on fresh macOS and Windows runners. The workflow generates
