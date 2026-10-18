@@ -7,7 +7,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "postinstall": "install-electron --no",
+    "postinstall": "install-electron",
     "generate:project": "bun scripts/generate-project.mjs",
     "generate:lab": "bun scripts/generate-lab.mjs",
     "generate:brand": "python3 scripts/generate_brand_assets.py",
