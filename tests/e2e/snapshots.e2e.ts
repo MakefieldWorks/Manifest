@@ -173,12 +173,6 @@ test('creates, compares, and reverts snapshots from the renderer surface', async
   await expect(appPage.getByTestId('snapshot-timeline-event').filter({ hasText: 'Recovered current project from a recovery point' })).toBeVisible()
 })
 
-// Export and restore each run about a dozen git subprocesses, which can take
-// longer than the default expect timeout on a slow Windows runner. Match the
-// 60s limit archiveGit puts on each git call, so a genuine hang still fails
-// with git's own error instead of a stalled "Verifying" status.
-const ARCHIVE_TIMEOUT = 60_000
-
 test('exports and reviews a portable archive before restoring a separate project folder', async ({ appPage, electronApp, workspaceDir }) => {
   await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Portable Lab')
   await openSnapshotsPanel(appPage)
@@ -191,7 +185,7 @@ test('exports and reviews a portable archive before restoring a separate project
   await appPage.getByTestId('open-archives-btn').click()
   const modal = appPage.getByTestId('project-archive-dialog')
   await modal.getByTestId('archive-export').click()
-  await expect(modal.getByRole('status')).toContainText('Verified archive saved', { timeout: ARCHIVE_TIMEOUT })
+  await expect(modal.getByRole('status')).toContainText('Verified archive saved')
   await setDialogPath(electronApp, archive)
   await modal.getByTestId('archive-review').click()
   await expect(modal.getByTestId('archive-preview')).toContainText('Portable Lab')
@@ -202,7 +196,7 @@ test('exports and reviews a portable archive before restoring a separate project
   await expect(modal.getByTestId('archive-preview')).toBeVisible()
   await setDialogPath(electronApp, workspaceDir)
   await modal.getByTestId('archive-restore').click()
-  await expect(modal.getByRole('status')).toContainText('Verified project restored', { timeout: ARCHIVE_TIMEOUT })
+  await expect(modal.getByRole('status')).toContainText('Verified project restored')
   const restored = readdirSync(workspaceDir).filter(name => name.startsWith('Manifest-restored-'))
   expect(restored).toHaveLength(1)
   const document = JSON.parse(readFileSync(join(workspaceDir, restored[0], 'Manifest.manifestproject'), 'utf8'))
