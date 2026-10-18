@@ -56,9 +56,9 @@ You will need:
 
 - [Bun](https://bun.sh/)
 - Git available on your system `PATH`
-- macOS 12 or newer, Windows, or Linux for Electron development
+- macOS 13 or newer, Windows, or Linux for Electron development
 
-`better-sqlite3` is a native dependency, so rebuild steps matter. The provided scripts already handle that.
+`better-sqlite3` is a native dependency, but it ships prebuilt Node-API binaries, so no rebuild step is needed. `bun install` also downloads the Electron binary for your platform.
 On Linux, Electron uses Wayland by default; use `--ozone-platform=x11` on X11-only systems.
 
 ## Quick Start

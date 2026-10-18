@@ -6,7 +6,7 @@
 
 ## Test infrastructure follow-ups
 
-- After upgrading Electron from 39.8.10, retest the inventory property-key datalist in hidden macOS E2E runs and remove the popup suppression in `tests/e2e/fixtures.ts` if the native SIGSEGV is fixed. The default suite checks suggestion options and filtering, but does not open the native popup; check that interaction in a visible run.
+- Electron is now 44.9.0 (from 39.8.10). Retest the inventory property-key datalist in hidden macOS E2E runs and remove the popup suppression in `tests/e2e/fixtures.ts` if the native SIGSEGV is fixed. The default suite checks suggestion options and filtering, but does not open the native popup; check that interaction in a visible run.
 
 ## Completed
 
