@@ -1,11 +1,12 @@
 import { createHash } from 'crypto'
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import type { Project, ProjectArchivePreview } from '../shared/types'
 import { migrateSnapshotHistory } from '../shared/snapshot-history-migration'
 import { PROJECT_DOCUMENT_FILE } from './project-launcher'
-import { GitService, archiveTrace } from './git-service'
+import { GitService } from './git-service'
 import { writeHistoryFile } from './history-backup'
 
 const MAX_BYTES = 128 * 1024 * 1024
@@ -29,6 +30,13 @@ function readBounded(path: string, max = MAX_BYTES): Buffer {
   const bytes = readFileSync(path)
   if (bytes.length > max) throw new Error('Archive input grew beyond its size limit')
   return bytes
+}
+
+// Git marks its object files read-only. On Windows, Electron 44's Node 24
+// fs.rmSync fails on them with EPERM (Node 22's did not), which left archive
+// export stuck after a successful write. fs.promises.rm still removes them.
+async function removeGitFolder(path: string): Promise<void> {
+  await rm(path, { recursive: true, force: true })
 }
 
 export class ProjectArchive {
@@ -68,7 +76,6 @@ export class ProjectArchive {
   }
 
   async export(projectPath: string, currentDocument: string, destination: string): Promise<void> {
-    archiveTrace('export: begin')
     const files = this.sourceFiles(projectPath)
     const sourceToken = this.fingerprint(files)
     const refs = await this.git.archiveRefs(projectPath)
@@ -79,7 +86,6 @@ export class ProjectArchive {
       if (refs !== await this.git.archiveRefs(projectPath) || sourceToken !== this.fingerprint(this.sourceFiles(projectPath))) {
         throw new Error('Project history changed while archiving. Try exporting again.')
       }
-      archiveTrace('export: bundle created and source unchanged')
       files.set(PROJECT_DOCUMENT_FILE, Buffer.from(currentDocument))
       files.set('snapshots.bundle', readBounded(bundle))
       this.checkSize(files)
@@ -91,20 +97,13 @@ export class ProjectArchive {
       writeFileSync(candidatePath, output, { flag: 'wx' })
       // Verify the encoded container and an isolated reconstruction before
       // publishing, using exactly the same decoder as an imported archive.
-      archiveTrace('export: candidate written')
       const decoded = this.decode(candidatePath)
       const staged = join(scratch, 'verify')
       mkdirSync(staged)
       await this.materialize(decoded.files, staged)
-      archiveTrace('export: materialized')
       if (refs !== await this.git.archiveRefs(staged)) throw new Error('Reconstructed Git references differ from the source')
       writeHistoryFile(destination, output)
-      archiveTrace('export: published')
-    } finally {
-      archiveTrace('export: removing scratch')
-      rmSync(scratch, { recursive: true, force: true })
-      archiveTrace('export: scratch removed')
-    }
+    } finally { await removeGitFolder(scratch) }
   }
 
   private decode(path: string): { archive: Archive; files: Map<string, Buffer>; token: string } {
@@ -173,7 +172,7 @@ export class ProjectArchive {
       const result = await this.materialize(files, scratch)
       return { token, projectName: result.project.name, createdAt: archive.createdAt, snapshotCount: result.snapshotCount,
         recoveryFileCount: [...files.keys()].filter(path => path.startsWith('.manifest/recovery/')).length, fileCount: files.size }
-    } finally { rmSync(scratch, { recursive: true, force: true }) }
+    } finally { await removeGitFolder(scratch) }
   }
 
   async restore(path: string, token: string, parent: string): Promise<string> {
@@ -186,7 +185,7 @@ export class ProjectArchive {
       await this.materialize(files, destination)
       return destination
     } catch (error) {
-      rmSync(destination, { recursive: true, force: true })
+      await removeGitFolder(destination)
       throw error
     }
   }

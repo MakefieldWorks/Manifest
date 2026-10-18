@@ -3,7 +3,6 @@
 // Runs operations through a serial queue to prevent .git/index.lock contention.
 
 import { execFile } from 'child_process'
-import { appendFileSync } from 'fs'
 import { createHash } from 'crypto'
 import { promisify } from 'util'
 import type { GitStatus, Snapshot } from '../shared/types'
@@ -289,26 +288,7 @@ async function gitPathExists(projectDir: string, ref: string, path: string): Pro
   return stdout.length > 0
 }
 
-// TEMPORARY Windows diagnostics for the archive export hang (PR #102).
-export function archiveTrace(message: string): void {
-  const file = process.env['MANIFEST_ARCHIVE_TRACE_FILE']
-  if (file) appendFileSync(file, `${new Date().toISOString()} [${process.pid}] ${message}\n`)
-}
-
 async function archiveGit(cwd: string, args: string[]): Promise<string> {
-  const started = Date.now()
-  archiveTrace(`start git ${args.join(' ')} (cwd ${cwd})`)
-  try {
-    const stdout = await archiveGitInner(cwd, args)
-    archiveTrace(`done  git ${args[0]} ${args[1] ?? ''} in ${Date.now() - started}ms`)
-    return stdout
-  } catch (error) {
-    archiveTrace(`fail  git ${args[0]} ${args[1] ?? ''} in ${Date.now() - started}ms: ${String(error)}`)
-    throw error
-  }
-}
-
-async function archiveGitInner(cwd: string, args: string[]): Promise<string> {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')))
   env.GIT_CONFIG_NOSYSTEM = '1'
   env.GIT_CONFIG_GLOBAL = process.platform === 'win32' ? 'NUL' : '/dev/null'
