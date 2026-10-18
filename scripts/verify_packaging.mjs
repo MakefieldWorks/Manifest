@@ -92,7 +92,10 @@ function verifyMacBundle() {
   const iconFileName = iconBaseName.endsWith('.icns') ? iconBaseName : `${iconBaseName}.icns`
   ensureFile(join(appBundle, 'Contents', 'Resources', iconFileName))
 
-  const asarPath = join(appBundle, 'Contents', 'Resources', 'app.asar')
+  verifyAsarAssets(join(appBundle, 'Contents', 'Resources', 'app.asar'))
+}
+
+function verifyAsarAssets(asarPath) {
   ensureFile(asarPath)
 
   const asarEntries = new Set(listPackage(asarPath))
@@ -112,10 +115,13 @@ function verifyWindowsBundle() {
   ensureFile(join(unpackedDir, 'Manifest.exe'))
 }
 
+// buildHostPackage passes --dir, so Linux produces linux-unpacked rather than
+// the AppImage target; verify the unpacked executable and its bundled assets.
 function verifyLinuxBundle() {
-  const appImage = readdirSync(DIST_DIR).find((entry) => entry.endsWith('.AppImage'))
-  assert(appImage, `Could not find Linux AppImage output under ${DIST_DIR}`)
-  ensureFile(join(DIST_DIR, appImage))
+  const unpackedDir = join(DIST_DIR, 'linux-unpacked')
+  assert(existsSync(unpackedDir), `Could not find Linux unpacked output at ${unpackedDir}`)
+  ensureFile(join(unpackedDir, 'manifest'))
+  verifyAsarAssets(join(unpackedDir, 'resources', 'app.asar'))
 }
 
 function main() {

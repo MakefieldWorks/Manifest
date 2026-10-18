@@ -38,6 +38,10 @@ unsnapshotted work. The supplied project is left unchanged. Omit `--packaged`
 to test the development Electron build instead. The full `test:e2e` suite also
 uses that development build.
 
+The default Linux CI job runs `package:verify` and the packaged dogfood test
+on every PR. On Linux the packaged executable is `dist/linux-unpacked/manifest`;
+run the test under `xvfb-run --auto-servernum` when no display is available.
+
 Add the `ci:full` label to a PR, or dispatch `Pilot platform checks` manually,
 to run these checks on fresh macOS and Windows runners. The workflow generates
 the fixture without `--force` because each runner starts clean; use `--force`
