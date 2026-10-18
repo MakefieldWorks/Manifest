@@ -32,16 +32,17 @@ jobs:
           node --version
           $env:ELECTRON_RUN_AS_NODE = '1'
           & .\node_modules\electron\dist\electron.exe -p "process.versions.electron + ' node ' + process.versions.node"
-      - name: Archive unit tests under Node 22
-        timeout-minutes: 5
-        continue-on-error: true
-        run: node ./node_modules/vitest/vitest.mjs run tests/unit/main/project-archive.test.ts
-      - name: Archive unit tests under Electron's Node
-        timeout-minutes: 5
-        continue-on-error: true
-        env:
-          ELECTRON_RUN_AS_NODE: "1"
-        run: '& .\node_modules\electron\dist\electron.exe ./node_modules/vitest/vitest.mjs run tests/unit/main/project-archive.test.ts'
+      - name: rmSync probe
+        shell: pwsh
+        run: |
+          function Probe($exe, $mode, $asNode) {
+            $env:ELECTRON_RUN_AS_NODE = $asNode
+            $p = Start-Process -FilePath $exe -ArgumentList "scripts/debug/rmsync-git-repo.mjs", $mode -NoNewWindow -PassThru
+            if (-not $p.WaitForExit(30000)) { "HUNG: $exe $mode"; Stop-Process -Id $p.Id -Force } else { "exit $($p.ExitCode): $exe $mode" }
+          }
+          Probe "node" "sync" ""
+          Probe ".\node_modules\electron\dist\electron.exe" "sync" "1"
+          Probe ".\node_modules\electron\dist\electron.exe" "async" "1"
       - name: Reset trace
         run: Remove-Item -ErrorAction SilentlyContinue $env:MANIFEST_ARCHIVE_TRACE_FILE
       - name: Archive E2E test in Electron

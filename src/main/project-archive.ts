@@ -100,7 +100,11 @@ export class ProjectArchive {
       if (refs !== await this.git.archiveRefs(staged)) throw new Error('Reconstructed Git references differ from the source')
       writeHistoryFile(destination, output)
       archiveTrace('export: published')
-    } finally { rmSync(scratch, { recursive: true, force: true }) }
+    } finally {
+      archiveTrace('export: removing scratch')
+      rmSync(scratch, { recursive: true, force: true })
+      archiveTrace('export: scratch removed')
+    }
   }
 
   private decode(path: string): { archive: Archive; files: Map<string, Buffer>; token: string } {
