@@ -54,7 +54,10 @@ function packagedExecutablePath() {
   if (process.platform === 'win32') {
     return join(ROOT_DIR, 'dist', 'win-unpacked', 'Manifest.exe')
   }
-  console.error(`Packaged dogfood launch is supported on macOS and Windows, not ${process.platform}.`)
+  if (process.platform === 'linux') {
+    return join(ROOT_DIR, 'dist', 'linux-unpacked', 'manifest')
+  }
+  console.error(`Packaged dogfood launch is supported on macOS, Windows, and Linux, not ${process.platform}.`)
   usage()
   process.exit(1)
 }

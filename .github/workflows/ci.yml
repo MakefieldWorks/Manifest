@@ -53,6 +53,18 @@ jobs:
           MANIFEST_E2E_VISIBLE: "1"
         run: xvfb-run --auto-servernum bun run test:e2e
 
+      # Packaged-app coverage on every PR: build the unpacked Linux package,
+      # then run the pilot durability pass (edit, relaunch, snapshot, revert)
+      # through its executable rather than the development build.
+      - name: Verify Linux package
+        run: bun run package:verify
+      - name: Generate dogfood fixture
+        run: bun run generate:project -- --output ./tmp/pilot-dogfood --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424
+      - name: Packaged dogfood
+        env:
+          MANIFEST_E2E_VISIBLE: "1"
+        run: xvfb-run --auto-servernum bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged
+
       - name: Upload Playwright diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
