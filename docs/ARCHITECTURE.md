@@ -465,8 +465,10 @@ build is wasted work, and the node-gyp version our toolchain hoists imports
 `distutils`, so it fails outright on Python 3.12+ (the default on current
 macOS and Windows runners). `package.json` therefore sets
 `"trustedDependencies": ["electron"]`. A non-empty list replaces Bun's default,
-so only Electron's postinstall (which downloads its binary) runs. An empty list
-does not work: Bun treats it as unset.
+so no dependency install scripts run. `electron` is only a placeholder that keeps
+the list non-empty; its package has no install script. The Electron binary is
+downloaded by the root `postinstall` (`install-electron`), which Bun always runs,
+so keep that script. An empty list does not work: Bun treats it as unset.
 
 ### Search index lifecycle
 
