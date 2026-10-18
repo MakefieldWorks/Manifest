@@ -1,0 +1,58 @@
+name: CI
+
+# Default checks for every push to main and every pull request. Ubuntu runners
+# bill at 1x, so this runs unconditionally. macOS/Windows coverage stays opt-in
+# through the `ci:full` label in pilot-platform.yml (see CLAUDE.md CI policy).
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Typecheck, unit, and E2E (ubuntu)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install locked dependencies
+        run: bun ci
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Unit tests
+        run: bun run test
+
+      # Ubuntu 23.10+ blocks unprivileged user namespaces through AppArmor,
+      # which Chromium's sandbox needs. Re-allow them on this disposable runner
+      # instead of launching Electron with --no-sandbox.
+      - name: Allow Chromium sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Electron E2E tests
+        run: xvfb-run --auto-servernum bun run test:e2e
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-linux
+          path: .playwright-artifacts/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
