@@ -30,8 +30,8 @@ jobs:
         run: |
           git --version
           node --version
-          node_modules\.bin\electron.cmd --version
-          $env:ELECTRON_RUN_AS_NODE = '1'; node_modules\electron\dist\electron.exe -p "process.versions.node"
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          & .\node_modules\electron\dist\electron.exe -p "process.versions.electron + ' node ' + process.versions.node"
       - name: Archive unit tests under Node 22
         timeout-minutes: 5
         continue-on-error: true
@@ -41,7 +41,7 @@ jobs:
         continue-on-error: true
         env:
           ELECTRON_RUN_AS_NODE: "1"
-        run: node_modules\electron\dist\electron.exe ./node_modules/vitest/vitest.mjs run tests/unit/main/project-archive.test.ts
+        run: '& .\node_modules\electron\dist\electron.exe ./node_modules/vitest/vitest.mjs run tests/unit/main/project-archive.test.ts'
       - name: Reset trace
         run: Remove-Item -ErrorAction SilentlyContinue $env:MANIFEST_ARCHIVE_TRACE_FILE
       - name: Archive E2E test in Electron
