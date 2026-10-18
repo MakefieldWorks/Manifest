@@ -5,7 +5,7 @@ import { dirname, join } from 'path'
 import type { Project, ProjectArchivePreview } from '../shared/types'
 import { migrateSnapshotHistory } from '../shared/snapshot-history-migration'
 import { PROJECT_DOCUMENT_FILE } from './project-launcher'
-import { GitService } from './git-service'
+import { GitService, archiveTrace } from './git-service'
 import { writeHistoryFile } from './history-backup'
 
 const MAX_BYTES = 128 * 1024 * 1024
@@ -68,6 +68,7 @@ export class ProjectArchive {
   }
 
   async export(projectPath: string, currentDocument: string, destination: string): Promise<void> {
+    archiveTrace('export: begin')
     const files = this.sourceFiles(projectPath)
     const sourceToken = this.fingerprint(files)
     const refs = await this.git.archiveRefs(projectPath)
@@ -78,6 +79,7 @@ export class ProjectArchive {
       if (refs !== await this.git.archiveRefs(projectPath) || sourceToken !== this.fingerprint(this.sourceFiles(projectPath))) {
         throw new Error('Project history changed while archiving. Try exporting again.')
       }
+      archiveTrace('export: bundle created and source unchanged')
       files.set(PROJECT_DOCUMENT_FILE, Buffer.from(currentDocument))
       files.set('snapshots.bundle', readBounded(bundle))
       this.checkSize(files)
@@ -89,12 +91,15 @@ export class ProjectArchive {
       writeFileSync(candidatePath, output, { flag: 'wx' })
       // Verify the encoded container and an isolated reconstruction before
       // publishing, using exactly the same decoder as an imported archive.
+      archiveTrace('export: candidate written')
       const decoded = this.decode(candidatePath)
       const staged = join(scratch, 'verify')
       mkdirSync(staged)
       await this.materialize(decoded.files, staged)
+      archiveTrace('export: materialized')
       if (refs !== await this.git.archiveRefs(staged)) throw new Error('Reconstructed Git references differ from the source')
       writeHistoryFile(destination, output)
+      archiveTrace('export: published')
     } finally { rmSync(scratch, { recursive: true, force: true }) }
   }
 
