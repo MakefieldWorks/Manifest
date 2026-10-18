@@ -1,10 +1,11 @@
 name: Windows archive debug
 
-# TEMPORARY (PR #102): manual-only diagnostics for the Windows archive export
-# hang on Electron 44. Remove before merging.
+# TEMPORARY (PR #102): diagnostics for the Windows archive export hang on
+# Electron 44. Runs only on pushes to this one branch. Remove before merging.
 
 "on":
-  workflow_dispatch:
+  push:
+    branches: [claude/project-thread-7mkr1j]
 
 permissions:
   contents: read
