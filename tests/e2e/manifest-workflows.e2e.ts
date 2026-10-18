@@ -119,6 +119,18 @@ async function openSettingsWindow(electronApp: ElectronApplication): Promise<Pag
   return settingsWindow
 }
 
+async function closeSettingsWindow(settingsPage: Page): Promise<void> {
+  const closed = settingsPage.waitForEvent('close')
+  // Done closes the window from its click handler, so the window can be gone
+  // before Playwright finishes the click and the click then rejects with
+  // "Target page, context or browser has been closed". That is the outcome we
+  // want, so only rethrow when the window is still open.
+  await settingsPage.getByTestId('settings-done').click().catch((error: unknown) => {
+    if (!settingsPage.isClosed()) throw error
+  })
+  await closed
+}
+
 async function writeFixtureProject(targetDir: string, fixtureName: string): Promise<void> {
   mkdirSync(targetDir, { recursive: true })
   const fixturePath = join(process.cwd(), 'tests', 'fixtures', fixtureName)
@@ -313,9 +325,7 @@ test('opens a dedicated settings window, syncs selected schemes, and saves prefe
     launchBehavior: 'project-hub',
     appearance: { mode: 'system' },
   }))
-  const closed = settingsPage.waitForEvent('close')
-  await settingsPage.getByTestId('settings-done').click()
-  await closed
+  await closeSettingsWindow(settingsPage)
 })
 
 test('reopens the last project when that launch behavior is selected', async ({ workspaceDir }) => {
@@ -334,9 +344,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
     await settingsPage.getByTestId('dark-theme-preference').selectOption('manifest-graphite-dark')
     await settingsPage.getByTestId('theme-preference').selectOption('dark')
     await expect(settingsPage.getByRole('status')).toContainText('Appearance updated')
-    const settingsClosed = settingsPage.waitForEvent('close')
-    await settingsPage.getByTestId('settings-done').click()
-    await settingsClosed
+    await closeSettingsWindow(settingsPage)
   } finally {
     await firstApp.close()
   }
