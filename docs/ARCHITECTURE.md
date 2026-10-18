@@ -459,6 +459,15 @@ Version 13 and later ship prebuilt Node-API binaries. Node-API is ABI-stable, so
 the same binary loads in Node (unit tests) and in Electron without a rebuild
 step.
 
+Bun still compiles any trusted dependency that has a `binding.gyp` and no
+install script, and better-sqlite3 is on Bun's default trusted list. That
+build is wasted work, and the node-gyp version our toolchain hoists imports
+`distutils`, so it fails outright on Python 3.12+ (the default on current
+macOS and Windows runners). `package.json` therefore sets
+`"trustedDependencies": ["electron"]`. A non-empty list replaces Bun's default,
+so only Electron's postinstall (which downloads its binary) runs. An empty list
+does not work: Bun treats it as unset.
+
 ### Search index lifecycle
 
 - **Full rebuild:** On project open, or if `search.db` is missing/corrupt.
