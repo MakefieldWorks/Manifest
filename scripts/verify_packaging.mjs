@@ -59,7 +59,6 @@ function findBundle(startDir, suffix) {
 }
 
 function buildHostPackage() {
-  run('bun', ['run', 'rebuild:native:electron'])
   run('bun', ['run', 'build'])
 
   const args = ['--publish', 'never', '--dir']

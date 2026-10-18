@@ -455,8 +455,9 @@ This keeps search fast without making the index a source of truth.
 ### Implementation: better-sqlite3
 
 Use `better-sqlite3` for synchronous SQLite access with FTS5 in the main process.
-Requires `@electron/rebuild` to compile for Electron's Node version. Add a
-postinstall script: `electron-rebuild -f -w better-sqlite3`.
+Version 13 and later ship prebuilt Node-API binaries. Node-API is ABI-stable, so
+the same binary loads in Node (unit tests) and in Electron without a rebuild
+step.
 
 ### Search index lifecycle
 

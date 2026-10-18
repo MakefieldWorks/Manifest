@@ -962,7 +962,7 @@ async function copyDiagnosticsToClipboard(): Promise<void> {
     logsPath: logDir,
     userDataPath: userData,
   })
-  clipboard.writeText(diagnostics)
+  await clipboard.writeText(diagnostics)
 
   const owner = mainWindow ?? BrowserWindow.getFocusedWindow()
   const options = {

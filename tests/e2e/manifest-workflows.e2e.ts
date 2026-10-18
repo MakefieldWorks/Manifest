@@ -344,8 +344,11 @@ test('reopens the last project when that launch behavior is selected', async ({ 
   const reopenedApp = await launchAppWithArgs([], userDataDir)
   try {
     const reopenedPage = await reopenedApp.firstWindow()
-    await expect.poll(() => reopenedPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
+    // firstWindow() can resolve before the renderer's initial navigation
+    // commits; a raw evaluate() then fails when that navigation replaces the
+    // page. Locator assertions retry across it, so wait for the app first.
     await expect(reopenedPage.getByTestId('project-view')).toBeVisible()
+    await expect.poll(() => reopenedPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
     await expect(treeRow(reopenedPage, 'Reopen Lab')).toBeVisible()
     const reopenedProject = await currentProject(reopenedPage)
     expect((reopenedProject as typeof reopenedProject & { path?: string }).path).toBe(projectDir)

@@ -58,8 +58,8 @@ export const test = base.extend<ManifestFixtures>({
 
 export { expect }
 
-// Electron 39.8.10 on macOS exits with SIGSEGV when a hidden window opens the
-// native datalist popup. Recheck after upgrading Electron. These tests exercise
+// Electron 39.8.10 on macOS exited with SIGSEGV when a hidden window opened the
+// native datalist popup. Not yet rechecked on Electron 44. These tests exercise
 // filtering, so suppress only the popup and keep normal input events.
 export async function fillPropertyKey(page: Page, value: string): Promise<void> {
   const input = page.getByTestId('inventory-filter-property-key')
