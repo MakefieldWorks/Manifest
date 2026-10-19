@@ -18,6 +18,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
+    # Keep these runners on hidden E2E windows (playwright.config.ts defaults
+    # Windows to visible for local runs). Hidden mode is what this job has
+    # always passed with, and the native focus test, which only runs with
+    # visible windows, has not been validated on a hosted Windows desktop.
+    env:
+      MANIFEST_E2E_BACKGROUND: "1"
     strategy:
       fail-fast: false
       matrix:

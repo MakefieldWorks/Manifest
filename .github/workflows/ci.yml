@@ -44,10 +44,10 @@ jobs:
       # instead of launching Electron with --no-sandbox.
       - name: Allow Chromium sandbox
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      # Hidden windows (the local default, so E2E runs do not take over a
-      # developer's desktop) are render-throttled on Linux, which stalls
-      # Playwright's actionability checks until tests time out. xvfb's virtual
-      # display is private to this job, so show the windows here.
+      # Hidden windows are render-throttled on Linux, which stalls Playwright's
+      # actionability checks until tests time out. playwright.config.ts already
+      # defaults Linux to visible windows; keep the explicit flag so this job
+      # stays visible under xvfb's private display regardless of that default.
       - name: Electron E2E tests
         env:
           MANIFEST_E2E_VISIBLE: "1"
