@@ -493,7 +493,17 @@ export function planNetbox(
 
   // ── Devices (under their rack, else location, else site) ───────────────────
   for (const device of [...devices].sort((a, b) => a.pk - b.pk)) {
-    const name = typeof device.fields.name === 'string' ? device.fields.name : ''
+    const dt = typeof device.fields.device_type === 'number' ? deviceTypes.get(device.fields.device_type) : undefined
+    const manufacturer = dt ? nameOf(manufacturers, dt.fields.manufacturer) : null
+    const model = typeof dt?.fields.model === 'string' ? dt.fields.model : null
+    // NetBox allows unnamed devices (patch panels, unlabeled switches) and
+    // displays them as "<manufacturer> <model> (<pk>)". Use the same label so
+    // they are imported instead of skipped for an empty name.
+    const rawName = typeof device.fields.name === 'string' ? device.fields.name.trim() : ''
+    const name = rawName || `${[manufacturer, model].filter(Boolean).join(' ') || 'Device'} (${device.pk})`
+    if (!rawName) {
+      warnings.push({ row: device.pk, reason: `unnamed device imported as "${name}"` })
+    }
     const rack = device.fields.rack
     const loc = device.fields.location
     // All three parent options (rack/location/site) are localIds created above,
@@ -504,7 +514,6 @@ export function planNetbox(
     else if (typeof loc === 'number') parentKey = `loc:${loc}`
     else parentKey = `site:${device.fields.site}`
 
-    const dt = typeof device.fields.device_type === 'number' ? deviceTypes.get(device.fields.device_type) : undefined
     // Devices are leaves — route through addNode with no localId.
     const added = addNode({
       parentKey,
@@ -513,9 +522,10 @@ export function planNetbox(
       templateId: NETBOX_TEMPLATE_IDS.device,
       props: buildProps(effective[NETBOX_TEMPLATE_IDS.device], {
         status: device.fields.status,
-        manufacturer: dt ? nameOf(manufacturers, dt.fields.manufacturer) : null,
-        model: dt?.fields.model ?? null,
-        role: nameOf(deviceRoles, device.fields.role),
+        manufacturer,
+        model,
+        // NetBox 3.5 and earlier name this foreign key `device_role`.
+        role: nameOf(deviceRoles, device.fields.role ?? device.fields.device_role),
         platform: nameOf(platforms, device.fields.platform),
         serial: device.fields.serial,
         asset_tag: device.fields.asset_tag,

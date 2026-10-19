@@ -306,6 +306,35 @@ describe('planNetbox', () => {
     expect(skipped.some((s) => /parent was not imported/.test(s.reason))).toBe(true)
   })
 
+  it('imports an unnamed device under NetBox\'s "<manufacturer> <model> (<pk>)" label', () => {
+    const dump: NetboxObject[] = [
+      { model: 'dcim.manufacturer', pk: 1, fields: { name: 'Panduit' } },
+      { model: 'dcim.devicetype', pk: 2, fields: { manufacturer: 1, model: '48-Port Patch Panel' } },
+      { model: 'dcim.site', pk: 3, fields: { name: 'S', status: 'active' } },
+      { model: 'dcim.rack', pk: 4, fields: { name: 'R', site: 3, status: 'active', width: 19, u_height: '42.0' } },
+      { model: 'dcim.device', pk: 5, fields: { name: null, site: 3, rack: 4, position: '11.0', status: 'active', device_type: 2 } },
+      { model: 'dcim.device', pk: 6, fields: { name: '', site: 3, rack: 4, position: '12.0', status: 'active', device_type: 2 } },
+      { model: 'dcim.device', pk: 7, fields: { name: null, site: 3, rack: null, status: 'active', device_type: null } },
+    ]
+    const { create, skipped, warnings, counts } = planNetbox(dump, 'base-1', {}, [baseRoot])
+    expect(skipped).toEqual([])
+    expect(counts.devices).toBe(3)
+    expect(findNode(create, 'Panduit 48-Port Patch Panel (5)')).toMatchObject({ parentId: 'rack:4' })
+    expect(findNode(create, 'Panduit 48-Port Patch Panel (6)')).toBeDefined()
+    expect(findNode(create, 'Device (7)')).toBeDefined()
+    expect(warnings.filter((w) => /unnamed device/.test(w.reason))).toHaveLength(3)
+  })
+
+  it('reads the device role from NetBox 3.5-and-earlier `device_role`', () => {
+    const dump: NetboxObject[] = [
+      { model: 'dcim.devicerole', pk: 1, fields: { name: 'Router' } },
+      { model: 'dcim.site', pk: 2, fields: { name: 'S', status: 'active' } },
+      { model: 'dcim.device', pk: 3, fields: { name: 'rtr', site: 2, status: 'active', device_role: 1 } },
+    ]
+    const { create } = planNetbox(dump, 'base-1', {}, [baseRoot])
+    expect(findNode(create, 'rtr')?.properties.role).toBe('Router')
+  })
+
   it('skips a rack/device whose site FK does not resolve', () => {
     const dump: NetboxObject[] = [
       { model: 'dcim.rack', pk: 2, fields: { name: 'R', site: 999, status: 'active', width: 19, u_height: '42.0' } },
