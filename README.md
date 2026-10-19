@@ -80,9 +80,12 @@ bun run generate:brand  # regenerate app/web icons from resources/manifest.svg
 bun run generate:lab    # generate a realistic sample lab project (typed templates + snapshot timeline)
 ```
 
-Electron E2E tests run with hidden, unfocused windows by default so they do not
-take over the desktop. Run `MANIFEST_E2E_VISIBLE=1 bun run test:e2e` to watch
-them or exercise the native focus/blur test.
+On macOS, Electron E2E tests run with hidden, unfocused windows by default so
+they do not take over the desktop. Run `MANIFEST_E2E_VISIBLE=1 bun run test:e2e`
+to watch them or exercise the native focus/blur test. On Windows and Linux the
+tests show their windows by default, because hidden windows render too slowly
+for the UI tests to finish in time; on Linux without a display, wrap the run in
+`xvfb-run --auto-servernum`.
 
 To create a sample project to explore, run `bun run generate:lab -- --output ./tmp/lab --force`,
 then open `./tmp/lab` from the app's welcome screen. It produces a ~7k-node lab
