@@ -196,6 +196,8 @@ too slowly on Windows for the UI suite, so Windows and Linux now default to
 visible E2E windows. The native focus/blur test, which only runs visibly,
 passed here.
 
-The manual native-shell checks in [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md) (frame,
-taskbar icon, Open Recent, close/quit save behavior, compare readability, and
-the Explorer document icon) remain open on Windows.
+Robert then opened `dist\win-unpacked\Manifest.exe` and reported the native
+shell working properly: frame, taskbar icon, Open Recent, close/quit save
+behavior, and snapshot compare. The Explorer `.manifestproject` document icon
+needs an installer-registered association and is not covered by the unpacked
+build; check it with the first signed installer.
