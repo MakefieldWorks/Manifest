@@ -325,6 +325,21 @@ describe('planNetbox', () => {
     expect(warnings.filter((w) => /unnamed device/.test(w.reason))).toHaveLength(3)
   })
 
+  it('replaces slashes in a derived device label and warns only for devices actually imported', () => {
+    const dump: NetboxObject[] = [
+      { model: 'dcim.manufacturer', pk: 1, fields: { name: 'Juniper' } },
+      { model: 'dcim.devicetype', pk: 2, fields: { manufacturer: 1, model: 'SRX300/320' } },
+      { model: 'dcim.site', pk: 3, fields: { name: 'S', status: 'active' } },
+      { model: 'dcim.device', pk: 4, fields: { name: null, site: 3, status: 'active', device_type: 2 } },
+      // Parent site does not resolve, so this unnamed device is skipped.
+      { model: 'dcim.device', pk: 5, fields: { name: null, site: 999, status: 'active', device_type: 2 } },
+    ]
+    const { create, skipped, warnings } = planNetbox(dump, 'base-1', {}, [baseRoot])
+    expect(findNode(create, 'Juniper SRX300-320 (4)')).toBeDefined()
+    expect(skipped.map((s) => s.row)).toEqual([5])
+    expect(warnings.filter((w) => /unnamed device/.test(w.reason)).map((w) => w.row)).toEqual([4])
+  })
+
   it('reads the device role from NetBox 3.5-and-earlier `device_role`', () => {
     const dump: NetboxObject[] = [
       { model: 'dcim.devicerole', pk: 1, fields: { name: 'Router' } },

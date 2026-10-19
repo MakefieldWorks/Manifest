@@ -499,11 +499,12 @@ export function planNetbox(
     // NetBox allows unnamed devices (patch panels, unlabeled switches) and
     // displays them as "<manufacturer> <model> (<pk>)". Use the same label so
     // they are imported instead of skipped for an empty name.
-    const rawName = typeof device.fields.name === 'string' ? device.fields.name.trim() : ''
-    const name = rawName || `${[manufacturer, model].filter(Boolean).join(' ') || 'Device'} (${device.pk})`
-    if (!rawName) {
-      warnings.push({ row: device.pk, reason: `unnamed device imported as "${name}"` })
-    }
+    // Slashes are not allowed in node names, so replace them in the derived label.
+    const rawName = typeof device.fields.name === 'string' ? device.fields.name : ''
+    const unnamed = rawName.trim() === ''
+    const name = unnamed
+      ? `${[manufacturer, model].filter(Boolean).join(' ').replace(/[/\\]/g, '-') || 'Device'} (${device.pk})`
+      : rawName
     const rack = device.fields.rack
     const loc = device.fields.location
     // All three parent options (rack/location/site) are localIds created above,
@@ -537,7 +538,10 @@ export function planNetbox(
       issueRow: device.pk,
       issueLabel: `device "${name}"`,
     })
-    if (added) counts.devices++
+    if (added) {
+      counts.devices++
+      if (unnamed) warnings.push({ row: device.pk, reason: `unnamed device imported as "${name}"` })
+    }
   }
 
   return { templates, create, skipped, warnings, counts }
