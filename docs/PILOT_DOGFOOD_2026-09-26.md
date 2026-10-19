@@ -174,3 +174,30 @@ in [PR #100's checks](https://github.com/MakefieldWorks/Manifest/pull/100/checks
 
 Manual native-shell checks, representative real import data, and signed/notarized
 distribution verification remain open.
+
+## Windows local pass — 2026-10-19
+
+On a Windows 11 Pro machine at `main` `7002a2a` (bun 1.3.12, Electron 44.9.0),
+from `C:\code\Manifest`:
+
+| Check | Result |
+| --- | --- |
+| `bun run typecheck` | Passed; no Svelte errors or warnings |
+| `bun run test` | 899 passed |
+| `bun run package:verify` | Passed; `dist\win-unpacked\Manifest.exe` branding verified |
+| `bun run test:dogfood -- --project ./tmp/pilot-dogfood --packaged` | Passed (1.1m) against the 754-node fixture |
+| `bun run test:e2e` (hidden windows) | 74 passed, 15 failed, 2 skipped (27.7m) |
+| `bun run test:e2e` (visible windows, PR #104) | 89 passed, 2 expected skips (3.6m) |
+
+The 15 hidden-window failures were all 30-second test timeouts in snapshot,
+compare, template, batch-edit, and node-history tests; the same tests took
+about 4 seconds each with visible windows. Never-shown Electron windows render
+too slowly on Windows for the UI suite, so Windows and Linux now default to
+visible E2E windows. The native focus/blur test, which only runs visibly,
+passed here.
+
+Robert then opened `dist\win-unpacked\Manifest.exe` and reported the native
+shell working properly: frame, taskbar icon, Open Recent, close/quit save
+behavior, and snapshot compare. The Explorer `.manifestproject` document icon
+needs an installer-registered association and is not covered by the unpacked
+build; check it with the first signed installer.
