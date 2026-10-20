@@ -10,6 +10,7 @@
   } from '../../../shared/types'
   import { isUsableTemplate, templateLabel, templateFields, validatePropertyKey } from '../../../shared/validation'
   import { suggestKey } from '../../../shared/import'
+  import ImportIssueList from './ImportIssueList.svelte'
 
   interface Props {
     baseParent: ManifestNode
@@ -30,9 +31,6 @@
   let mode = $state<'csv' | 'netbox'>('csv')
   let netboxInspect = $state<NetboxInspect | null>(null)
   let netboxPlan = $state<NetboxImportPlan | null>(null)
-
-  // How many skipped issues to list before collapsing to "…and N more".
-  const ISSUE_PREVIEW = 5
 
   // Mapping state.
   let placement = $state<'flat' | 'path'>('flat')
@@ -323,14 +321,13 @@
               <p class="text-xs text-stone-500 mt-0.5">
                 {netboxPlan.sites} sites · {netboxPlan.locations} locations · {netboxPlan.racks} racks · {netboxPlan.devices} devices
               </p>
-              {#if netboxPlan.skipped.length > 0}
-                <ul class="mt-1 space-y-0.5">
-                  {#each netboxPlan.skipped.slice(0, ISSUE_PREVIEW) as s (s.row + (s.column ?? ''))}
-                    <li class="text-xs text-stone-500 truncate">{s.reason}</li>
-                  {/each}
-                  {#if netboxPlan.skippedCount > ISSUE_PREVIEW}<li class="text-xs text-stone-400">…and {netboxPlan.skippedCount - ISSUE_PREVIEW} more</li>{/if}
-                </ul>
-              {/if}
+              <!-- Keyed on the plan so a re-validate starts the lists collapsed. -->
+              {#key netboxPlan}
+                <ImportIssueList title="Skipped" issues={netboxPlan.skipped} total={netboxPlan.skippedCount}
+                  showRow={false} testid="netbox-skipped" />
+                <ImportIssueList title="Warnings" issues={netboxPlan.warnings} total={netboxPlan.warningCount}
+                  showRow={false} testid="netbox-warnings" />
+              {/key}
             </div>
           {/if}
 
@@ -474,14 +471,12 @@
                 · <span class="text-amber-700">{plan.warningCount} warnings</span>
                 {#if plan.createdParents > 0}· <span class="text-sky-700">{plan.createdParents} parents created</span>{/if}
               </p>
-              {#if plan.skipped.length > 0}
-                <ul class="mt-1 space-y-0.5">
-                  {#each plan.skipped.slice(0, 5) as s (s.row + (s.column ?? ''))}
-                    <li class="text-xs text-stone-500 truncate">row {s.row}{s.column ? ` · ${s.column}` : ''} — {s.reason}</li>
-                  {/each}
-                  {#if plan.skipped.length > 5}<li class="text-xs text-stone-400">…and {plan.skippedCount - 5} more</li>{/if}
-                </ul>
-              {/if}
+              {#key plan}
+                <ImportIssueList title="Skipped" issues={plan.skipped} total={plan.skippedCount}
+                  showRow testid="import-skipped" />
+                <ImportIssueList title="Warnings" issues={plan.warnings} total={plan.warningCount}
+                  showRow testid="import-warnings" />
+              {/key}
               {#if plan.suggestedNameColumn}
                 {@const suggested = plan.suggestedNameColumn}
                 <div class="mt-2 flex items-center gap-2 flex-wrap" data-testid="import-name-suggestion">
@@ -495,9 +490,6 @@
                     Use “{suggested}” as the name
                   </button>
                 </div>
-              {/if}
-              {#if plan.capped}
-                <p class="text-xs text-stone-400 mt-1">Counts above are the exact totals; only the first few skipped rows are listed (warnings are counted only).</p>
               {/if}
             </div>
           {/if}

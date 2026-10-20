@@ -79,6 +79,9 @@ test('imports CSV: maps a spaced header, coerces typed cells, skips invalid + du
   const summary = appPage.getByTestId('import-summary')
   await expect(summary).toContainText('1 will import')
   await expect(summary).toContainText('2 skipped')
+  await expect(appPage.getByTestId('import-skipped').locator('li')).toHaveCount(2)
+  await expect(appPage.getByTestId('import-skipped')).toContainText('row 4')
+  await expect(appPage.getByTestId('import-skipped-toggle')).toHaveCount(0)
 
   await appPage.getByTestId('import-apply').click()
   await expect(appPage.getByTestId('import-dialog')).toHaveCount(0)
@@ -385,4 +388,67 @@ test('imports a NetBox dumpdata JSON into a typed Site → Location → Rack →
 
   // The Site landed in the tree as the top of the imported subtree.
   await expect(treeRow(appPage, 'Site Alpha')).toBeVisible()
+})
+
+test('NetBox validation lists its warnings, with a toggle to show them all', async ({
+  appPage,
+  electronApp,
+  workspaceDir,
+}) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'NetBox Warnings')
+
+  // Seven unnamed patch panels: each imports under a derived name and warns.
+  const dump = [
+    { model: 'dcim.manufacturer', pk: 1, fields: { name: 'Panduit', slug: 'panduit' } },
+    { model: 'dcim.devicetype', pk: 2, fields: { manufacturer: 1, model: '48-Port Patch Panel', slug: 'pp48' } },
+    { model: 'dcim.site', pk: 3, fields: { name: 'Site Beta', status: 'active' } },
+    ...Array.from({ length: 7 }, (_, i) => ({
+      model: 'dcim.device', pk: 10 + i,
+      fields: { name: null, site: 3, rack: null, status: 'active', device_type: 2 },
+    })),
+  ]
+  const jsonPath = join(workspaceDir, 'netbox-unnamed.json')
+  writeFileSync(jsonPath, JSON.stringify(dump), 'utf8')
+
+  await clickNativeMenuCommand(electronApp, 'project:import')
+  await setDialogPath(electronApp, jsonPath)
+  await appPage.getByTestId('import-choose-file').click()
+  await appPage.getByTestId('netbox-validate').click()
+  await expect(appPage.getByTestId('netbox-summary')).toContainText('7 warnings')
+
+  const warnings = appPage.getByTestId('netbox-warnings')
+  await expect(warnings.locator('li')).toHaveCount(5)
+  await expect(warnings).toContainText('unnamed device imported as "Panduit 48-Port Patch Panel (10)"')
+  await appPage.getByTestId('netbox-warnings-toggle').click()
+  await expect(warnings.locator('li')).toHaveCount(7)
+  await expect(warnings).toContainText('Panduit 48-Port Patch Panel (16)')
+})
+
+test('more skipped rows than can be sent says so before and after expanding', async ({
+  appPage,
+  electronApp,
+  workspaceDir,
+}) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Cap Lab')
+
+  // 150 rows with the same name: one imports, 149 are skipped, and main sends
+  // only the first 100 of them.
+  const csvPath = join(workspaceDir, 'many.csv')
+  writeFileSync(csvPath, 'name\n' + 'Same\n'.repeat(150), 'utf8')
+  await clickNativeMenuCommand(electronApp, 'project:import')
+  await setDialogPath(electronApp, csvPath)
+  await appPage.getByTestId('import-choose-file').click()
+  await appPage.getByTestId('import-validate').click()
+  await expect(appPage.getByTestId('import-summary')).toContainText('149 skipped')
+
+  const toggle = appPage.getByTestId('import-skipped-toggle')
+  await expect(toggle).toHaveText('Show 100 of 149')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(appPage.getByTestId('import-skipped-capped')).toContainText('Only the first 100 of 149')
+  await toggle.click()
+  await expect(appPage.getByTestId('import-skipped').locator('li')).toHaveCount(100)
+
+  // Re-validating starts the list collapsed again.
+  await appPage.getByTestId('import-validate').click()
+  await expect(appPage.getByTestId('import-skipped').locator('li')).toHaveCount(5)
 })
