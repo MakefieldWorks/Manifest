@@ -1,43 +1,57 @@
-// Project lifecycle: create, open, save, and node CRUD.
-// All filesystem operations go through here.
-// Never call fs directly from main/index.ts.
+// Project lifecycle: create, open, save, edit, and history operations.
+// All filesystem operations go through here (or the ./project modules it
+// calls). Never call fs directly from main/index.ts.
 //
 // State model:
 //   - currentProject holds the in-memory project after open/create.
 //   - All node mutations update currentProject then schedule an autosave.
 //   - Autosave is debounced (AUTOSAVE_DEBOUNCE_MS). On close/quit,
-//     call flushAutosave() to write immediately before clearing state.
+//     call flushAndClose() to write immediately before clearing state.
 //
 // ┌─────────────────────────────────────────────┐
 // │  IPC call (node:create / update / delete…)  │
 // └────────────────────┬────────────────────────┘
 //                      │
 //                      ▼
-//            mutate currentProject
+//        planner in ./project (pure: validate, build next project)
+//                      │
+//                      ▼
+//        commitProjectMutation (guards, search sync, edit history)
 //                      │
 //                      ├──▶ scheduleAutosave() ──▶ debounce ──▶ writeManifest()
 //                      │
 //                      └──▶ return Result<Project>
 //
+// Module boundaries: this class owns every piece of mutable state (the open
+// project, operation flags, document versions, the history journal) and the
+// ORDER of side effects — journal, search index, document write, history
+// metadata. The ./project modules own computation: they take the current
+// project (or injected readers) and return plans, previews, or errors, so
+// they can be read and tested without the state machine around them.
+//   ./project/document            parse/validate/serialize the project file, load warnings
+//   ./project/nodes, templates    node and template CRUD planners
+//   ./project/references          reference-field integrity
+//   ./project/imports             CSV and NetBox import
+//   ./project/inventory           inventory table and CSV export shaping
+//   ./project/compare             snapshot compare and diff reports
+//   ./project/history-metadata    history.json read/write and timeline helpers
+//   ./project/node-history        per-node history walk
+//   ./project/recovery            recovery-file and history-backup review
+//   ./project/interrupted-history journal evidence: proof, review, cleanup scan
+//   ./project/history-backfill    background history.db backfill (owns its own status)
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, renameSync, statSync, lstatSync, realpathSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, lstatSync, realpathSync, unlinkSync, writeFileSync } from 'fs'
 import { join, resolve, relative, isAbsolute, dirname, basename, sep } from 'path'
-import { createHash } from 'crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { EditHistory } from './edit-history'
-import { HistoryBackupStore, writeHistoryFile, type HistoryBackupCandidate } from './history-backup'
+import { HistoryBackupStore, writeHistoryFile } from './history-backup'
 import { ProjectArchive } from './project-archive'
 import { HistoryOperationStore, RetainedEvidenceChangedError, type HistoryOperationIntent,
-  type MetadataHistoryOperationIntent, type PendingHistoryOperationV3, type RetainedHistoryOperationCandidate } from './history-operation'
+  type MetadataHistoryOperationIntent, type PendingHistoryOperationV3 } from './history-operation'
 import type { ProjectArchivePreview, ExternalDocumentPreview, InterruptedHistoryPreview,
   InterruptedHistoryEvidencePreview, InterruptedHistoryEvidenceDeleteResult } from '../shared/types'
 import type { HistoryBackupStatus, HistoryBackupRestoreResult, RecoveryFilePreview } from '../shared/types'
-import { buildNodePathResolver, collectSubtreeIds } from '../shared/subtree'
-import {
-  planBatchPropertyUpdate,
-  type BatchPropertyUpdateRequest,
-  type BatchPropertyUpdateResult,
-} from '../shared/batch-properties'
+import type { BatchPropertyUpdateRequest, BatchPropertyUpdateResult } from '../shared/batch-properties'
 import {
   filterInventoryNodes,
   hasInventoryFilters,
@@ -45,28 +59,13 @@ import {
   inventoryFilterSnippet,
   validateInventoryFilters,
 } from '../shared/inventory-filters'
-import {
-  buildInventoryRows,
-  DEFAULT_INVENTORY_COLUMNS,
-  inventoryColumnLabel,
-  inventoryPropertyKeys,
-  isInventoryColumn,
-  MAX_INVENTORY_COLUMNS,
-  sortInventoryRows,
-  type InventoryColumn,
-  type InventorySortDirection,
-  type InventoryTablePage,
-  type InventoryTableRequest,
-  type InventoryTableRow,
-} from '../shared/inventory-table'
+import type { InventoryTablePage } from '../shared/inventory-table'
 import type {
   Project,
-  ComparisonScope,
   RecoveryPointApplyRequest,
   RecoveryPointApplyResult,
   ManifestNode,
   NodeHistory,
-  NodeHistoryEntry,
   NodeHistoryIndexStatus,
   SearchResult,
   SearchResultPage,
@@ -79,10 +78,6 @@ import type {
   SnapshotTimeline,
   RecoveryPoint,
   NodeTemplate,
-  TemplateField,
-  ManifestWarning,
-  ProjectWarning,
-  ReferenceBlocker,
   ImportMapping,
   ImportInspect,
   ImportPlan,
@@ -99,72 +94,88 @@ import {
   migrateSnapshotHistory,
   type SnapshotHistoryState,
 } from '../shared/snapshot-history-migration'
-import {
-  validateNodeName,
-  validateDuplicateNodeName,
-  validatePropertyKey,
-  validatePropertyValue,
-  validateSnapshotName,
-  validateSnapshotDescription,
-  validateTemplate,
-  validateTemplateId,
-  validateTypedPropertyValue,
-  validateReferenceTarget,
-  coercePropertyValue,
-  templateFields,
-  templateLabel,
-} from '../shared/validation'
-import { diffProjects, diffTemplates } from '../shared/diff-engine'
-import {
-  filterDiffsToComparisonScope,
-  filterTemplateDiffsToComparisonScope,
-  resolveComparisonScope,
-} from '../shared/comparison-scope'
-import { isCurrentRef, CURRENT_PROJECT_LABEL } from '../shared/snapshot-ref'
-import { buildMergedTree } from '../shared/merged-tree'
-import { parseCsv, serializeCsv, CsvParseError } from '../shared/csv'
-import { detectCloudSyncPath } from '../shared/cloud-sync'
-import { planImport } from '../shared/import'
-import { parseNetboxDump, inspectNetbox, planNetbox, NetboxParseError } from '../shared/netbox'
-import {
-  formatDiffReportMarkdown,
-  formatDiffReportCsv,
-  formatDiffReportHtml,
-  isReportFormat,
-  type ReportFormat,
-  type ReportContext,
-} from '../shared/report'
-import type { MergedTree } from '../shared/merged-tree'
+import { validateSnapshotName, validateSnapshotDescription } from '../shared/validation'
+import { isCurrentRef } from '../shared/snapshot-ref'
+import { buildMergedTree, type MergedTree } from '../shared/merged-tree'
+import { isReportFormat } from '../shared/report'
 import { SnapshotDocumentChangedError, type GitService } from './git-service'
 import type { Logger } from './logger'
 import { normalizeSearchPage, SearchIndexService } from './search-index'
 import { HistoryIndexService } from './history-index'
-
-interface LoadedComparison {
-  projectA: Project
-  projectB: Project
-  diffs: DiffEntry[]
-  templateDiffs: ReturnType<typeof diffTemplates>
-  scope: ComparisonScope | null
-}
 import { findProjectDocument, PROJECT_DOCUMENT_FILE } from './project-launcher'
+import {
+  MAX_FILE_SIZE_BYTES,
+  collectLoadWarnings,
+  collectProjectWarnings,
+  hashDocument,
+  parseProjectDocument,
+  readDocumentBytes,
+  readDocumentHash,
+  serializeProjectForPersistence,
+  validateProjectDocument,
+  withLoadWarnings,
+  withProjectWarnings,
+} from './project/document'
+import type { ProjectMutation, SearchUpdate } from './project/mutation'
+import {
+  planNodeBatchPropertyUpdate,
+  planNodeCreate,
+  planNodeDelete,
+  planNodeDuplicate,
+  planNodeMove,
+  planNodeUpdate,
+  type NodeUpdateChanges,
+} from './project/nodes'
+import { planTemplateCreate, planTemplateDelete, planTemplateUpdate } from './project/templates'
+import {
+  inspectCsvImport,
+  inspectNetboxImport,
+  planCsvImport,
+  planNetboxImport,
+  previewCsvImport,
+  previewNetboxImport,
+} from './project/imports'
+import {
+  buildSortedInventory,
+  inventoryCsvContent,
+  inventoryCsvSuggestedName,
+  inventoryPage,
+  normalizeInventoryTableRequest,
+  type PreparedInventoryTable,
+} from './project/inventory'
+import { formatComparisonReport, loadAndDiff, type LoadedComparison } from './project/compare'
+import {
+  HistoryMetadataReadError,
+  createSafetyRecoveryPointIfNeeded,
+  pruneRecoveryPoints,
+  readSnapshotHistoryFile,
+  revertNoteRequired,
+  snapshotHistoryPath,
+  synthesizeSnapshotEvents,
+  withSnapshotMetadata,
+  writeSnapshotHistoryFile,
+} from './project/history-metadata'
+import { walkNodeHistory } from './project/node-history'
+import {
+  HistoryBackupProjectChangedError,
+  scanRecoveryFiles,
+  validateHistoryBackup,
+  type ValidatedHistoryBackup,
+} from './project/recovery'
+import {
+  finishIfProvenComplete,
+  interruptedHistoryCandidate,
+  readHistoryBytesOrNull,
+  scanInterruptedHistoryEvidence,
+  type JournalContext,
+} from './project/interrupted-history'
+import { HistoryBackfill, type HistoryBackfillStatus } from './project/history-backfill'
 
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  // 50 MB
-const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / 1024 / 1024
-const IMPORT_ISSUE_CAP = 100                   // max skipped/warning issues surfaced
+export type { HistoryBackfillStatus } from './project/history-backfill'
+
 const AUTOSAVE_DEBOUNCE_MS = 2500              // 2.5 seconds
-const MAX_RECOVERY_POINTS = 10                 // cap stored auto-saved recovery points
 
-class HistoryMetadataReadError extends Error {}
 class ExternalDocumentChangedError extends Error {}
-class HistoryBackupProjectChangedError extends Error {}
-
-
-export interface HistoryBackfillStatus {
-  inProgress: boolean
-  completed: number
-  total: number
-}
 
 export class ProjectManager {
   private historyBeforeOperation: SnapshotHistoryState | null = null
@@ -178,18 +189,24 @@ export class ProjectManager {
   private conflictLocalCopy: { path: string; hash: string; file: string } | null = null
   private archivePreview: { path: string; token: string } | null = null
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null
-  private backfillStatus: HistoryBackfillStatus = {
-    inProgress: false, completed: 0, total: 0,
-  }
-  private backfillToken = 0  // bumped on close so a stale backfill exits early
-  private backfillPromise: Promise<void> | null = null
+  private readonly backfill: HistoryBackfill
 
   constructor(
     private readonly git: GitService,
     private readonly logger: Logger,
     private readonly search = new SearchIndexService(),
     private readonly history = new HistoryIndexService()
-  ) {}
+  ) {
+    this.backfill = new HistoryBackfill({
+      git,
+      history,
+      logger,
+      currentProjectPath: () => this.currentProject?.path,
+      isBlocked: () => this.hasInterruptedHistory(),
+      readHistory: () => this.readSnapshotHistory(),
+      parse: raw => this.parseManifestJson(raw),
+    })
+  }
 
   // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -237,8 +254,8 @@ export class ProjectManager {
       if (!searchResult.ok) return searchResult as Result<Project>
       this.openHistoryIndex(projectPath)
 
-      const projectWarnings = this.collectProjectWarnings(projectPath)
-      const runtimeProject = this.withProjectWarnings(project, projectWarnings)
+      const projectWarnings = collectProjectWarnings(projectPath)
+      const runtimeProject = withProjectWarnings(project, projectWarnings)
       this.edits.clear()
       this.currentProject = runtimeProject
       this.logger.info('project created', { name, path: projectPath })
@@ -288,7 +305,7 @@ export class ProjectManager {
         return err(ErrorCode.SCHEMA_VERSION, msg)
       }
 
-      const validation = this.validateManifest(data)
+      const validation = validateProjectDocument(data, this.logger)
       if (!validation.ok) return validation as Result<Project>
 
       // Non-fatal, path-qualified integrity/type warnings. We never silently
@@ -296,11 +313,11 @@ export class ProjectManager {
       // Warnings are a one-time, load-event payload: they ride the open
       // response but are NOT stored on currentProject, so they don't propagate
       // through subsequent mutation results.
-      const warnings = this.collectLoadWarnings(data)
-      const projectWarnings = this.collectProjectWarnings(projectPath)
+      const warnings = collectLoadWarnings(data)
+      const projectWarnings = collectProjectWarnings(projectPath)
       const project: Project = { ...data, path: projectPath }
       const canonicalPath = join(projectPath, PROJECT_DOCUMENT_FILE)
-      const openingHash = document.isLegacy ? this.documentHash(canonicalPath) : this.hashDocument(rawBytes)
+      const openingHash = document.isLegacy ? readDocumentHash(canonicalPath) : hashDocument(rawBytes)
       if (warnings.length > 0) {
         this.logger.warn('project loaded with warnings', { path: projectPath, count: warnings.length })
       }
@@ -336,15 +353,14 @@ export class ProjectManager {
       // background work before it becomes the incoming project's problem. Without
       // this, a pending autosave debounce would fire and write the NEW project,
       // and the in-flight backfill's `inProgress` guard would suppress the new
-      // project's own backfill (scheduleHistoryBackfill below early-returns while
+      // project's own backfill (backfill.schedule below early-returns while
       // a prior backfill is still running).
       if (this.currentProject) {
         this.cancelAutosave()
-        this.backfillToken++ // supersede any in-flight backfill so it bails
-        this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
+        this.backfill.cancel() // supersede any in-flight backfill so it bails
       }
 
-      const runtimeProject = this.withProjectWarnings(project, projectWarnings)
+      const runtimeProject = withProjectWarnings(project, projectWarnings)
       this.edits.clear()
       this.currentProject = runtimeProject
       this.documentSaveError = null
@@ -352,8 +368,8 @@ export class ProjectManager {
       if ((data.version === originalVersion && !document.isLegacy) || new HistoryOperationStore(projectPath, project.id).pending()) this.documentVersions.set(canonicalPath, openingHash)
       this.retainCurrentDocumentVersion()
       await this.finishProvenHistoryOperation()
-      this.scheduleHistoryBackfill()
-      return ok(this.withLoadWarnings(runtimeProject, warnings))
+      this.backfill.schedule()
+      return ok(withLoadWarnings(runtimeProject, warnings))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.error('project open failed', { path: projectPath, error: msg })
@@ -386,7 +402,6 @@ export class ProjectManager {
 
   discardCurrentProject(): void {
     this.cancelAutosave()
-    this.backfillToken++  // signal any in-flight backfill to exit early
     this.edits.clear()
     this.currentProject = null
     this.documentSaveError = null
@@ -394,11 +409,11 @@ export class ProjectManager {
     this.conflictLocalCopy = null
     this.search.close()
     this.history.close()
-    this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
+    this.backfill.cancel()  // signal any in-flight backfill to exit early
   }
 
   getHistoryBackfillStatus(): HistoryBackfillStatus {
-    return { ...this.backfillStatus }
+    return this.backfill.getStatus()
   }
 
   getHistoryIndexStatus(): NodeHistoryIndexStatus {
@@ -410,7 +425,7 @@ export class ProjectManager {
         const msg = e instanceof Error ? e.message : String(e)
         if (/history index is not open/i.test(msg)) {
           return {
-            ...this.backfillStatus,
+            ...this.backfill.getStatus(),
             incompleteCount: 0,
             incompleteSnapshotIds: [],
           }
@@ -420,7 +435,7 @@ export class ProjectManager {
     }
 
     return {
-      ...this.backfillStatus,
+      ...this.backfill.getStatus(),
       incompleteCount: incompleteSnapshotIds.length,
       incompleteSnapshotIds,
     }
@@ -430,7 +445,7 @@ export class ProjectManager {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
-    this.scheduleHistoryBackfill()
+    this.backfill.schedule()
     return ok(this.getHistoryIndexStatus())
   }
 
@@ -438,7 +453,7 @@ export class ProjectManager {
   // to deterministically wait for backfill to finish without polling. UI does
   // not need this — it polls getHistoryBackfillStatus for the progress display.
   async waitForHistoryBackfill(): Promise<void> {
-    if (this.backfillPromise) await this.backfillPromise
+    await this.backfill.wait()
   }
 
   editHistoryState() { return this.edits.state() }
@@ -478,7 +493,7 @@ export class ProjectManager {
       if (this.currentProject?.path) this.assertDocumentUnchanged(this.currentProject.path)
       const history = this.readSnapshotHistory()
       this.historyBeforeOperation = history
-      if (this.currentProject?.path && existsSync(this.snapshotHistoryPath(this.currentProject.path))) {
+      if (this.currentProject?.path && existsSync(snapshotHistoryPath(this.currentProject.path))) {
         try {
           mkdirSync(join(this.currentProject.path, '.manifest'), { recursive: true })
           new HistoryBackupStore(this.currentProject.path, this.currentProject.id).save(history)
@@ -512,861 +527,121 @@ export class ProjectManager {
   }
 
   // ─── Node CRUD ──────────────────────────────────────────────────────────────
+  // Validation and next-state construction live in ./project/nodes; these
+  // methods add the guards that depend on manager state and commit.
 
-  // Create a child node under parentId.
-  // New node is appended as the last child (order = sibling count).
   nodeCreate(parentId: string, name: string, templateId?: string | null): Result<Project> {
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-
-    const nameValidation = validateNodeName(name)
-    if (!nameValidation.valid) {
-      return err(ErrorCode.VALIDATION_FAILED, nameValidation.message ?? 'Invalid name')
-    }
-
-    // Parent must exist.
-    const parent = this.currentProject.nodes.find(n => n.id === parentId)
-    if (!parent) {
-      return err(ErrorCode.INVALID_HIERARCHY, `Parent node not found: ${parentId}`)
-    }
-
-    // Sibling name uniqueness (case-insensitive).
-    const siblings = this.currentProject.nodes.filter(n => n.parentId === parentId)
-    if (this.hasSiblingNameConflict(name, parentId, null)) {
-      return err(
-        ErrorCode.VALIDATION_FAILED,
-        `A node named "${name}" already exists under this parent`
-      )
-    }
-
-    // Optional template binding. When bound, seed properties from field defaults.
-    let template: NodeTemplate | undefined
-    if (templateId !== undefined && templateId !== null) {
-      template = this.currentProject.templates?.[templateId]
-      if (!template) {
-        return err(ErrorCode.TEMPLATE_NOT_FOUND, `Template not found: ${templateId}`)
-      }
-    }
-    const seededProperties = template ? seedDefaults(template) : {}
-
-    const now = new Date().toISOString()
-    const newNode: ManifestNode = {
-      id: uuidv7(),
-      parentId,
-      name,
-      order: siblings.length,
-      properties: seededProperties,
-      ...(templateId !== undefined && templateId !== null ? { templateId } : {}),
-      created: now,
-      modified: now,
-    }
-
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: now,
-      nodes: [...this.currentProject.nodes, newNode],
-    }
-
-    return this.commitProjectMutation(nextProject, 'Add node', () => {
-      this.search.upsertNode(nextProject.path!, newNode)
-    })
+    return this.commitPlannedMutation(planNodeCreate(this.currentProject, parentId, name, templateId))
   }
 
-  // Duplicate an entire subtree as one reversible mutation. Templates are shared;
-  // only currently typed references into the source subtree are remapped.
   nodeDuplicate(id: string, name: string): Result<Project> {
     const project = this.currentProject
     if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
     if (this.historyOperationInProgress) {
       return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
     }
-    const source = project.nodes.find(node => node.id === id)
-    if (!source || source.parentId === null) {
-      return err(ErrorCode.INVALID_HIERARCHY, source ? 'The project root cannot be duplicated.' : 'Node not found.')
-    }
-    const projectIds = new Set(project.nodes.map(node => node.id))
-    if (projectIds.size !== project.nodes.length || !projectIds.has(source.parentId)) {
-      return err(ErrorCode.INVALID_HIERARCHY, 'Repair duplicate node IDs or the missing parent before duplicating this node.')
-    }
-    if (typeof name !== 'string') return err(ErrorCode.VALIDATION_FAILED, 'Copy name must be text')
-    const copyName = name.trim()
-    const siblings = project.nodes.filter(node => node.parentId === source.parentId).sort((a, b) => a.order - b.order)
-    const validation = validateDuplicateNodeName(copyName, siblings.map(node => node.name))
-    if (!validation.valid) return err(ErrorCode.VALIDATION_FAILED, validation.message!)
-
-    const ids = collectSubtreeIds(project.nodes, id)
-    const copiesById = new Map([...ids].map(originalId => [originalId, uuidv7()]))
-    const insertionOrder = siblings.findIndex(node => node.id === id) + 1
-    const now = new Date().toISOString()
-    const copies = project.nodes.filter(node => ids.has(node.id)).map(node => {
-      const properties = { ...node.properties }
-      const fields = templateFields(node.templateId ? project.templates?.[node.templateId] : undefined)
-      for (const [key, field] of Object.entries(fields)) {
-        const target = properties[key]
-        if (field?.type === 'reference' && typeof target === 'string' && copiesById.has(target)) {
-          properties[key] = copiesById.get(target)!
-        }
-      }
-      return {
-        ...node,
-        id: copiesById.get(node.id)!,
-        parentId: node.id === id ? source.parentId : copiesById.get(node.parentId!)!,
-        name: node.id === id ? copyName : node.name,
-        order: node.id === id ? insertionOrder : node.order,
-        properties,
-        created: now,
-        modified: now,
-      }
-    })
-    // Normalize the parent's complete sibling order around the insertion. This
-    // matches move/delete semantics and also repairs gaps or ties tolerated in
-    // hand-edited project files.
-    const siblingOrders = new Map(siblings.map((node, index) => [node.id, index < insertionOrder ? index : index + 1]))
-    const nextProject: Project = {
-      ...project,
-      modified: now,
-      nodes: [
-        ...project.nodes.map(node => {
-          const order = siblingOrders.get(node.id)
-          return order !== undefined && order !== node.order ? { ...node, order, modified: now } : node
-        }),
-        ...copies,
-      ],
-    }
-    return this.commitProjectMutation(nextProject, 'Duplicate subtree', () => {
-      for (const node of copies) this.search.upsertNode(nextProject.path!, node)
-    })
+    return this.commitPlannedMutation(planNodeDuplicate(project, id, name))
   }
 
-  // Apply one property change to an explicit node set as one atomic, undoable edit.
   nodeBatchUpdateProperties(request: BatchPropertyUpdateRequest): Result<BatchPropertyUpdateResult> {
     const project = this.currentProject
     if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
     if (this.historyOperationInProgress) {
       return err(ErrorCode.VALIDATION_FAILED, 'Wait for the snapshot or recovery operation to finish.')
     }
-    if (!request || typeof request !== 'object') {
-      return err(ErrorCode.VALIDATION_FAILED, 'Invalid batch property update')
-    }
-    const plan = planBatchPropertyUpdate(project, request)
-    if (!plan.valid) return err(ErrorCode.VALIDATION_FAILED, plan.message)
-    if (plan.changes.length === 0) return ok({ project, changesApplied: 0 })
-
-    const now = new Date().toISOString()
-    const changesById = new Map(plan.changes.map(change => [change.nodeId, change]))
-    const updatedNodes: ManifestNode[] = []
-    const key = request.key.trim()
-    const nodes = project.nodes.map(node => {
-      const change = changesById.get(node.id)
-      if (!change) return node
-      const properties = { ...node.properties }
-      if (change.after === undefined) delete properties[key]
-      else properties[key] = change.after
-      const updated = { ...node, properties, modified: now }
-      updatedNodes.push(updated)
-      return updated
-    })
-    const nextProject = { ...project, modified: now, nodes }
-    const committed = this.commitProjectMutation(nextProject, 'Batch edit properties', () => {
-      for (const node of updatedNodes) this.search.upsertNode(nextProject.path!, node)
-    })
+    const planned = planNodeBatchPropertyUpdate(project, request)
+    if (!planned.ok) return planned
+    const { mutation, changesApplied } = planned.data
+    if (!mutation) return ok({ project, changesApplied })
+    const committed = this.commitMutation(mutation)
     return committed.ok
-      ? ok({ project: committed.data, changesApplied: plan.changes.length })
+      ? ok({ project: committed.data, changesApplied })
       : committed
   }
 
-  // Update a node's name, properties, and/or template binding.
-  nodeUpdate(
-    id: string,
-    changes: {
-      name?: string
-      properties?: Record<string, string | number | boolean | null>
-      templateId?: string | null
-    }
-  ): Result<Project> {
+  nodeUpdate(id: string, changes: NodeUpdateChanges): Result<Project> {
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    return this.commitPlannedMutation(planNodeUpdate(this.currentProject, id, changes))
+  }
 
-    const node = this.currentProject.nodes.find(n => n.id === id)
-    if (!node) return err(ErrorCode.VALIDATION_FAILED, `Node not found: ${id}`)
+  nodeDelete(id: string, options?: { unlinkReferences?: boolean }): Result<Project> {
+    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    return this.commitPlannedMutation(planNodeDelete(this.currentProject, id, options))
+  }
 
-    if (changes.name !== undefined) {
-      const nameValidation = validateNodeName(changes.name)
-      if (!nameValidation.valid) {
-        return err(ErrorCode.VALIDATION_FAILED, nameValidation.message ?? 'Invalid name')
-      }
-      if (this.hasSiblingNameConflict(changes.name, node.parentId, id)) {
-        return err(
-          ErrorCode.VALIDATION_FAILED,
-          `A node named "${changes.name}" already exists under this parent`
-        )
-      }
-    }
-
-    // Resolve the effective template after this update (null = unbind/freeform).
-    const nextTemplateId =
-      changes.templateId !== undefined ? changes.templateId : node.templateId ?? null
-    let template: NodeTemplate | undefined
-    if (nextTemplateId !== null && nextTemplateId !== undefined) {
-      template = this.currentProject.templates?.[nextTemplateId]
-      if (!template) {
-        return err(ErrorCode.TEMPLATE_NOT_FOUND, `Template not found: ${nextTemplateId}`)
-      }
-    }
-
-    // Re-coerce/validate properties whenever the property set OR the template
-    // binding changes. Binding a node to a template (selector sends only
-    // { templateId }) must validate the node's EXISTING properties against the
-    // new template — otherwise an ad-hoc value like status:"bogus" could become
-    // silently invalid under an enum field. Keys matching a template field are
-    // coerced strictly to the field type; ad-hoc keys use lenient validation.
-    const templateBindingChanged =
-      changes.templateId !== undefined && (changes.templateId ?? null) !== (node.templateId ?? null)
-    const recoerce = changes.properties !== undefined || templateBindingChanged
-
-    let nextProperties = node.properties
-    if (recoerce) {
-      const baseProps = changes.properties !== undefined ? changes.properties : node.properties
-      const coerced: Record<string, string | number | boolean | null> = {}
-      for (const [key, value] of Object.entries(baseProps)) {
-        const keyValidation = validatePropertyKey(key)
-        if (!keyValidation.valid) {
-          return err(ErrorCode.VALIDATION_FAILED, keyValidation.message ?? 'Invalid property key')
-        }
-        const field = templateFields(template)[key]
-        if (field && value !== null) {
-          const result = coercePropertyValue(value, field)
-          if (!result.valid) {
-            return err(
-              ErrorCode.VALIDATION_FAILED,
-              `Property "${key}": ${result.message ?? 'invalid value'}`
-            )
-          }
-          const targetCheck = this.validateReferenceFieldValue(result.value, field, node.id)
-          if (!targetCheck.valid) {
-            return err(
-              ErrorCode.VALIDATION_FAILED,
-              `Property "${key}": ${targetCheck.message ?? 'invalid reference'}`
-            )
-          }
-          coerced[key] = result.value ?? null
-        } else {
-          if (value !== null) {
-            const valueValidation = validatePropertyValue(value)
-            if (!valueValidation.valid) {
-              return err(ErrorCode.VALIDATION_FAILED, valueValidation.message ?? 'Invalid property value')
-            }
-          }
-          coerced[key] = value
-        }
-      }
-      nextProperties = coerced
-    }
-
-    const now = new Date().toISOString()
-    const updatedNode: ManifestNode = {
-      ...node,
-      ...(changes.name !== undefined ? { name: changes.name } : {}),
-      ...(recoerce ? { properties: nextProperties } : {}),
-      ...(changes.templateId !== undefined ? { templateId: changes.templateId } : {}),
-      modified: now,
-    }
-
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: now,
-      nodes: this.currentProject.nodes.map(n => n.id === id ? updatedNode : n),
-    }
-
-    return this.commitProjectMutation(nextProject, 'Edit node', () => {
-      this.search.upsertNode(nextProject.path!, updatedNode)
-    })
+  nodeMove(id: string, newParentId: string, newOrder: number): Result<Project> {
+    const project = this.currentProject
+    if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    const planned = planNodeMove(project, id, newParentId, newOrder)
+    if (!planned.ok) return planned
+    // Already in position: return the project as-is without recording an edit.
+    if (!planned.data) return ok(project)
+    return this.commitMutation(planned.data)
   }
 
   // ─── Template CRUD ────────────────────────────────────────────────────────────
 
-  // Create a new node template. id must be a unique slug.
   templateCreate(id: string, template: NodeTemplate): Result<Project> {
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-
-    const idValidation = validateTemplateId(id)
-    if (!idValidation.valid) {
-      return err(ErrorCode.VALIDATION_FAILED, idValidation.message ?? 'Invalid template id')
-    }
-    if (this.currentProject.templates?.[id]) {
-      return err(ErrorCode.VALIDATION_FAILED, `A template with id "${id}" already exists`)
-    }
-    const templateValidation = validateTemplate(template)
-    if (!templateValidation.valid) {
-      return err(ErrorCode.VALIDATION_FAILED, templateValidation.message ?? 'Invalid template')
-    }
-    const referenceDefaults = this.validateTemplateReferenceDefaults(template)
-    if (!referenceDefaults.valid) {
-      return err(ErrorCode.VALIDATION_FAILED, referenceDefaults.message ?? 'Invalid reference default')
-    }
-
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: new Date().toISOString(),
-      templates: { ...this.currentProject.templates, [id]: template },
-    }
-    return this.commitProjectMutation(nextProject, 'Create template', () => {
-      this.search.rebuild(nextProject)
-    })
+    return this.commitPlannedMutation(planTemplateCreate(this.currentProject, id, template))
   }
 
-  // Update an existing template. Rejects changes that would make any currently
-  // bound node's value invalid (we never retroactively coerce stored data).
   templateUpdate(id: string, changes: Partial<NodeTemplate>): Result<Project> {
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-
-    const existing = this.currentProject.templates?.[id]
-    if (!existing) return err(ErrorCode.TEMPLATE_NOT_FOUND, `Template not found: ${id}`)
-
-    const proposed: NodeTemplate = {
-      label: changes.label ?? existing.label,
-      ...(changes.description !== undefined
-        ? { description: changes.description }
-        : existing.description !== undefined
-          ? { description: existing.description }
-          : {}),
-      fields: changes.fields ?? existing.fields,
-    }
-
-    const templateValidation = validateTemplate(proposed)
-    if (!templateValidation.valid) {
-      return err(ErrorCode.VALIDATION_FAILED, templateValidation.message ?? 'Invalid template')
-    }
-    const referenceDefaults = this.validateTemplateReferenceDefaults(proposed)
-    if (!referenceDefaults.valid) {
-      return err(ErrorCode.VALIDATION_FAILED, referenceDefaults.message ?? 'Invalid reference default')
-    }
-
-    // Guard: every bound node's existing values must remain valid under the
-    // proposed field definitions. A field that is removed is fine (the value
-    // simply becomes ad-hoc/untyped).
-    for (const node of this.currentProject.nodes) {
-      if ((node.templateId ?? null) !== id) continue
-      for (const [key, field] of Object.entries(proposed.fields)) {
-        const value = node.properties[key]
-        // An empty string is the freeform-editor representation of an unset
-        // value. Treat it the same as a missing typed field so a user can set
-        // its type before entering a value (notably for dates and numbers).
-        if (value === undefined || value === null || value === '') continue
-        const check = validateTypedPropertyValue(value, field)
-        if (!check.valid) {
-          return err(
-            ErrorCode.VALIDATION_FAILED,
-            `Cannot change field "${key}": node "${node.name}" has value ${JSON.stringify(value)} that is invalid for the new type (${check.message})`
-          )
-        }
-        const targetCheck = this.validateReferenceFieldValue(value, field, node.id)
-        if (!targetCheck.valid) {
-          return err(
-            ErrorCode.VALIDATION_FAILED,
-            `Cannot change field "${key}": node "${node.name}" has value ${JSON.stringify(value)} that is invalid for the new type (${targetCheck.message})`
-          )
-        }
-      }
-    }
-
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: new Date().toISOString(),
-      templates: { ...this.currentProject.templates, [id]: proposed },
-    }
-    return this.commitProjectMutation(nextProject, 'Edit template', () => {
-      this.search.rebuild(nextProject)
-    })
+    return this.commitPlannedMutation(planTemplateUpdate(this.currentProject, id, changes))
   }
 
-  // Delete a template. Bound nodes are unbound (templateId cleared) but keep
-  // their property values — non-destructive; values become ad-hoc/untyped.
   templateDelete(id: string): Result<Project> {
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-
-    if (!this.currentProject.templates?.[id]) {
-      return err(ErrorCode.TEMPLATE_NOT_FOUND, `Template not found: ${id}`)
-    }
-
-    const remaining = { ...this.currentProject.templates }
-    delete remaining[id]
-
-    const now = new Date().toISOString()
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: now,
-      templates: remaining,
-      nodes: this.currentProject.nodes.map(n =>
-        (n.templateId ?? null) === id ? { ...n, templateId: null, modified: now } : n
-      ),
-    }
-    return this.commitProjectMutation(nextProject, 'Delete template', () => {
-      this.search.rebuild(nextProject)
-    })
+    return this.commitPlannedMutation(planTemplateDelete(this.currentProject, id))
   }
 
-  // ─── CSV import ───────────────────────────────────────────────────────────────
+  // ─── CSV and NetBox import ───────────────────────────────────────────────────
 
-  // Enforce the shared import-file size cap. `label` names the file kind in the
-  // error message; the limit text is derived from the constant so it can't drift.
-  private checkImportFileSize(path: string, label: string): Result<void> {
-    const stat = statSync(path)
-    if (stat.size > MAX_FILE_SIZE_BYTES) {
-      const mb = Math.round(stat.size / 1024 / 1024)
-      return err(ErrorCode.FILE_TOO_LARGE, `${label} is ${mb}MB (limit: ${MAX_FILE_SIZE_MB}MB)`)
-    }
-    return ok(undefined)
-  }
-
-  // Read + parse a CSV file into rows, with the same size cap as project files.
-  private readCsv(path: string): Result<string[][]> {
-    try {
-      const sizeCheck = this.checkImportFileSize(path, 'CSV')
-      if (!sizeCheck.ok) return sizeCheck as Result<string[][]>
-      const raw = readFileSync(path, 'utf8')
-      return ok(parseCsv(raw))
-    } catch (e: unknown) {
-      if (e instanceof CsvParseError) return err(ErrorCode.VALIDATION_FAILED, e.message)
-      const msg = e instanceof Error ? e.message : String(e)
-      return err(ErrorCode.VALIDATION_FAILED, `Could not read CSV: ${msg}`)
-    }
-  }
-
-  // First look at a file before any mapping: headers, a sample, total row count.
   inspectImport(path: string): Result<ImportInspect> {
-    const parsed = this.readCsv(path)
-    if (!parsed.ok) return parsed as Result<ImportInspect>
-    const table = parsed.data
-    const headers = table[0] ?? []
-    const dataRows = table.slice(1)
-    return ok({ headers, sampleRows: dataRows.slice(0, 50), rowCount: dataRows.length })
+    return inspectCsvImport(path)
   }
 
-  // Full-file validation given a mapping (counts + capped issue samples).
   planImportCsv(path: string, mapping: ImportMapping): Result<ImportPlan> {
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-    const parsed = this.readCsv(path)
-    if (!parsed.ok) return parsed as Result<ImportPlan>
-    const table = parsed.data
-    const out = planImport(
-      table.slice(1), table[0] ?? [], mapping,
-      this.currentProject.templates ?? {}, this.currentProject.nodes,
-    )
-    if (out.mappingError) return err(ErrorCode.VALIDATION_FAILED, out.mappingError)
-    const CAP = IMPORT_ISSUE_CAP
-    const createdParents = out.create.filter(n => n.auto).length
-    return ok({
-      acceptedCount: out.create.length - createdParents,
-      updatedCount: out.update.length,
-      skippedCount: out.skipped.length,
-      warningCount: out.warnings.length,
-      createdParents,
-      skipped: out.skipped.slice(0, CAP),
-      warnings: out.warnings.slice(0, CAP),
-      capped: out.skipped.length > CAP || out.warnings.length > CAP,
-      ...(out.suggestedNameColumn ? { suggestedNameColumn: out.suggestedNameColumn } : {}),
-    })
+    return previewCsvImport(this.currentProject, path, mapping)
   }
 
-  // Apply: re-plan (authoritative), build every accepted node, append in ONE
-  // mutation/commit, and return the updated project plus a summary.
   applyImportCsv(path: string, mapping: ImportMapping): Result<{ project: Project; summary: ImportResult }> {
-    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-    const parsed = this.readCsv(path)
-    if (!parsed.ok) return parsed as Result<{ project: Project; summary: ImportResult }>
-    const table = parsed.data
-    const out = planImport(
-      table.slice(1), table[0] ?? [], mapping,
-      this.currentProject.templates ?? {}, this.currentProject.nodes,
-    )
-    if (out.mappingError) return err(ErrorCode.VALIDATION_FAILED, out.mappingError)
-
-    const createdParents = out.create.filter(n => n.auto).length
-    const CAP = IMPORT_ISSUE_CAP
-    const summary: ImportResult = {
-      created: out.create.length - createdParents,
-      updated: out.update.length,
-      createdParents,
-      skippedCount: out.skipped.length,
-      warningCount: out.warnings.length,
-      skipped: out.skipped.slice(0, CAP),
-      warnings: out.warnings.slice(0, CAP),
-      capped: out.skipped.length > CAP || out.warnings.length > CAP,
-    }
-    if (out.create.length === 0 && out.update.length === 0) {
-      return ok({ project: this.currentProject, summary })
-    }
-
-    const now = new Date().toISOString()
-    // Per-parent order counters seeded from existing child counts.
-    const orderByParent = new Map<string, number>()
-    for (const n of this.currentProject.nodes) {
-      if (n.parentId !== null) orderByParent.set(n.parentId, (orderByParent.get(n.parentId) ?? 0) + 1)
-    }
-    // Auto-created ancestors carry a synthetic `localId`; map it to the real id
-    // so dependent nodes (pushed after their parent) wire up correctly.
-    const idMap = new Map<string, string>()
-    const newNodes: ManifestNode[] = out.create.map(p => {
-      const parentId = idMap.get(p.parentId) ?? p.parentId
-      const id = uuidv7()
-      if (p.localId) idMap.set(p.localId, id)
-      const order = orderByParent.get(parentId) ?? 0
-      orderByParent.set(parentId, order + 1)
-      return {
-        id,
-        parentId,
-        name: p.name,
-        order,
-        properties: p.properties,
-        ...(p.templateId ? { templateId: p.templateId } : {}),
-        created: now,
-        modified: now,
-      }
-    })
-
-    // Apply update-on-key changes to existing nodes (name / properties / binding;
-    // `templateId` omitted ⇒ leave the existing binding). The planner already
-    // validated rebinds against the new template, so no invalid node is committed.
-    const updateById = new Map(out.update.map(u => [u.nodeId, u]))
-    const updatedNodeList: ManifestNode[] = []
-    const updatedNodes: ManifestNode[] = this.currentProject.nodes.map(n => {
-      const u = updateById.get(n.id)
-      if (!u) return n
-      const updated: ManifestNode = {
-        ...n,
-        name: u.name,
-        properties: u.properties,
-        ...(u.templateId !== undefined ? { templateId: u.templateId } : {}),
-        modified: now,
-      }
-      updatedNodeList.push(updated)
-      return updated
-    })
-
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: now,
-      nodes: [...updatedNodes, ...newNodes],
-    }
-    // Incrementally upsert only the created + updated nodes (imports never delete)
-    // instead of rebuilding the whole index — keeps import cost O(import size),
-    // not O(tree size). Mirrors nodeCreate/nodeUpdate/nodeMove; if a sync throws,
-    // commitProjectMutation falls back to a full rebuild via restoreSearchIndex.
-    const committed = this.commitProjectMutation(nextProject, 'Import CSV', () => {
-      const projectPath = nextProject.path!
-      for (const node of newNodes) this.search.upsertNode(projectPath, node)
-      for (const node of updatedNodeList) this.search.upsertNode(projectPath, node)
-    })
+    const project = this.currentProject
+    if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    const planned = planCsvImport(project, path, mapping)
+    if (!planned.ok) return planned
+    const { mutation, summary } = planned.data
+    if (!mutation) return ok({ project, summary })
+    const committed = this.commitMutation(mutation)
     if (!committed.ok) return committed as Result<{ project: Project; summary: ImportResult }>
     return ok({ project: committed.data, summary })
   }
 
-  // ─── NetBox relational import ────────────────────────────────────────────
-  // NetBox is a relational DCIM source (Django dumpdata JSON). Unlike CSV, the
-  // adapter resolves FK relations into a Site → Location → Rack → Device tree
-  // with typed attributes (see src/shared/netbox.ts). inspect/plan/apply mirror
-  // the CSV trio; apply creates templates + nodes in ONE commit.
-
-  private readNetbox(path: string): Result<ReturnType<typeof parseNetboxDump>> {
-    try {
-      const sizeCheck = this.checkImportFileSize(path, 'NetBox export')
-      if (!sizeCheck.ok) return sizeCheck as Result<ReturnType<typeof parseNetboxDump>>
-      const raw = readFileSync(path, 'utf8')
-      return ok(parseNetboxDump(raw))
-    } catch (e: unknown) {
-      if (e instanceof NetboxParseError) return err(ErrorCode.VALIDATION_FAILED, e.message)
-      const msg = e instanceof Error ? e.message : String(e)
-      return err(ErrorCode.VALIDATION_FAILED, `Could not read NetBox export: ${msg}`)
-    }
-  }
-
   inspectNetboxImport(path: string): Result<NetboxInspect> {
-    const parsed = this.readNetbox(path)
-    if (!parsed.ok) return parsed as Result<NetboxInspect>
-    return ok(inspectNetbox(parsed.data))
+    return inspectNetboxImport(path)
   }
 
   planNetboxImport(path: string, options: NetboxImportOptions): Result<NetboxImportPlan> {
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-    const parsed = this.readNetbox(path)
-    if (!parsed.ok) return parsed as Result<NetboxImportPlan>
-    const out = planNetbox(
-      parsed.data, options.baseParentId,
-      this.currentProject.templates ?? {}, this.currentProject.nodes,
-    )
-    if (out.mappingError) return err(ErrorCode.VALIDATION_FAILED, out.mappingError)
-    const CAP = IMPORT_ISSUE_CAP
-    return ok({
-      templatesCreated: Object.keys(out.templates).length,
-      sites: out.counts.sites,
-      locations: out.counts.locations,
-      racks: out.counts.racks,
-      devices: out.counts.devices,
-      acceptedCount: out.create.length,
-      skippedCount: out.skipped.length,
-      warningCount: out.warnings.length,
-      skipped: out.skipped.slice(0, CAP),
-      warnings: out.warnings.slice(0, CAP),
-      capped: out.skipped.length > CAP || out.warnings.length > CAP,
-    })
+    return previewNetboxImport(this.currentProject, path, options)
   }
 
   applyNetboxImport(
     path: string,
     options: NetboxImportOptions,
   ): Result<{ project: Project; summary: NetboxImportResult }> {
-    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-    const parsed = this.readNetbox(path)
-    if (!parsed.ok) return parsed as Result<{ project: Project; summary: NetboxImportResult }>
-    const out = planNetbox(
-      parsed.data, options.baseParentId,
-      this.currentProject.templates ?? {}, this.currentProject.nodes,
-    )
-    if (out.mappingError) {
-      return err(ErrorCode.VALIDATION_FAILED, out.mappingError)
-    }
-    const CAP = IMPORT_ISSUE_CAP
-    const summary: NetboxImportResult = {
-      templatesCreated: Object.keys(out.templates).length,
-      created: out.create.length,
-      sites: out.counts.sites,
-      locations: out.counts.locations,
-      racks: out.counts.racks,
-      devices: out.counts.devices,
-      skippedCount: out.skipped.length,
-      warningCount: out.warnings.length,
-      skipped: out.skipped.slice(0, CAP),
-      warnings: out.warnings.slice(0, CAP),
-      capped: out.skipped.length > CAP || out.warnings.length > CAP,
-    }
-    if (out.create.length === 0 && Object.keys(out.templates).length === 0) {
-      return ok({ project: this.currentProject, summary })
-    }
-
-    const now = new Date().toISOString()
-    const orderByParent = new Map<string, number>()
-    for (const n of this.currentProject.nodes) {
-      if (n.parentId !== null) orderByParent.set(n.parentId, (orderByParent.get(n.parentId) ?? 0) + 1)
-    }
-    // Containers carry a synthetic localId; map it to the real uuid so children
-    // pushed after their parent wire up (same pattern as CSV auto-ancestors).
-    const idMap = new Map<string, string>()
-    const newNodes: ManifestNode[] = out.create.map((p) => {
-      const parentId = idMap.get(p.parentId) ?? p.parentId
-      const id = uuidv7()
-      if (p.localId) idMap.set(p.localId, id)
-      const order = orderByParent.get(parentId) ?? 0
-      orderByParent.set(parentId, order + 1)
-      return {
-        id,
-        parentId,
-        name: p.name,
-        order,
-        properties: p.properties,
-        ...(p.templateId ? { templateId: p.templateId } : {}),
-        created: now,
-        modified: now,
-      }
-    })
-
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: now,
-      templates: { ...this.currentProject.templates, ...out.templates },
-      nodes: [...this.currentProject.nodes, ...newNodes],
-    }
-    const committed = this.commitProjectMutation(nextProject, 'Import NetBox', () => {
-      const projectPath = nextProject.path!
-      for (const node of newNodes) this.search.upsertNode(projectPath, node)
-    })
+    const project = this.currentProject
+    if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
+    const planned = planNetboxImport(project, path, options)
+    if (!planned.ok) return planned
+    const { mutation, summary } = planned.data
+    if (!mutation) return ok({ project, summary })
+    const committed = this.commitMutation(mutation)
     if (!committed.ok) return committed as Result<{ project: Project; summary: NetboxImportResult }>
     return ok({ project: committed.data, summary })
-  }
-
-  // Delete a node and all its descendants.
-  // Root node (parentId === null) cannot be deleted.
-  //
-  // By default, deletion is blocked when a surviving node's live `reference`
-  // property — or a template `reference` field default — points into the
-  // deletion set, including mutual or cyclic references across subtrees the user
-  // can't easily clear by hand. `options.unlinkReferences` is the explicit force
-  // path: it nulls those reference properties on the survivors and clears the
-  // stale template defaults, then deletes. Safe-by-default otherwise — the
-  // blocker list rides in the error context so the renderer can show it and
-  // confirm before forcing.
-  nodeDelete(id: string, options?: { unlinkReferences?: boolean }): Result<Project> {
-    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-
-    const node = this.currentProject.nodes.find(n => n.id === id)
-    if (!node) return err(ErrorCode.VALIDATION_FAILED, `Node not found: ${id}`)
-
-    if (node.parentId === null) {
-      return err(ErrorCode.INVALID_HIERARCHY, 'Cannot delete the root node')
-    }
-
-    // Collect node + all descendants.
-    const toDelete = this.collectDescendants(id)
-    const blockers = this.findExternalReferencesTo(toDelete)
-    if (blockers.length > 0 && !options?.unlinkReferences) {
-      const n = blockers.length
-      const message =
-        n === 1 && blockers[0].kind === 'node'
-          ? `Cannot delete "${node.name}" because "${blockers[0].nodeName}" field "${blockers[0].key}" references it`
-          : `Cannot delete "${node.name}" because ${n} reference${n === 1 ? '' : 's'} ${n === 1 ? 'points' : 'point'} into it`
-      return err(ErrorCode.VALIDATION_FAILED, message, { blockers })
-    }
-
-    // Force path: clear each blocking reference. A node may hold more than one
-    // blocking reference and a template may have more than one defaulting field,
-    // so group keys by holder (node id / template id).
-    const now = new Date().toISOString()
-    const unlinkKeysByNode = new Map<string, Set<string>>()
-    const clearDefaultsByTemplate = new Map<string, Set<string>>()
-    for (const b of blockers) {
-      if (b.kind === 'node' && b.nodeId) {
-        let keys = unlinkKeysByNode.get(b.nodeId)
-        if (!keys) unlinkKeysByNode.set(b.nodeId, (keys = new Set()))
-        keys.add(b.key)
-      } else if (b.kind === 'template-default' && b.templateId) {
-        let keys = clearDefaultsByTemplate.get(b.templateId)
-        if (!keys) clearDefaultsByTemplate.set(b.templateId, (keys = new Set()))
-        keys.add(b.key)
-      }
-    }
-
-    // Re-number siblings after deletion; unlink survivors in the same pass.
-    const remaining = this.currentProject.nodes
-      .filter(n => !toDelete.has(n.id))
-      .map(n => {
-        const keys = unlinkKeysByNode.get(n.id)
-        if (!keys) return n
-        const properties = { ...n.properties }
-        for (const key of keys) properties[key] = null
-        return { ...n, properties, modified: now }
-      })
-    const reordered = this.renumberSiblings(remaining, node.parentId)
-
-    // Drop stale reference defaults from affected templates (immutably).
-    let nextTemplates = this.currentProject.templates
-    if (clearDefaultsByTemplate.size > 0) {
-      nextTemplates = { ...this.currentProject.templates }
-      for (const [templateId, keys] of clearDefaultsByTemplate) {
-        const template = nextTemplates[templateId]
-        if (!template) continue
-        const fields = { ...template.fields }
-        for (const key of keys) {
-          if (!fields[key]) continue
-          const { default: _drop, ...rest } = fields[key]
-          fields[key] = rest
-        }
-        nextTemplates[templateId] = { ...template, fields }
-      }
-    }
-
-    const nextProject: Project = {
-      ...this.currentProject,
-      modified: now,
-      nodes: reordered,
-      ...(nextTemplates ? { templates: nextTemplates } : {}),
-    }
-
-    return this.commitProjectMutation(nextProject, 'Delete node', () => {
-      this.search.deleteNodes(nextProject.path!, Array.from(toDelete))
-      // Re-index unlinked survivors so search reflects the cleared references.
-      if (unlinkKeysByNode.size > 0) {
-        for (const n of reordered) {
-          if (unlinkKeysByNode.has(n.id)) this.search.upsertNode(nextProject.path!, n)
-        }
-      }
-    })
-  }
-
-  // Move a node to a new parent (reparent) or reorder within current parent.
-  // Reparented nodes are appended as the last child of the target parent.
-  // For reordering within the same parent, newOrder specifies the target position.
-  nodeMove(id: string, newParentId: string, newOrder: number): Result<Project> {
-    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project open')
-
-    const node = this.currentProject.nodes.find(n => n.id === id)
-    if (!node) return err(ErrorCode.VALIDATION_FAILED, `Node not found: ${id}`)
-
-    if (node.parentId === null) {
-      return err(ErrorCode.INVALID_HIERARCHY, 'Cannot move the root node')
-    }
-
-    const newParent = this.currentProject.nodes.find(n => n.id === newParentId)
-    if (!newParent) {
-      return err(ErrorCode.INVALID_HIERARCHY, `Target parent not found: ${newParentId}`)
-    }
-
-    // Reject circular reparent: newParentId must not be a descendant of node.
-    if (this.isDescendant(newParentId, id)) {
-      return err(ErrorCode.INVALID_HIERARCHY, 'Cannot move a node into its own descendant')
-    }
-
-    const isReparent = node.parentId !== newParentId
-    const now = new Date().toISOString()
-    let nextProject: Project
-
-    if (isReparent) {
-      // Sibling name check in new parent.
-      if (this.hasSiblingNameConflict(node.name, newParentId, null)) {
-        return err(
-          ErrorCode.VALIDATION_FAILED,
-          `A node named "${node.name}" already exists in the target location`
-        )
-      }
-
-      // Remove from old parent, re-number old siblings.
-      const withoutNode = this.currentProject.nodes.filter(n => n.id !== id)
-      const reorderedOld = this.renumberSiblings(withoutNode, node.parentId)
-
-      // Append to new parent as last child.
-      const newSiblingCount = reorderedOld.filter(n => n.parentId === newParentId).length
-      const movedNode: ManifestNode = {
-        ...node,
-        parentId: newParentId,
-        order: newSiblingCount,
-        modified: now,
-      }
-
-      nextProject = {
-        ...this.currentProject,
-        modified: now,
-        nodes: [...reorderedOld, movedNode],
-      }
-    } else {
-      // Reorder within same parent.
-      const siblings = this.currentProject.nodes
-        .filter(n => n.parentId === node.parentId)
-        .sort((a, b) => a.order - b.order)
-
-      const clamped = Math.max(0, Math.min(newOrder, siblings.length - 1))
-      if (clamped === node.order) {
-        // No-op: already in position.
-        return ok(this.currentProject)
-      }
-
-      // Remove node from current position, insert at target.
-      const without = siblings.filter(n => n.id !== id)
-      without.splice(clamped, 0, node)
-
-      // Assign clean 0..n-1 orders.
-      const reordered = without.map((n, i) => ({ ...n, order: i, modified: now }))
-
-      nextProject = {
-        ...this.currentProject,
-        modified: now,
-        nodes: [
-          ...this.currentProject.nodes.filter(n => n.parentId !== node.parentId),
-          ...reordered,
-        ],
-      }
-    }
-
-    const movedNode = nextProject.nodes.find(n => n.id === id)!
-    return this.commitProjectMutation(nextProject, 'Move node', () => {
-      this.search.upsertNode(nextProject.path!, movedNode)
-    })
   }
 
   // ─── Search ─────────────────────────────────────────────────────────────────
@@ -1472,59 +747,43 @@ export class ProjectManager {
   inventoryTable(rawRequest: unknown): Result<InventoryTablePage> {
     const prepared = this.prepareInventoryTable(rawRequest)
     if (!prepared.ok) return prepared
-    const { request, rows, propertyKeys } = prepared.data
-    const { offset, limit } = normalizeSearchPage(request.offset, request.limit)
-    const pageRows = rows.slice(offset, offset + limit).map(row => ({
-      nodeId: row.nodeId,
-      values: Object.fromEntries(request.columns.map(column => [column, row.values[column] ?? ''])),
-    }))
-    return ok({
-      rows: pageRows,
-      total: rows.length,
-      offset,
-      hasMore: offset + pageRows.length < rows.length,
-      propertyKeys,
-    })
+    return ok(inventoryPage(prepared.data))
   }
 
   prepareInventoryCsv(rawRequest: unknown): Result<{ suggestedName: string }> {
-    const normalized = this.normalizeInventoryTableRequest(rawRequest)
+    const normalized = normalizeInventoryTableRequest(this.currentProject, rawRequest)
     if (!normalized.ok) return normalized
-    return ok({ suggestedName: this.inventoryCsvSuggestedName() })
+    return ok({ suggestedName: inventoryCsvSuggestedName(this.currentProject) })
   }
 
   buildInventoryCsv(rawRequest: unknown): Result<{ content: string; suggestedName: string; rowCount: number }> {
     const prepared = this.prepareInventoryTable(rawRequest)
     if (!prepared.ok) return prepared
-    const { request, rows } = prepared.data
-    const headers = request.columns.map(inventoryColumnLabel)
-    const content = serializeCsv([
-      headers,
-      ...rows.map(row => request.columns.map(column => row.values[column] ?? '')),
-    ])
-    return ok({ content, suggestedName: this.inventoryCsvSuggestedName(), rowCount: rows.length })
+    return ok({
+      content: inventoryCsvContent(prepared.data),
+      suggestedName: inventoryCsvSuggestedName(this.currentProject),
+      rowCount: prepared.data.rows.length,
+    })
   }
 
-  private prepareInventoryTable(rawRequest: unknown): Result<{
-    request: InventoryTableRequest
-    rows: InventoryTableRow[]
-    propertyKeys: string[]
-  }> {
-    const normalized = this.normalizeInventoryTableRequest(rawRequest)
+  // Select the request's nodes (filters, then the search index for a query,
+  // rebuilding it once if it is stale) and build sorted rows.
+  private prepareInventoryTable(rawRequest: unknown): Result<PreparedInventoryTable> {
+    const normalized = normalizeInventoryTableRequest(this.currentProject, rawRequest)
     if (!normalized.ok) return normalized
     const request = normalized.data
-    const filterCheck = { filters: request.filters }
     const project = this.currentProject!
+    const filtersActive = hasInventoryFilters(request.filters)
 
     let nodes: ManifestNode[]
     if (!request.query) {
-      nodes = hasInventoryFilters(filterCheck.filters)
-        ? filterInventoryNodes(project, filterCheck.filters)
+      nodes = filtersActive
+        ? filterInventoryNodes(project, request.filters)
         : [...project.nodes]
     } else {
       const nodeMap = new Map(project.nodes.map(node => [node.id, node]))
-      const eligibleNodes = hasInventoryFilters(filterCheck.filters)
-        ? filterInventoryNodes(project, filterCheck.filters)
+      const eligibleNodes = filtersActive
+        ? filterInventoryNodes(project, request.filters)
         : project.nodes
       const queryAll = (): ManifestNode[] => {
         if (!this.search.hasExactNodeSet(project.path!, nodeMap.keys())) {
@@ -1533,7 +792,7 @@ export class ProjectManager {
         return this.search.queryAll(
           project.path!,
           request.query,
-          hasInventoryFilters(filterCheck.filters) ? eligibleNodes.map(node => node.id) : undefined,
+          filtersActive ? eligibleNodes.map(node => node.id) : undefined,
         ).flatMap(hit => {
           const node = nodeMap.get(hit.nodeId)
           return node ? [node] : []
@@ -1541,7 +800,7 @@ export class ProjectManager {
       }
       try {
         nodes = queryAll()
-      } catch (error) {
+      } catch {
         const rebuilt = this.rebuildSearchIndex(project, 'rebuild')
         if (!rebuilt.ok) return rebuilt
         try {
@@ -1553,60 +812,10 @@ export class ProjectManager {
       }
     }
 
-    const rowColumns = request.columns.includes(request.sortColumn)
-      ? request.columns
-      : [...request.columns, request.sortColumn]
-    const rows = sortInventoryRows(buildInventoryRows(project, nodes, rowColumns), request.sortColumn, request.sortDirection)
-    return ok({ request, rows, propertyKeys: inventoryPropertyKeys(project) })
+    return ok(buildSortedInventory(project, nodes, request))
   }
 
-  private normalizeInventoryTableRequest(rawRequest: unknown): Result<InventoryTableRequest> {
-    if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is open.')
-    if (!rawRequest || typeof rawRequest !== 'object' || Array.isArray(rawRequest)) {
-      return err(ErrorCode.VALIDATION_FAILED, 'Inventory table request must be an object.')
-    }
-    const candidate = rawRequest as Record<string, unknown>
-    if (typeof candidate.query !== 'string' || candidate.query.length > 512) {
-      return err(ErrorCode.VALIDATION_FAILED, 'Inventory query must be a string of at most 512 characters.')
-    }
-    const filterCheck = validateInventoryFilters(candidate.filters)
-    if (!filterCheck.valid) return err(ErrorCode.VALIDATION_FAILED, filterCheck.message)
-    if (!Array.isArray(candidate.columns) || !candidate.columns.every(isInventoryColumn)) {
-      return err(ErrorCode.VALIDATION_FAILED, `Choose between 1 and ${MAX_INVENTORY_COLUMNS} valid inventory columns.`)
-    }
-    const columns = [...new Set(candidate.columns as InventoryColumn[])]
-    if (columns.length === 0 || columns.length > MAX_INVENTORY_COLUMNS) {
-      return err(ErrorCode.VALIDATION_FAILED, `Choose between 1 and ${MAX_INVENTORY_COLUMNS} valid inventory columns.`)
-    }
-    if (candidate.sortColumn !== undefined && !isInventoryColumn(candidate.sortColumn)) {
-      return err(ErrorCode.VALIDATION_FAILED, 'Inventory sort column is invalid.')
-    }
-    if (candidate.sortDirection !== undefined && candidate.sortDirection !== 'asc' && candidate.sortDirection !== 'desc') {
-      return err(ErrorCode.VALIDATION_FAILED, 'Inventory sort direction must be asc or desc.')
-    }
-    const sortColumn = candidate.sortColumn as InventoryColumn | undefined ?? columns[0] ?? DEFAULT_INVENTORY_COLUMNS[0]
-    const sortDirection: InventorySortDirection = candidate.sortDirection === 'desc' ? 'desc' : 'asc'
-    const request: InventoryTableRequest = {
-      query: candidate.query.trim(),
-      filters: filterCheck.filters,
-      columns,
-      sortColumn,
-      sortDirection,
-      offset: typeof candidate.offset === 'number' ? candidate.offset : 0,
-      limit: typeof candidate.limit === 'number' ? candidate.limit : 50,
-    }
-
-    return ok(request)
-  }
-
-  private inventoryCsvSuggestedName(): string {
-    const projectName = this.currentProject?.name.trim()
-      .replace(/[^\p{L}\p{N}]+/gu, '-')
-      .replace(/^-|-$/g, '') || 'manifest'
-    return `${projectName}-inventory.csv`
-  }
-
-  // ─── Snapshots / history ───────────────────────────────────────────────────
+  // ─── Archives ───────────────────────────────────────────────────────────────
 
   private archiveService(): ProjectArchive {
     return new ProjectArchive(this.git, raw => {
@@ -1629,7 +838,7 @@ export class ProjectManager {
     try {
       this.assertDocumentUnchanged(this.currentProject.path)
       this.readSnapshotHistory()
-      await this.archiveService().export(this.currentProject.path, this.serializeProjectForPersistence(this.currentProject), destination)
+      await this.archiveService().export(this.currentProject.path, serializeProjectForPersistence(this.currentProject), destination)
       return ok({ path: destination })
     } catch (error) {
       return err(ErrorCode.ARCHIVE_FAILED, `Could not export project archive: ${error instanceof Error ? error.message : String(error)}`)
@@ -1664,61 +873,10 @@ export class ProjectManager {
     } finally { this.archiveBusy = false }
   }
 
+  // ─── Recovery files and history backup ───────────────────────────────────────
+
   private scanRecoveryFiles(): RecoveryFilePreview {
-    const project = this.currentProject!
-    const directory = join(project.path!, '.manifest', 'recovery')
-    const manifestDirectory = join(project.path!, '.manifest')
-    if (existsSync(manifestDirectory) && lstatSync(manifestDirectory).isSymbolicLink()) {
-      throw new Error('The metadata directory must not be a link.')
-    }
-    if (existsSync(directory) && (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink())) {
-      throw new Error('The recovery directory must be a local directory, not a link.')
-    }
-    const history = this.readSnapshotHistory()
-    const hash = createHash('sha256').update(project.id).update(project.path!)
-    // Include the exact primary bytes so even a semantically equivalent edit
-    // invalidates the preview. Missing legacy metadata has a distinct token.
-    const metadataPath = this.snapshotHistoryPath(project.path!)
-    hash.update(existsSync(metadataPath) ? readFileSync(metadataPath) : 'missing')
-    const files: RecoveryFilePreview['files'] = []
-    let uninspectedCount = 0
-    let inspectedBytes = 0
-    if (!existsSync(directory)) return { token: hash.digest('hex'), files, uninspectedCount }
-    const registered = new Set(history.recoveryPoints.map(point => point.manifestPath.split(/[/\\]/).pop()))
-    for (const name of readdirSync(directory).sort()) {
-      hash.update(JSON.stringify(name))
-      if (registered.has(name) || name.startsWith('.')) continue
-      if (files.length >= 100) { uninspectedCount++; continue }
-      const file = { name, eligible: false, explanation: '' } as RecoveryFilePreview['files'][number]
-      files.push(file)
-      try {
-        const path = join(directory, name)
-        const stat = lstatSync(path)
-        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Not a regular local file.')
-        if (!/^recovery-[a-zA-Z0-9-]+\.manifest\.json$/.test(name)) throw new Error('Unrecognized recovery filename; left untouched.')
-        if (stat.size > MAX_FILE_SIZE_BYTES) throw new Error(`Recovery file exceeds the ${MAX_FILE_SIZE_MB} MB limit.`)
-        if (inspectedBytes + stat.size > MAX_FILE_SIZE_BYTES) throw new Error('Not inspected: this review reached its 50 MB total limit. Move other unlisted files to a safe external folder and review again.')
-        const bytes = readFileSync(path)
-        // The stat precheck is a soft I/O limit: external writers can grow a
-        // file during read. Charge actual bytes and refuse to parse overflow.
-        inspectedBytes += bytes.length
-        if (inspectedBytes > MAX_FILE_SIZE_BYTES) throw new Error('Not inspected: files grew beyond the 50 MB review limit. Review again after file changes finish.')
-        hash.update(createHash('sha256').update(bytes).digest())
-        const parsed = this.parseManifestJson(bytes.toString('utf8'))
-        if (!parsed.ok) throw new Error(parsed.error.message)
-        if (parsed.data.id !== project.id) throw new Error('This file belongs to another project.')
-        const id = name.slice(0, -'.manifest.json'.length)
-        if (history.recoveryPoints.some(point => point.id === id)) throw new Error('Recovery ID is already registered to another file.')
-        file.eligible = true
-        file.projectName = parsed.data.name
-        file.nodeCount = parsed.data.nodes.length
-        file.explanation = 'Original save time and operation context are unknown.'
-      } catch (error) {
-        file.explanation = error instanceof Error ? error.message : String(error)
-      }
-      hash.update(JSON.stringify(file))
-    }
-    return { token: hash.digest('hex'), files, uninspectedCount }
+    return scanRecoveryFiles(this.currentProject!, () => this.readSnapshotHistory(), raw => this.parseManifestJson(raw))
   }
 
   async recoveryFilesPreview(): Promise<Result<RecoveryFilePreview>> {
@@ -1761,8 +919,8 @@ export class ProjectManager {
         // recover event, change lineage, or prune files during reconciliation.
         this.beginMetadataHistoryOperation(`Register recovery file: ${file.name}`, {
           kind: 'recovery-register', targetId: point.id,
-          expectedHistoryHash: this.hashDocument(JSON.stringify(history, null, 2)),
-          targetPayloadHash: this.hashDocument(payload),
+          expectedHistoryHash: hashDocument(JSON.stringify(history, null, 2)),
+          targetPayloadHash: hashDocument(payload),
         })
         this.writeSnapshotHistory(history)
         return ok(point)
@@ -1789,7 +947,7 @@ export class ProjectManager {
       try {
         this.beginMetadataHistoryOperation(`Remove recovery registration: ${recoveryId}`, {
           kind: 'recovery-forget', targetId: recoveryId,
-          expectedHistoryHash: this.hashDocument(JSON.stringify(history, null, 2)),
+          expectedHistoryHash: hashDocument(JSON.stringify(history, null, 2)),
         })
         this.writeSnapshotHistory(history, { deleteRemovedPayloads: false })
         return ok(undefined)
@@ -1801,59 +959,14 @@ export class ProjectManager {
     })
   }
 
-  private async validatedHistoryBackup(): Promise<HistoryBackupCandidate & { missingSnapshots: string[]; unlistedRecoveryFiles: string[] }> {
+  private async validatedHistoryBackup(): Promise<ValidatedHistoryBackup> {
     const project = this.currentProject
-    if (!project?.path) throw new Error('No project is currently open')
-    const candidate = new HistoryBackupStore(project.path, project.id).candidate()
-    const snapshots = await this.git.listSnapshots(project.path)
-    if (this.currentProject?.path !== project.path || this.currentProject.id !== project.id) {
-      throw new HistoryBackupProjectChangedError('The project changed while checking the backup. Try reviewing the backup again.')
-    }
-    const names = new Set(snapshots.map(snapshot => snapshot.id))
-    const refs = [
-      ...Object.keys(candidate.history.snapshots),
-      ...Object.values(candidate.history.snapshots).map(meta => meta.basedOnSnapshotId),
-      ...candidate.history.events.flatMap(event => [event.snapshotId, event.targetSnapshotId]),
-      candidate.history.currentBaseSnapshotId,
-    ].filter((value): value is string => Boolean(value))
-    const unavailable = refs.filter(ref => !names.has(ref))
-    if (unavailable.length) throw new Error(`Backup snapshots are unavailable: ${[...new Set(unavailable)].join(', ')}`)
-    const payloadHashes: string[] = []
-    for (const point of candidate.history.recoveryPoints) {
-      const path = join(project.path, ...point.manifestPath.split(/[\\/]/))
-      const payload = readFileSync(path)
-      payloadHashes.push(createHash('sha256').update(payload).digest('hex'))
-      const parsed = this.parseManifestJson(payload.toString('utf8'))
-      if (!parsed.ok || parsed.data.id !== project.id) {
-        throw new Error(`Recovery file for ${point.id} is invalid or belongs to another project.`)
-      }
-    }
-    const recorded = new Set(candidate.history.events.filter(event => event.type === 'snapshot').map(event => event.snapshotId))
-    const missing = snapshots.filter(snapshot => !recorded.has(snapshot.id))
-      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
-    // Reconstruct missing snapshot events from Git. Preserve recorded ordering;
-    // insert by timestamp, placing second-resolution ties after recorded events.
-    // Exact historical order and descriptions cannot be recovered from tags.
-    for (const snapshot of missing) {
-      const event: SnapshotTimelineEvent = {
-        id: uuidv7(), type: 'snapshot', createdAt: snapshot.createdAt,
-        snapshotId: snapshot.id, note: candidate.history.snapshots[snapshot.id]?.note ?? null,
-      }
-      const index = candidate.history.events.findIndex(existing =>
-        Math.floor(Date.parse(existing.createdAt) / 1000) > Math.floor(Date.parse(event.createdAt) / 1000))
-      if (index < 0) candidate.history.events.push(event)
-      else candidate.history.events.splice(index, 0, event)
-    }
-    let recoveryFiles: string[] = []
-    try { recoveryFiles = readdirSync(join(project.path, '.manifest', 'recovery')) } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-    }
-    const registered = new Set(candidate.history.recoveryPoints.map(point => point.manifestPath.split(/[\\/]/).pop()))
-    const token = createHash('sha256').update(JSON.stringify([
-      candidate.sourceToken, snapshots.map(snapshot => [snapshot.id, snapshot.commitHash]).sort(), payloadHashes, recoveryFiles.sort(),
-    ])).digest('hex')
-    return { ...candidate, token, missingSnapshots: missing.map(snapshot => snapshot.name),
-      unlistedRecoveryFiles: recoveryFiles.filter(name => name.endsWith('.manifest.json') && !registered.has(name)).sort() }
+    return validateHistoryBackup(
+      project,
+      this.git,
+      () => this.currentProject?.path === project?.path && this.currentProject?.id === project?.id,
+      raw => this.parseManifestJson(raw),
+    )
   }
 
   async historyBackupStatus(): Promise<Result<HistoryBackupStatus>> {
@@ -1893,7 +1006,7 @@ export class ProjectManager {
       })
       const record = this.beginMetadataHistoryOperation('Restore history from automatic backup', {
         kind: 'history-backup-restore', targetId: 'history.backup.json',
-        expectedHistoryHash: this.hashDocument(JSON.stringify(restored, null, 2)),
+        expectedHistoryHash: hashDocument(JSON.stringify(restored, null, 2)),
       }, candidate.source)
       const preservedPath = backupStore.restore(candidate, `${backupStore.historyPath}.damaged-${record.id}`)
       try { this.operationStore()!.finish() }
@@ -1901,13 +1014,15 @@ export class ProjectManager {
         this.logger.warn('history backup restored; retrying evidence cleanup', { error: String(error) })
         await this.finishProvenHistoryOperation()
       }
-      this.scheduleHistoryBackfill()
+      this.backfill.schedule()
       return ok({ preservedPath })
     } catch (error) {
       return err(this.hasInterruptedHistory() ? ErrorCode.HISTORY_OPERATION_PENDING : ErrorCode.HISTORY_BACKUP_FAILED,
         `Could not restore history backup: ${error instanceof Error ? error.message : String(error)}`)
     } finally { this.historyOperationInProgress = false }
   }
+
+  // ─── Snapshots ──────────────────────────────────────────────────────────────
 
   async snapshotCreate(name: unknown, description: unknown = null): Promise<Result<Snapshot>> {
     return this.withHistoryOperation(() => this.performSnapshotCreate(name, description))
@@ -1944,7 +1059,7 @@ export class ProjectManager {
     // A completed flush updates documentVersions. The fallback covers an
     // already-current document whose bytes did not need another write.
     const expectedDocumentHash = this.documentVersions.get(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE)) ??
-      this.hashDocument(this.serializeProjectForPersistence(this.currentProject))
+      hashDocument(serializeProjectForPersistence(this.currentProject))
     this.beginHistoryOperation(`Create snapshot: ${name}`, {
       kind: 'snapshot-create', eventId, targetId: name,
       expectedDocumentHash,
@@ -2010,7 +1125,7 @@ export class ProjectManager {
 
     try {
       const snapshots = await this.git.listSnapshots(this.currentProject.path)
-      return ok(this.withSnapshotMetadata(snapshots))
+      return ok(withSnapshotMetadata(snapshots, this.readSnapshotHistory()))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.error('snapshot list failed', { path: this.currentProject.path, error: msg })
@@ -2025,24 +1140,10 @@ export class ProjectManager {
 
     try {
       const history = this.readSnapshotHistory()
-      const snapshots = this.withSnapshotMetadata(
-        await this.git.listSnapshots(this.currentProject.path),
-      )
-      const recordedSnapshotIds = new Set(
-        history.events
-          .filter(event => event.type === 'snapshot')
-          .map(event => event.snapshotId)
-          .filter((id): id is string => Boolean(id))
-      )
-      const syntheticSnapshotEvents: SnapshotTimelineEvent[] = snapshots
-        .filter(snapshot => !recordedSnapshotIds.has(snapshot.id))
-        .map(snapshot => ({
-          id: `snapshot:${snapshot.id}`,
-          type: 'snapshot',
-          createdAt: snapshot.createdAt,
-          snapshotId: snapshot.id,
-          note: snapshot.note,
-        }))
+      const listed = await this.git.listSnapshots(this.currentProject.path)
+      // Re-read after the await, as before the split: metadata comes from the
+      // history as it is now, events from the read above.
+      const snapshots = withSnapshotMetadata(listed, this.readSnapshotHistory())
       // Recorded events keep their push order (the order they actually happened).
       // Sorting them by createdAt would shuffle revert/recover events relative to
       // snapshot events, because git tags carry second-resolution timestamps while
@@ -2050,9 +1151,7 @@ export class ProjectManager {
       // and a revert created in the same wall-clock second can swap.
       // Synthetic events (for snapshots that predate timeline tracking) are sorted
       // by createdAt and prepended.
-      const sortedSynthetic = [...syntheticSnapshotEvents]
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-      const events = [...sortedSynthetic, ...history.events]
+      const events = [...synthesizeSnapshotEvents(snapshots, history.events, 'snapshot:'), ...history.events]
 
       return ok({
         events,
@@ -2065,18 +1164,7 @@ export class ProjectManager {
     }
   }
 
-  // Per-node chronological history. Walks the timeline events in push order,
-  // emitting an entry for each event that changed THIS node's state:
-  //
-  //   - 'snapshot' entries come from history.db rows (delta-encoded — only
-  //     present when the node actually changed at that snapshot)
-  //   - 'revert' entries are synthesized by reading the target snapshot's
-  //     manifest and comparing the node's state to whatever was last shown
-  //   - 'recover' entries are synthesized similarly from the recovery point's
-  //     manifest file
-  //
-  // Snapshots, reverts, and recoveries that left this node unchanged emit
-  // no entry — the result is a clean transition log.
+  // Per-node chronological history; see ./project/node-history for the walk.
   async nodeHistory(nodeId: string): Promise<Result<NodeHistory>> {
     if (!this.currentProject?.path) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
@@ -2085,15 +1173,15 @@ export class ProjectManager {
 
     // Synchronously trigger a backfill probe before any await. This is
     // idempotent — already-running backfills pass through, and an
-    // up-to-date index is detected and exits inside runHistoryBackfill.
+    // up-to-date index is detected and exits inside the backfill run.
     // The synchronous flip of inProgress=true (when scheduled) prevents
     // the renderer from seeing stale "not in progress" state.
-    this.scheduleHistoryBackfill()
+    this.backfill.schedule()
 
-    let dbRowsBySnapshot = new Map<string, ReturnType<typeof this.history.nodeHistory>[number]>()
+    let rowsBySnapshot = new Map<string, ReturnType<typeof this.history.nodeHistory>[number]>()
     try {
       const rows = this.history.nodeHistory(nodeId)
-      dbRowsBySnapshot = new Map(rows.map(r => [r.snapshotId, r]))
+      rowsBySnapshot = new Map(rows.map(r => [r.snapshotId, r]))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.warn('history index query failed', { nodeId, error: msg })
@@ -2119,130 +1207,29 @@ export class ProjectManager {
     // though their rows exist in history.db.
     let allEvents: SnapshotTimelineEvent[] = persistedHistory.events
     try {
-      const allSnapshots = this.withSnapshotMetadata(
-        await this.git.listSnapshots(projectPath),
-      )
-      const recordedSnapshotIds = new Set(
-        persistedHistory.events
-          .filter(e => e.type === 'snapshot')
-          .map(e => e.snapshotId)
-          .filter((id): id is string => Boolean(id)),
-      )
-      const synthetic: SnapshotTimelineEvent[] = allSnapshots
-        .filter(s => !recordedSnapshotIds.has(s.id))
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-        .map(s => ({
-          id: `synthetic:${s.id}`,
-          type: 'snapshot',
-          createdAt: s.createdAt,
-          snapshotId: s.id,
-          note: s.note,
-        }))
-      allEvents = [...synthetic, ...persistedHistory.events]
+      const listed = await this.git.listSnapshots(projectPath)
+      const allSnapshots = withSnapshotMetadata(listed, this.readSnapshotHistory())
+      allEvents = [...synthesizeSnapshotEvents(allSnapshots, persistedHistory.events, 'synthetic:'), ...persistedHistory.events]
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.warn('nodeHistory: synthetic event build failed; using events as-is', { error: msg })
     }
 
-    // Cache snapshot manifests so multiple reverts targeting the same
-    // snapshot don't pay the read cost twice.
-    const snapshotManifestCache = new Map<string, Project | null>()
-    const readSnapshotProject = async (snapshotId: string): Promise<Project | null> => {
-      if (snapshotManifestCache.has(snapshotId)) return snapshotManifestCache.get(snapshotId)!
-      try {
-        const raw = await this.git.readSnapshotManifest(projectPath, snapshotId)
-        const parsed = this.parseManifestJson(raw)
-        const result = parsed.ok ? parsed.data : null
-        snapshotManifestCache.set(snapshotId, result)
-        return result
-      } catch {
-        snapshotManifestCache.set(snapshotId, null)
-        return null
-      }
-    }
-
-    const entries: NodeHistoryEntry[] = []
-    let lastState: NodeStateProjection = absentState()
-    let order = 0
-
-    for (const event of allEvents) {
-      if (event.type === 'snapshot') {
-        const snapshotId = event.snapshotId
-        if (!snapshotId) continue
-        const row = dbRowsBySnapshot.get(snapshotId)
-        if (!row) continue  // delta-encoded skip — node unchanged at this snapshot
-        const newState: NodeStateProjection = {
-          presence: row.presence,
-          nodeName: row.nodeName,
-          parentId: row.parentId,
-          nodeOrder: row.nodeOrder,
-          properties: row.properties,
-          templateId: row.templateId,
-        }
-        if (statesEqual(newState, lastState)) continue
-        entries.push({
-          type: 'snapshot',
-          entryId: snapshotId,
-          createdAt: event.createdAt,
-          snapshotName: snapshotId,
-          note: event.note ?? null,
-          order: order++,
-          ...newState,
-        })
-        lastState = newState
-      } else if (event.type === 'revert') {
-        const target = event.targetSnapshotId
-        if (!target) continue
-        const targetProject = await readSnapshotProject(target)
-        if (!targetProject) continue
-        const newState = projectStateForNode(targetProject, nodeId)
-        if (statesEqual(newState, lastState)) continue
-        entries.push({
-          type: 'revert',
-          entryId: event.id,
-          createdAt: event.createdAt,
-          snapshotName: null,
-          order: order++,
-          ...newState,
-          revertTargetSnapshotId: target,
-          note: event.note ?? null,
-        })
-        lastState = newState
-      } else if (event.type === 'recover') {
-        const recoveryPointId = event.recoveryPointId
-        if (!recoveryPointId) continue
-        const point = persistedHistory.recoveryPoints.find(p => p.id === recoveryPointId)
-        if (!point) continue
-        const recoveryFile = join(projectPath, ...point.manifestPath.split(/[\\/]/))
-        let recoveredProject: Project | null = null
-        try {
-          if (existsSync(recoveryFile)) {
-            const raw = readFileSync(recoveryFile, 'utf8')
-            const parsed = this.parseManifestJson(raw)
-            if (parsed.ok) recoveredProject = parsed.data
-          }
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e)
-          this.logger.warn('history: recovery manifest read failed', { recoveryPointId, error: msg })
-        }
-        if (!recoveredProject) continue
-        const newState = projectStateForNode(recoveredProject, nodeId)
-        if (statesEqual(newState, lastState)) continue
-        entries.push({
-          type: 'recover',
-          entryId: event.id,
-          createdAt: event.createdAt,
-          snapshotName: null,
-          order: order++,
-          ...newState,
-          recoveryPointId,
-        })
-        lastState = newState
-      }
-    }
+    const entries = await walkNodeHistory({
+      nodeId,
+      projectPath,
+      events: allEvents,
+      rowsBySnapshot,
+      recoveryPoints: persistedHistory.recoveryPoints,
+      readSnapshotManifest: snapshotId => this.git.readSnapshotManifest(projectPath, snapshotId),
+      parse: raw => this.parseManifestJson(raw),
+      logger: this.logger,
+    })
 
     return ok({ entries, backfillStatus: this.getHistoryIndexStatus() })
   }
+
+  // ─── Compare and reports ────────────────────────────────────────────────────
 
   async snapshotCompare(a: string, b: string, scopeNodeId: unknown = null): Promise<Result<DiffEntry[]>> {
     if (!this.currentProject?.path) {
@@ -2302,58 +1289,8 @@ export class ProjectManager {
     return this.parseManifestJson(raw)
   }
 
-  /** Shared inner logic: resolve both refs, diff them, and apply an optional subtree scope. */
-  private async loadAndDiff(a: string, b: string, scopeNodeId: unknown = null): Promise<Result<LoadedComparison>> {
-    if (scopeNodeId !== null && scopeNodeId !== undefined && (
-      typeof scopeNodeId !== 'string' || scopeNodeId.length === 0
-    )) {
-      return err(ErrorCode.VALIDATION_FAILED, 'Comparison scope must be a valid node ID')
-    }
-    const requestedScopeId = typeof scopeNodeId === 'string' ? scopeNodeId : null
-
-    // Comparing a ref against itself is an empty diff by definition. The renderer
-    // already blocks it, but guard here too (defense-in-depth for direct callers)
-    // and skip the redundant resolve/git-read.
-    let projectA: Project
-    let projectB: Project
-    if (a === b) {
-      const only = await this.resolveCompareProject(a)
-      if (!only.ok) return only as Result<LoadedComparison>
-      projectA = only.data
-      projectB = only.data
-    } else {
-      const [resolvedA, resolvedB] = await Promise.all([
-        this.resolveCompareProject(a),
-        this.resolveCompareProject(b),
-      ])
-      if (!resolvedA.ok) return resolvedA as Result<LoadedComparison>
-      if (!resolvedB.ok) return resolvedB as Result<LoadedComparison>
-      projectA = resolvedA.data
-      projectB = resolvedB.data
-    }
-
-    const allDiffs = a === b ? [] : diffProjects(projectA, projectB)
-    const allTemplateDiffs = a === b ? [] : diffTemplates(projectA, projectB)
-    if (!requestedScopeId) {
-      return ok({ projectA, projectB, diffs: allDiffs, templateDiffs: allTemplateDiffs, scope: null })
-    }
-
-    const resolvedScope = resolveComparisonScope(projectA, projectB, requestedScopeId)
-    if (!resolvedScope) {
-      return err(ErrorCode.VALIDATION_FAILED, 'The selected comparison scope does not exist in either project state')
-    }
-    return ok({
-      projectA,
-      projectB,
-      diffs: filterDiffsToComparisonScope(allDiffs, resolvedScope.nodeIds),
-      templateDiffs: filterTemplateDiffsToComparisonScope(
-        allTemplateDiffs,
-        projectA,
-        projectB,
-        resolvedScope.nodeIds,
-      ),
-      scope: resolvedScope.scope,
-    })
+  private loadAndDiff(a: string, b: string, scopeNodeId: unknown = null): Promise<Result<LoadedComparison>> {
+    return loadAndDiff(ref => this.resolveCompareProject(ref), a, b, scopeNodeId)
   }
 
   /**
@@ -2377,69 +1314,20 @@ export class ProjectManager {
     try {
       const loaded = await this.loadAndDiff(from, to, scopeNodeId)
       if (!loaded.ok) return loaded as Result<{ content: string; suggestedName: string }>
-      const { projectA, projectB, diffs, templateDiffs, scope } = loaded.data
 
       // loadAndDiff returns no Snapshot records, so resolve metadata separately
       // for the report header (date + short commit hash).
       const listed = await this.snapshotList()
       if (!listed.ok) return listed as Result<{ content: string; suggestedName: string }>
-      const snaps = listed.data
-      const meta = (name: string) => {
-        // The current-project side has no Snapshot record; label it and leave
-        // date/hash blank (it's the live working copy, not a committed snapshot).
-        if (isCurrentRef(name)) {
-          return { name: CURRENT_PROJECT_LABEL, date: '', hash: '', note: null }
-        }
-        const s = snaps.find(x => x.name === name)
-        return {
-          name,
-          date: s ? s.createdAt.slice(0, 16).replace('T', ' ') : '',
-          hash: s ? s.commitHash.slice(0, 7) : '',
-          note: s?.note ?? null,
-        }
-      }
-
-      const ctx: ReportContext = {
-        projectName: projectB.name || this.currentProject.name,
-        from: meta(from),
-        to: meta(to),
-        generatedAt: new Date().toISOString(),
-        scope,
-        oldPathById: buildNodePathResolver(projectA.nodes),
-        templateLabelOld: (v) => (v ? templateLabel(projectA.templates?.[String(v)], String(v)) : '(none)'),
-        templateLabelNew: (v) => (v ? templateLabel(projectB.templates?.[String(v)], String(v)) : '(none)'),
-      }
-
-      let content: string
-      switch (format) {
-        case 'markdown':
-          content = formatDiffReportMarkdown(diffs, templateDiffs, ctx)
-          break
-        case 'csv':
-          content = formatDiffReportCsv(diffs, templateDiffs, ctx)
-          break
-        case 'html':
-          content = formatDiffReportHtml(diffs, templateDiffs, ctx)
-          break
-      }
-
-      const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'snapshot'
-      // The current-project side gets a clearer filename token than safe('@current')
-      // ('current'), which would otherwise read like an ordinary snapshot called
-      // "current". This is a save-dialog default the user can rename, so a
-      // residual clash with a snapshot literally named "current-project" is
-      // tolerable, not a correctness concern.
-      const fileToken = (ref: string) => (isCurrentRef(ref) ? 'current-project' : safe(ref))
-      const ext: Record<ReportFormat, string> = { markdown: 'md', csv: 'csv', html: 'html' }
-      const scopeToken = scope ? `-${safe(scope.name)}-${safe(scope.nodeId)}` : ''
-      const suggestedName = `${safe(ctx.projectName)}-changes-${fileToken(from)}-to-${fileToken(to)}${scopeToken}.${ext[format]}`
-      return ok({ content, suggestedName })
+      return ok(formatComparisonReport(loaded.data, from, to, format, listed.data, () => this.currentProject!.name))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.error('report build failed', { path: this.currentProject.path, from, to, format, error: msg })
       return err(ErrorCode.SNAPSHOT_READ_FAILED, `Failed to build report: ${msg}`)
     }
   }
+
+  // ─── Revert and recovery ────────────────────────────────────────────────────
 
   async snapshotRevert(request: SnapshotRevertRequest): Promise<Result<SnapshotRevertResult>> {
     return this.withHistoryOperation(() => this.performSnapshotRevert(request))
@@ -2477,9 +1365,9 @@ export class ProjectManager {
       const eventId = uuidv7()
       this.beginHistoryOperation(`Revert to snapshot: ${name}`, {
         kind: 'snapshot-revert', eventId, targetId: name,
-        expectedDocumentHash: this.hashDocument(this.serializeProjectForPersistence(restoredProject)),
+        expectedDocumentHash: hashDocument(serializeProjectForPersistence(restoredProject)),
       })
-      const safetyRecoveryPoint = await this.createSafetyRecoveryPointIfNeeded(previousProject)
+      const safetyRecoveryPoint = await createSafetyRecoveryPointIfNeeded(previousProject, this.git, this.logger)
 
       const searchResult = this.rebuildSearchIndex(restoredProject, 'rebuild')
       if (!searchResult.ok) {
@@ -2567,9 +1455,9 @@ export class ProjectManager {
       const eventId = uuidv7()
       this.beginHistoryOperation(`Apply recovery: ${request.id}`, {
         kind: 'recovery-apply', eventId, targetId: request.id,
-        expectedDocumentHash: this.hashDocument(this.serializeProjectForPersistence(recoveredProject)),
+        expectedDocumentHash: hashDocument(serializeProjectForPersistence(recoveredProject)),
       })
-      const safetyRecoveryPoint = await this.createSafetyRecoveryPointIfNeeded(previousProject)
+      const safetyRecoveryPoint = await createSafetyRecoveryPointIfNeeded(previousProject, this.git, this.logger)
 
       const searchResult = this.rebuildSearchIndex(recoveredProject, 'rebuild')
       if (!searchResult.ok) {
@@ -2612,7 +1500,20 @@ export class ProjectManager {
     }
   }
 
-  // ─── Autosave ───────────────────────────────────────────────────────────────
+  private async requiresRevertNote(targetSnapshotName: string): Promise<Result<boolean>> {
+    if (!this.currentProject?.path) {
+      return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
+    }
+    const projectPath = this.currentProject.path
+    return ok(await revertNoteRequired(this.readSnapshotHistory(), targetSnapshotName, () => this.git.listSnapshots(projectPath)))
+  }
+
+  private pruneRecoveryPoints(history: SnapshotHistoryState, protectedId: string | null = null): void {
+    if (!this.currentProject?.path) return
+    pruneRecoveryPoints(history, protectedId)
+  }
+
+  // ─── History operation journal ───────────────────────────────────────────────
 
   private operationStore(): HistoryOperationStore | null {
     return this.currentProject?.path ? new HistoryOperationStore(this.currentProject.path, this.currentProject.id) : null
@@ -2621,10 +1522,16 @@ export class ProjectManager {
   private historyBytesOrNull(): Buffer | null {
     const project = this.currentProject
     if (!project?.path) throw new Error('No project open')
-    try { return this.operationStore()!.read(this.snapshotHistoryPath(project.path)) }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
-      throw error
+    return readHistoryBytesOrNull(this.operationStore()!, project.path)
+  }
+
+  private journalContext(): JournalContext {
+    return {
+      project: this.currentProject!,
+      store: this.operationStore()!,
+      historyBytesOrNull: () => this.historyBytesOrNull(),
+      readHistory: bytes => this.readSnapshotHistory(bytes),
+      parse: raw => this.parseManifestJson(raw),
     }
   }
 
@@ -2632,7 +1539,7 @@ export class ProjectManager {
     intent: Omit<MetadataHistoryOperationIntent, 'expectedDocumentHash'>, source: Buffer | null = null): PendingHistoryOperationV3 {
     const project = this.currentProject
     if (!project?.path) throw new Error('No project open')
-    const document = this.documentBytes(join(project.path, PROJECT_DOCUMENT_FILE))
+    const document = readDocumentBytes(join(project.path, PROJECT_DOCUMENT_FILE))
     if (!document) throw new Error('The project document is missing.')
     const beforeHistory = this.historyBytesOrNull()
     if (intent.kind !== 'history-backup-restore') {
@@ -2644,8 +1551,8 @@ export class ProjectManager {
         throw new Error('History metadata changed. Review the operation again before changing it.')
       }
     }
-    return this.operationStore()!.beginMetadata(label, this.serializeProjectForPersistence(project), beforeHistory,
-      { ...intent, expectedDocumentHash: this.hashDocument(document) }, source)
+    return this.operationStore()!.beginMetadata(label, serializeProjectForPersistence(project), beforeHistory,
+      { ...intent, expectedDocumentHash: hashDocument(document) }, source)
   }
 
   private hasInterruptedHistory(): boolean { return this.operationStore()?.pending() ?? false }
@@ -2658,57 +1565,9 @@ export class ProjectManager {
     return ok({ pending: (!this.historyOperationInProgress || this.classifyingInterruptedHistory) && this.hasInterruptedHistory() })
   }
 
-  private scanInterruptedHistoryEvidence(): {
-    preview: InterruptedHistoryEvidencePreview
-    candidates: Map<string, RetainedHistoryOperationCandidate>
-  } {
+  private scanInterruptedHistoryEvidence() {
     if (!this.currentProject?.path) throw new Error('No project is currently open.')
-    const store = this.operationStore()!
-    if (!existsSync(store.recoveryPath)) {
-      return { preview: { groups: [], unavailableCount: 0, uninspectedCount: 0, historyReadable: true }, candidates: new Map() }
-    }
-    const historyBytes = this.historyBytesOrNull()
-    let history: SnapshotHistoryState | null = null
-    if (historyBytes !== null) {
-      try { history = this.readSnapshotHistory(historyBytes) }
-      catch (error) { if (!(error instanceof HistoryMetadataReadError)) throw error }
-    }
-    const retained = store.retainedCandidates()
-    const candidates = new Map<string, RetainedHistoryOperationCandidate>()
-    const groups: InterruptedHistoryEvidencePreview['groups'] = []
-    let unavailableCount = retained.unavailableCount
-    for (const candidate of retained.candidates) {
-      try {
-        const before = this.parseManifestJson(candidate.inventory.toString('utf8'))
-        if (!before.ok || before.data.id !== this.currentProject.id) throw new Error('Invalid before-state inventory.')
-        if (candidate.record.version !== 3 || candidate.record.kind !== 'history-backup-restore') {
-          migrateSnapshotHistory(JSON.parse(candidate.history.toString('utf8')))
-        }
-        const registeredAsRecoveryPoint = history?.recoveryPoints.some(point =>
-          point.manifestPath.split(/[\\/]/).pop() === candidate.record.inventoryFile)
-        const record = candidate.record
-        const token = store.fingerprint(candidate.bytes, candidate.inventory, candidate.history, candidate.source ?? '', historyBytes ?? 'missing-history',
-          JSON.stringify([record.id, candidate.recordFile, registeredAsRecoveryPoint]))
-        groups.push({
-          id: record.id,
-          token,
-          label: record.label,
-          startedAt: record.startedAt,
-          kind: record.version === 1 ? null : record.kind,
-          targetId: record.version === 1 ? null : record.targetId,
-          beforeNodeCount: before.data.nodes.length,
-          currentNodeCount: this.currentProject.nodes.length,
-          sizeBytes: candidate.bytes.length + candidate.inventory.length + candidate.history.length + (candidate.source?.length ?? 0),
-          files: [candidate.recordFile, record.inventoryFile, record.historyFile,
-            record.version === 3 ? record.sourceFile : undefined].filter((file): file is string => !!file),
-          registeredAsRecoveryPoint: registeredAsRecoveryPoint ?? false,
-        })
-        candidates.set(record.id, candidate)
-      } catch { unavailableCount++ }
-    }
-    groups.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-    return { preview: { groups, unavailableCount, uninspectedCount: retained.uninspectedCount,
-      historyReadable: history !== null }, candidates }
+    return scanInterruptedHistoryEvidence(this.journalContext())
   }
 
   interruptedHistoryEvidencePreview(): Result<InterruptedHistoryEvidencePreview> {
@@ -2754,9 +1613,8 @@ export class ProjectManager {
   private beginHistoryOperation(label: string, intent: HistoryOperationIntent): void {
     const store = this.operationStore()
     if (!store || !this.currentProject) throw new Error('No project open')
-    store.begin(label, this.serializeProjectForPersistence(this.currentProject), JSON.stringify(this.historyBeforeOperation ?? this.readSnapshotHistory(), null, 2), intent)
-    this.backfillToken++
-    this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
+    store.begin(label, serializeProjectForPersistence(this.currentProject), JSON.stringify(this.historyBeforeOperation ?? this.readSnapshotHistory(), null, 2), intent)
+    this.backfill.cancel()
   }
 
   private abortHistoryOperation(): void {
@@ -2768,87 +1626,11 @@ export class ProjectManager {
   private async finishProvenHistoryOperation(): Promise<void> {
     const store = this.operationStore()
     if (!store?.pending() || !this.currentProject?.path) return
-    const projectPath = this.currentProject.path
     const alreadyBusy = this.historyOperationInProgress
     this.historyOperationInProgress = true
     this.classifyingInterruptedHistory = true
     try {
-      const evidence = store.candidate()
-      const { record } = evidence
-      if (record.version === 3) {
-        const document = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
-        const historyBytes = this.historyBytesOrNull()
-        if (!document || !historyBytes || this.hashDocument(document) !== record.expectedDocumentHash ||
-            this.hashDocument(historyBytes) !== record.expectedHistoryHash) return
-        if (record.kind === 'recovery-register') {
-          const history = migrateSnapshotHistory(JSON.parse(historyBytes.toString('utf8')))
-          const point = history.recoveryPoints.find(point => point.id === record.targetId)
-          if (!point) return
-          const payload = store.read(join(projectPath, ...point.manifestPath.split(/[\\/]/)))
-          if (this.hashDocument(payload) !== record.targetPayloadHash) return
-        }
-        if (record.kind === 'recovery-forget') {
-          const history = migrateSnapshotHistory(JSON.parse(historyBytes.toString('utf8')))
-          if (history.recoveryPoints.some(point => point.id === record.targetId)) return
-        }
-        if (record.kind === 'history-backup-restore') {
-          const source = store.read(join(projectPath, '.manifest', 'history.backup.json'))
-          if (!evidence.source?.equals(source)) return
-          const preservedPath = `${this.snapshotHistoryPath(projectPath)}.damaged-${record.id}`
-          if (!record.historyMissing) {
-            const preserved = store.read(preservedPath)
-            if (!preserved.equals(evidence.history)) return
-          } else if (existsSync(preservedPath)) return
-        }
-        const latestDocument = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
-        const latestHistory = this.historyBytesOrNull()
-        if (!latestDocument?.equals(document) || !latestHistory?.equals(historyBytes)) return
-        store.finish(true)
-        this.logger.info('confirmed completed interrupted metadata operation', { path: projectPath, kind: record.kind })
-        return
-      }
-      if (record.version !== 2) return
-      const document = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
-      if (!document || this.hashDocument(document) !== record.expectedDocumentHash) return
-      const history = this.readSnapshotHistory()
-      const event = history.events.at(-1)
-      if (!event || event.id !== record.eventId) return
-
-      let complete = false
-      if (record.kind === 'snapshot-create' && event.type === 'snapshot' && event.snapshotId === record.targetId &&
-          history.currentBaseSnapshotId === record.targetId && history.pendingRevertEventId === null &&
-          history.snapshots[record.targetId]?.id === record.targetId) {
-        const snapshotDocument = await this.git.readSnapshotManifest(projectPath, record.targetId)
-        complete = this.hashDocument(snapshotDocument) === record.expectedDocumentHash
-      } else if (record.kind === 'snapshot-revert' && event.type === 'revert' && event.targetSnapshotId === record.targetId &&
-          history.currentBaseSnapshotId === record.targetId && history.pendingRevertEventId === record.eventId) {
-        const snapshotDocument = await this.git.readSnapshotManifest(projectPath, record.targetId)
-        // Revert rewrites a historical blob using the current serializer, so
-        // compare its canonical form. Snapshot creation records the raw bytes.
-        complete = this.hashDocument(this.canonicalizeManifestJson(snapshotDocument)) === record.expectedDocumentHash
-      } else if (record.kind === 'recovery-apply' && event.type === 'recover' && event.recoveryPointId === record.targetId &&
-          history.currentBaseSnapshotId === null && history.pendingRevertEventId === record.eventId) {
-        const recoveryPoint = history.recoveryPoints.find(point => point.id === record.targetId)
-        if (recoveryPoint) {
-          const recoveryDocument = store.read(join(projectPath, ...recoveryPoint.manifestPath.split(/[\\/]/)))
-          complete = this.hashDocument(this.canonicalizeManifestJson(recoveryDocument.toString('utf8'))) === record.expectedDocumentHash
-        }
-      }
-
-      if (!complete) return
-      // Recheck mutable evidence immediately before clearing the marker. This
-      // closes the external-writer window opened by the Git/payload read above.
-      const latestDocument = this.documentBytes(join(projectPath, PROJECT_DOCUMENT_FILE))
-      if (!latestDocument || this.hashDocument(latestDocument) !== record.expectedDocumentHash) return
-      if (JSON.stringify(this.readSnapshotHistory()) !== JSON.stringify(history)) return
-      store.finish(true)
-      this.logger.info('confirmed completed interrupted history operation', {
-        path: projectPath, kind: record.kind, eventId: record.eventId,
-      })
-    } catch (error) {
-      // Missing, altered, legacy, or unreadable evidence remains pending for
-      // the explicit review flow. Automatic cleanup must never guess.
-      this.logger.warn('could not prove interrupted history operation completed', { error: String(error) })
+      await finishIfProvenComplete({ ...this.journalContext(), store, git: this.git, logger: this.logger })
     } finally {
       this.classifyingInterruptedHistory = false
       this.historyOperationInProgress = alreadyBusy
@@ -2858,30 +1640,7 @@ export class ProjectManager {
   private interruptedHistoryCandidate() {
     const store = this.operationStore()
     if (!store || !this.currentProject) throw new Error('No project open')
-    const evidence = store.candidate()
-    const before = this.parseManifestJson(evidence.inventory.toString('utf8'))
-    if (!before.ok || before.data.id !== this.currentProject.id) throw new Error('The preserved inventory is invalid or belongs to another project.')
-    const metadataOnly = evidence.record.version === 3
-    if (!metadataOnly) migrateSnapshotHistory(JSON.parse(evidence.history.toString('utf8')))
-    const currentHistoryBytes = this.historyBytesOrNull()
-    let history: SnapshotHistoryState | null = null
-    let historyReadable = false
-    if (currentHistoryBytes !== null) {
-      try {
-        history = this.readSnapshotHistory(currentHistoryBytes)
-        historyReadable = true
-      } catch (error) {
-        if (!(error instanceof HistoryMetadataReadError)) throw error
-      }
-    }
-    const current = this.serializeProjectForPersistence(this.currentProject)
-    const disk = this.documentBytes(join(this.currentProject.path!, PROJECT_DOCUMENT_FILE))
-    if (!disk) throw new Error('Restore or resolve the missing project document before continuing.')
-    const token = metadataOnly || history === null ?
-      store.fingerprint(evidence.bytes, evidence.inventory, evidence.history, evidence.source ?? '',
-        currentHistoryBytes ?? 'missing-history', current, disk) :
-      store.fingerprint(evidence.bytes, evidence.inventory, evidence.history, JSON.stringify(history), current, disk)
-    return { store, evidence, before: before.data, history, currentHistoryBytes, metadataOnly, historyReadable, current, token }
+    return interruptedHistoryCandidate({ ...this.journalContext(), store })
   }
 
   reviewInterruptedHistory(): Result<InterruptedHistoryPreview> {
@@ -2915,7 +1674,7 @@ export class ProjectManager {
           if (!saved.ok) return saved as Result<Project>
         }
         candidate.store.finish(true)
-        if (candidate.historyReadable) this.scheduleHistoryBackfill()
+        if (candidate.historyReadable) this.backfill.schedule()
         if (candidate.metadataOnly) this.scheduleAutosave()
         else { this.cancelAutosave(); this.edits.clear() }
         return ok(this.currentProject!)
@@ -2930,13 +1689,13 @@ export class ProjectManager {
       candidate.store.finish(true)
       this.cancelAutosave()
       this.edits.clear()
-      this.scheduleHistoryBackfill()
+      this.backfill.schedule()
       return ok(this.currentProject!)
     } catch (error) { return err(ErrorCode.HISTORY_OPERATION_PENDING, `Could not continue after interrupted history: ${String(error)}`) }
     finally { this.historyOperationInProgress = false; this.historyBeforeOperation = null }
   }
 
-  private hashDocument(bytes: Buffer | string): string { return createHash('sha256').update(bytes).digest('hex') }
+  // ─── External document changes ───────────────────────────────────────────────
 
   private retainCurrentDocumentVersion(): void {
     const currentPath = join(this.currentProject!.path!, PROJECT_DOCUMENT_FILE)
@@ -2946,37 +1705,19 @@ export class ProjectManager {
     if (this.conflictLocalCopy?.path !== this.currentProject!.path) this.conflictLocalCopy = null
   }
 
-  private documentBytes(path: string): Buffer | null {
-    try {
-      const stat = lstatSync(path)
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_SIZE_BYTES) throw new Error('The project file is linked, not a regular file, or exceeds 50 MB.')
-      const bytes = readFileSync(path)
-      if (bytes.length > MAX_FILE_SIZE_BYTES) throw new Error('The project file exceeds 50 MB.')
-      return bytes
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
-      throw error
-    }
-  }
-
-  private documentHash(path: string): string | null {
-    const bytes = this.documentBytes(path)
-    return bytes === null ? null : this.hashDocument(bytes)
-  }
-
   private assertDocumentUnchanged(projectPath: string, expected?: string | null): void {
     const path = join(projectPath, PROJECT_DOCUMENT_FILE)
     const baseline = expected === undefined ? this.documentVersions.get(path) ?? null : expected
     try {
-      if (this.documentHash(path) === baseline) return
+      if (readDocumentHash(path) === baseline) return
     } catch { /* An unreadable file must never be replaced blindly. */ }
     let message = 'The project file changed outside Manifest or is no longer readable. Saving is paused. Review both versions before continuing.'
     if (this.currentProject?.path === projectPath) {
       try {
-        const local = this.serializeProjectForPersistence(this.currentProject)
-        const hash = this.hashDocument(local)
+        const local = serializeProjectForPersistence(this.currentProject)
+        const hash = hashDocument(local)
         if (this.conflictLocalCopy?.path !== projectPath || this.conflictLocalCopy.hash !== hash ||
-            this.documentHash(this.conflictLocalCopy.file) !== hash) {
+            readDocumentHash(this.conflictLocalCopy.file) !== hash) {
           const directory = this.conflictRecoveryDirectory(projectPath)
           const file = join(directory, `recovery-${uuidv7()}-local.manifest.json`)
           writeHistoryFile(file, local)
@@ -3013,13 +1754,13 @@ export class ProjectManager {
     const project = this.currentProject
     if (!project?.path) throw new Error('No project is currently open')
     const path = join(project.path, PROJECT_DOCUMENT_FILE)
-    const bytes = this.documentBytes(path)
-    const externalHash = bytes === null ? null : this.hashDocument(bytes)
+    const bytes = readDocumentBytes(path)
+    const externalHash = bytes === null ? null : hashDocument(bytes)
     if (externalHash === this.documentVersions.get(path)) throw new Error('The project file no longer differs from the last saved version. Try saving again.')
-    const local = this.serializeProjectForPersistence(project)
+    const local = serializeProjectForPersistence(project)
     const parsed = bytes === null ? null : this.parseManifestJson(bytes.toString('utf8'))
     const external = parsed?.ok && parsed.data.id === project.id ? parsed.data : null
-    const token = this.hashDocument(JSON.stringify([project.path, project.id, this.documentVersions.get(path), externalHash, this.hashDocument(local)]))
+    const token = hashDocument(JSON.stringify([project.path, project.id, this.documentVersions.get(path), externalHash, hashDocument(local)]))
     const description = bytes === null ? 'The project file is missing.' : !parsed?.ok ? 'The external file is not a supported valid project.' : !external ? 'The external file belongs to another project.' : 'The external inventory is valid for this project.'
     return { project, bytes, externalHash, local, external, token, description }
   }
@@ -3046,7 +1787,7 @@ export class ProjectManager {
       const recovery = this.conflictRecoveryDirectory(path)
       const history = request.choice === 'load-external' ? this.readSnapshotHistory() : null
       this.historyBeforeOperation = history
-      if (history && existsSync(this.snapshotHistoryPath(path))) new HistoryBackupStore(path, candidate.project.id).save(history)
+      if (history && existsSync(snapshotHistoryPath(path))) new HistoryBackupStore(path, candidate.project.id).save(history)
       const id = uuidv7()
       writeHistoryFile(join(recovery, `recovery-${id}-local.manifest.json`), candidate.local)
       if (candidate.bytes !== null) writeHistoryFile(join(recovery, `recovery-${id}-external.manifest.json`), candidate.bytes)
@@ -3057,7 +1798,7 @@ export class ProjectManager {
         const saved = await this.writeManifest(candidate.project, { expectedDocumentHash: candidate.externalHash })
         if (!saved.ok) return saved as Result<Project>
       } else {
-        const next = this.withProjectWarnings({ ...candidate.external!, path }, this.collectProjectWarnings(path))
+        const next = withProjectWarnings({ ...candidate.external!, path }, collectProjectWarnings(path))
         const indexed = this.rebuildSearchIndex(next, 'rebuild')
         if (!indexed.ok) return indexed as Result<Project>
         try {
@@ -3069,11 +1810,13 @@ export class ProjectManager {
         this.documentVersions.set(join(path, PROJECT_DOCUMENT_FILE), candidate.externalHash)
       }
       this.documentSaveError = null
-      return ok(request.choice === 'load-external' ? this.withLoadWarnings(this.currentProject!, this.collectLoadWarnings(candidate.external!)) : this.currentProject!)
+      return ok(request.choice === 'load-external' ? withLoadWarnings(this.currentProject!, collectLoadWarnings(candidate.external!)) : this.currentProject!)
     } catch (error) {
       return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, `Could not resolve external change: ${error instanceof Error ? error.message : String(error)}`)
     } finally { this.historyOperationInProgress = false; this.historyBeforeOperation = null }
   }
+
+  // ─── Autosave ───────────────────────────────────────────────────────────────
 
   private async flushPendingAutosave(): Promise<Result<void>> {
     this.cancelAutosave()
@@ -3099,29 +1842,32 @@ export class ProjectManager {
     }
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
+  // ─── Commit, persistence, and index seams ───────────────────────────────────
+  // writeManifest, writeSnapshotHistory, rebuildSearchIndex, and
+  // restoreSearchIndex stay methods on purpose: they are the failure-injection
+  // seams the interruption tests spy on.
 
   private parseManifestJson(raw: string): Result<Project> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let data: any
+    return parseProjectDocument(raw, this.logger)
+  }
 
-    try {
-      data = JSON.parse(raw)
-    } catch {
-      return err(ErrorCode.VALIDATION_FAILED, 'Project file is not valid JSON')
+  private commitPlannedMutation(planned: Result<ProjectMutation>): Result<Project> {
+    if (!planned.ok) return planned
+    return this.commitMutation(planned.data)
+  }
+
+  private commitMutation({ next, label, search }: ProjectMutation): Result<Project> {
+    return this.commitProjectMutation(next, label, () => this.applySearchUpdate(next, search))
+  }
+
+  private applySearchUpdate(project: Project, update: SearchUpdate): void {
+    if (update.rebuild) {
+      this.search.rebuild(project)
+      return
     }
-
-    try {
-      data = migrate(data)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return err(ErrorCode.SCHEMA_VERSION, msg)
-    }
-
-    const validation = this.validateManifest(data)
-    if (!validation.ok) return validation as Result<Project>
-
-    return ok(data as Project)
+    const projectPath = project.path!
+    if (update.remove) this.search.deleteNodes(projectPath, update.remove)
+    for (const node of update.upsert ?? []) this.search.upsertNode(projectPath, node)
   }
 
   private commitProjectMutation(
@@ -3183,6 +1929,57 @@ export class ProjectManager {
     }
   }
 
+  private readSnapshotHistory(bytes?: Buffer): SnapshotHistoryState {
+    const project = this.currentProject
+    if (!project?.path) return emptySnapshotHistory()
+    return readSnapshotHistoryFile(project.path, project.id, this.logger, bytes)
+  }
+
+  private writeSnapshotHistory(history: SnapshotHistoryState, { deleteRemovedPayloads = true }: { deleteRemovedPayloads?: boolean } = {}): void {
+    const project = this.currentProject
+    if (!project?.path) return
+    writeSnapshotHistoryFile(project.path, project.id, history,
+      this.historyBeforeOperation ?? emptySnapshotHistory(), deleteRemovedPayloads, this.logger)
+  }
+
+  // Atomic write: tmp then rename.
+  private async writeManifest(
+    project: Project,
+    options: { touchModified?: boolean; expectedDocumentHash?: string | null } = {}
+  ): Promise<Result<void>> {
+    if (!project.path) {
+      return err(ErrorCode.PROJECT_NOT_FOUND, 'Project has no path — cannot save')
+    }
+    const documentPath = join(project.path, PROJECT_DOCUMENT_FILE)
+    const tmpPath = `${documentPath}.${uuidv7()}.tmp`
+    const touchModified = options.touchModified ?? true
+    try {
+      this.assertDocumentUnchanged(project.path, options.expectedDocumentHash)
+      const persistedProject = {
+        ...project,
+        modified: touchModified ? new Date().toISOString() : project.modified,
+      }
+      const serialized = serializeProjectForPersistence(persistedProject)
+      writeFileSync(tmpPath, serialized, 'utf8')
+      this.assertDocumentUnchanged(project.path, options.expectedDocumentHash)
+      renameSync(tmpPath, documentPath)
+      this.documentVersions.set(documentPath, hashDocument(serialized))
+      this.documentSaveError = null
+      if (this.currentProject?.path === project.path && this.currentProject.id === project.id) {
+        this.currentProject = persistedProject
+      }
+      this.logger.debug('project saved', { path: project.path })
+      return ok(undefined as void)
+    } catch (e: unknown) {
+      if (e instanceof ExternalDocumentChangedError) {
+        return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, e.message)
+      }
+      const msg = e instanceof Error ? e.message : String(e)
+      this.logger.error('project save failed', { path: project.path, error: msg })
+      return err(ErrorCode.AUTOSAVE_WRITE_FAILED, `Failed to save project: ${msg}`)
+    } finally { try { unlinkSync(tmpPath) } catch { /* Only remove our temporary file. */ } }
+  }
+
   // ─── History index ──────────────────────────────────────────────────────────
 
   private openHistoryIndex(projectPath: string): void {
@@ -3231,722 +2028,5 @@ export class ProjectManager {
       })
     }
   }
-
-  // Background backfill: walk all snapshots in chronological order and
-  // populate history.db for any snapshot that's missing or marked complete=0.
-  // Yields to the event loop between snapshots so IPC stays responsive.
-  // Schedule a backfill in the background. Idempotent — calling repeatedly
-  // while one is already running does NOT start a second pass; the existing
-  // promise is returned. This lets nodeHistory and openProject both trigger
-  // safely without coordinating.
-  private scheduleHistoryBackfill(): void {
-    if (this.hasInterruptedHistory()) return
-    if (this.backfillStatus.inProgress) return
-    // Flip the flag synchronously so concurrent status queries don't see
-    // a transient false-idle while runHistoryBackfill is still in its
-    // pre-listSnapshots prelude.
-    this.backfillStatus = { inProgress: true, completed: 0, total: 0 }
-    this.backfillPromise = this.runHistoryBackfill().catch((e: unknown) => {
-      const msg = e instanceof Error ? e.message : String(e)
-      this.logger.error('history backfill crashed', { error: msg })
-      this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
-    })
-  }
-
-  private async runHistoryBackfill(): Promise<void> {
-    const projectPath = this.currentProject?.path
-    if (!projectPath) {
-      this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
-      return
-    }
-
-    const myToken = ++this.backfillToken
-    let allSnapshots
-    try {
-      allSnapshots = await this.git.listSnapshots(projectPath)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      this.logger.warn('history backfill: list snapshots failed', { error: msg })
-      this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
-      return
-    }
-
-    if (allSnapshots.length === 0) {
-      this.backfillStatus = { inProgress: false, completed: 0, total: 0 }
-      return
-    }
-
-    const recorded = this.history.recordedSnapshotIds()
-    const incomplete = new Set(this.history.incompleteSnapshotIds())
-    const needsAny = allSnapshots.some(s => !recorded.has(s.name) || incomplete.has(s.name))
-    if (!needsAny) {
-      this.backfillStatus = { inProgress: false, completed: allSnapshots.length, total: allSnapshots.length }
-      return
-    }
-
-    // Determine chronological order. For snapshots that have history.json
-    // events, use event push order (authoritative). For legacy snapshots
-    // without events, fall back to git's creatordate sort (second-precision,
-    // best-effort). Legacy snapshots are placed before recorded ones since
-    // events were added later in the project's life.
-    const persistedHistory = this.readSnapshotHistory()
-    const recordedIds = persistedHistory.events
-      .filter(e => e.type === 'snapshot' && e.snapshotId)
-      .map(e => e.snapshotId as string)
-    const inRecorded = new Set(recordedIds)
-    const tagsByName = new Map(allSnapshots.map(s => [s.name, s]))
-    const legacyOrdered = allSnapshots
-      .filter(s => !inRecorded.has(s.name))
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    const recordedOrdered = recordedIds
-      .map(id => tagsByName.get(id))
-      .filter((s): s is typeof allSnapshots[number] => s !== undefined)
-    const chronological = [...legacyOrdered, ...recordedOrdered]
-    // inProgress was set to true synchronously by scheduleHistoryBackfill;
-    // here we update total now that we know how many snapshots we'll walk.
-    this.backfillStatus = { inProgress: true, completed: 0, total: chronological.length }
-    this.logger.info('history backfill started', { total: chronological.length })
-
-    let previousProject: Project | null = null
-    for (let i = 0; i < chronological.length; i++) {
-      // Bail if the project was closed or another backfill superseded us.
-      if (myToken !== this.backfillToken || this.currentProject?.path !== projectPath) {
-        this.logger.info('history backfill cancelled', { completed: i, total: chronological.length })
-        this.backfillStatus = { inProgress: false, completed: i, total: chronological.length }
-        return
-      }
-
-      const snapshot = chronological[i]
-      const snapshotId = snapshot.name
-
-      let raw: string
-      try {
-        raw = await this.git.readSnapshotManifest(projectPath, snapshotId)
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e)
-        this.logger.warn('history backfill: manifest read failed', { snapshotId, error: msg })
-        previousProject = null  // can't trust delta against a snapshot we couldn't read
-        this.backfillStatus.completed = i + 1
-        await new Promise(resolve => setImmediate(resolve))
-        continue
-      }
-
-      const parsed = this.parseManifestJson(raw)
-      if (!parsed.ok) {
-        this.logger.warn('history backfill: manifest parse failed', {
-          snapshotId, error: parsed.error.message,
-        })
-        previousProject = null
-        this.backfillStatus.completed = i + 1
-        await new Promise(resolve => setImmediate(resolve))
-        continue
-      }
-
-      const isFresh = !recorded.has(snapshotId) || incomplete.has(snapshotId)
-      if (isFresh) {
-        try {
-          this.history.recordSnapshot({
-            snapshotId, snapshotOrder: i,
-            project: parsed.data, previousProject,
-          })
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e)
-          this.logger.warn('history backfill: insert failed', { snapshotId, error: msg })
-        }
-      }
-
-      previousProject = parsed.data
-      this.backfillStatus.completed = i + 1
-      await new Promise(resolve => setImmediate(resolve))
-    }
-
-    this.backfillStatus = { inProgress: false, completed: chronological.length, total: chronological.length }
-    this.logger.info('history backfill complete', { total: chronological.length })
-  }
-
-  private withSnapshotMetadata(snapshots: Snapshot[]): Snapshot[] {
-    const history = this.readSnapshotHistory()
-    return snapshots.map(snapshot => {
-      const meta = history.snapshots[snapshot.id]
-      return {
-        ...snapshot,
-        basedOnSnapshotId: meta?.basedOnSnapshotId ?? null,
-        createdAfterRevertEventId: meta?.createdAfterRevertEventId ?? null,
-        note: meta?.note ?? null,
-      }
-    })
-  }
-
-  private async requiresRevertNote(targetSnapshotName: string): Promise<Result<boolean>> {
-    if (!this.currentProject?.path) {
-      return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
-    }
-
-    const history = this.readSnapshotHistory()
-    const targetEventIndex = history.events.findIndex(
-      event => event.type === 'snapshot' && event.snapshotId === targetSnapshotName
-    )
-    if (targetEventIndex >= 0) {
-      return ok(history.events
-        .slice(targetEventIndex + 1)
-        .some(event => event.type === 'snapshot'))
-    }
-
-    const snapshots = await this.git.listSnapshots(this.currentProject.path)
-    const targetIndex = snapshots.findIndex(snapshot => snapshot.name === targetSnapshotName)
-    if (targetIndex < 0) return ok(false)
-
-    // listSnapshots sorts newest first; any earlier array item is a later timeline snapshot.
-    return ok(targetIndex > 0)
-  }
-
-  private async createSafetyRecoveryPointIfNeeded(project: Project): Promise<RecoveryPoint | null> {
-    if (!project.path) return null
-
-    const current = this.serializeProjectForPersistence(project)
-    let head = ''
-    try {
-      head = this.canonicalizeManifestJson(await this.git.readHeadManifest(project.path))
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      this.logger.warn('could not compare current project to HEAD before revert', { path: project.path, error: msg })
-    }
-
-    if (head && head === current) return null
-
-    const id = `recovery-${uuidv7()}`
-    const recoveryDir = join(project.path, '.manifest', 'recovery')
-    // Recovery payloads are internal sidecars, not user-openable documents.
-    // Keep their JSON suffix so they cannot be mistaken for Manifest projects.
-    const manifestPath = join('.manifest', 'recovery', `${id}.manifest.json`)
-    mkdirSync(recoveryDir, { recursive: true })
-    writeFileSync(join(project.path, manifestPath), current, 'utf8')
-
-    return {
-      id,
-      createdAt: new Date().toISOString(),
-      reason: 'pre-revert',
-      manifestPath,
-    }
-  }
-
-  // Select retained entries. Physical deletion happens only after primary
-  // metadata and its automatic backup both contain the retained registry.
-  private pruneRecoveryPoints(history: SnapshotHistoryState, protectedId: string | null = null): void {
-    const projectPath = this.currentProject?.path
-    if (!projectPath) return
-    const automatic = history.recoveryPoints.filter(point => point.reason !== 'reconciled')
-    if (automatic.length <= MAX_RECOVERY_POINTS) return
-
-    const sorted = automatic.filter(point => point.id !== protectedId).sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    )
-    const removeCount = automatic.length - MAX_RECOVERY_POINTS
-    const toRemove = sorted.slice(0, removeCount)
-    const removeIds = new Set(toRemove.map(p => p.id))
-
-    history.recoveryPoints = history.recoveryPoints.filter(p => !removeIds.has(p.id))
-  }
-
-  private readSnapshotHistory(bytes?: Buffer): SnapshotHistoryState {
-    const projectPath = this.currentProject?.path
-    if (!projectPath) return emptySnapshotHistory()
-
-    const historyPath = this.snapshotHistoryPath(projectPath)
-    try {
-      const parsed = JSON.parse(bytes ? bytes.toString('utf8') : readFileSync(historyPath, 'utf8'))
-      return migrateSnapshotHistory(parsed)
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
-        if (!existsSync(new HistoryBackupStore(projectPath, this.currentProject!.id).backupPath)) return emptySnapshotHistory()
-        throw new HistoryMetadataReadError('History metadata is missing, but an automatic backup exists. Review and restore the backup before creating snapshots, reverting, or recovering.')
-      }
-      const msg = e instanceof Error ? e.message : String(e)
-      this.logger.warn('snapshot history unavailable; preserving original metadata', { path: historyPath, error: msg })
-      throw new HistoryMetadataReadError(
-        `History metadata could not be read. The original file is preserved at ${historyPath}. ` +
-        'Restore this file from a known-good backup, or open the project with a Manifest version that supports it, then refresh. ' +
-        `Snapshot creation, revert, and recovery are blocked until it can be read. Details: ${msg}`
-      )
-    }
-  }
-
-  private writeSnapshotHistory(history: SnapshotHistoryState, { deleteRemovedPayloads = true }: { deleteRemovedPayloads?: boolean } = {}): void {
-    const projectPath = this.currentProject?.path
-    if (!projectPath) return
-
-    const manifestDir = join(projectPath, '.manifest')
-    const historyPath = this.snapshotHistoryPath(projectPath)
-    const previous = this.historyBeforeOperation ?? emptySnapshotHistory()
-    mkdirSync(manifestDir, { recursive: true })
-    writeHistoryFile(historyPath, JSON.stringify(history, null, 2))
-    try {
-      new HistoryBackupStore(projectPath, this.currentProject!.id).save(history)
-    } catch (error) {
-      // Primary metadata has committed. Keep the pre-operation backup and its
-      // payloads, and do not report an already-completed operation as failed.
-      this.logger.warn('history backup refresh failed; previous backup retained', { error: String(error) })
-      return
-    }
-    // Forgetting a registration removes it from the retained set, but must
-    // keep its file. Automatic retention pruning explicitly permits deletion.
-    if (!deleteRemovedPayloads) return
-    const retained = new Set(history.recoveryPoints.map(point => point.manifestPath))
-    for (const point of previous.recoveryPoints) {
-      if (retained.has(point.manifestPath)) continue
-      try { unlinkSync(join(projectPath, ...point.manifestPath.split(/[\\/]/))) } catch (error) {
-        this.logger.warn('recovery point file delete failed', { id: point.id, error: String(error) })
-      }
-    }
-  }
-
-  private snapshotHistoryPath(projectPath: string): string {
-    return join(projectPath, '.manifest', 'history.json')
-  }
-
-  private serializeProjectForPersistence(project: Project): string {
-    const { path: _path, loadWarnings: _loadWarnings, projectWarnings: _projectWarnings, ...persistable } = project
-    return JSON.stringify(persistable, null, 2)
-  }
-
-  private canonicalizeManifestJson(raw: string): string {
-    return JSON.stringify(JSON.parse(raw), null, 2)
-  }
-
-  // Collect id of node + all its descendants.
-  private collectDescendants(rootId: string): Set<string> {
-    const result = new Set<string>()
-    const queue = [rootId]
-    while (queue.length > 0) {
-      const id = queue.shift()!
-      result.add(id)
-      if (this.currentProject) {
-        for (const n of this.currentProject.nodes) {
-          if (n.parentId === id) queue.push(n.id)
-        }
-      }
-    }
-    return result
-  }
-
-  private validateReferenceFieldValue(
-    value: unknown,
-    field: TemplateField,
-    selfId?: string | null,
-    nodes: ManifestNode[] = this.currentProject?.nodes ?? [],
-  ): { valid: boolean; message?: string } {
-    if (field.type !== 'reference') return { valid: true }
-    return validateReferenceTarget(value, nodes, selfId)
-  }
-
-  private validateTemplateReferenceDefaults(template: NodeTemplate): { valid: boolean; message?: string } {
-    for (const [key, field] of Object.entries(templateFields(template))) {
-      if (field.type !== 'reference' || field.default === undefined || field.default === null) {
-        continue
-      }
-      const check = this.validateReferenceFieldValue(field.default, field)
-      if (!check.valid) {
-        return {
-          valid: false,
-          message: `Field "${key}" default is invalid: ${check.message ?? 'invalid reference'}`,
-        }
-      }
-    }
-    return { valid: true }
-  }
-
-  // All incoming references into the deletion set. Returns a serializable shape
-  // (no node/template objects) so the list can ride in the IPC error context.
-  // Reports every blocker, not just the first — the renderer needs the full set
-  // to show what a force-delete would clear.
-  //
-  // Detection is gated on the CURRENT `reference` field type, deliberately:
-  //   - Live node references — a surviving node whose reference-typed property
-  //     holds an id in the deletion set.
-  //   - Template defaults — a template `reference` field whose `default` points
-  //     into the deletion set (would otherwise seed a dangling pointer into
-  //     every node later created from that template).
-  // A value left under a key that was rebound away from `reference` (or whose
-  // template was unbound) is now plain text, NOT a reference, so it is not a
-  // blocker — clearing arbitrary free-text on force-delete would be silent data
-  // loss (e.g. a free-text field holding a pasted/imported id).
-  private findExternalReferencesTo(toDelete: Set<string>): ReferenceBlocker[] {
-    if (!this.currentProject) return []
-    const nameById = new Map(this.currentProject.nodes.map(n => [n.id, n.name]))
-    const blockers: ReferenceBlocker[] = []
-
-    for (const node of this.currentProject.nodes) {
-      if (toDelete.has(node.id)) continue
-      const templateId = node.templateId ?? null
-      const template = templateId ? this.currentProject.templates?.[templateId] : undefined
-      for (const [key, field] of Object.entries(templateFields(template))) {
-        if (field.type !== 'reference') continue
-        const value = node.properties?.[key]
-        if (typeof value === 'string' && toDelete.has(value)) {
-          blockers.push({
-            kind: 'node',
-            nodeId: node.id,
-            nodeName: node.name,
-            key,
-            targetId: value,
-            targetName: nameById.get(value) ?? value,
-          })
-        }
-      }
-    }
-
-    const templates = this.currentProject.templates ?? {}
-    for (const [templateId, template] of Object.entries(templates)) {
-      for (const [key, field] of Object.entries(templateFields(template))) {
-        if (field.type !== 'reference') continue
-        const def = field.default
-        if (typeof def === 'string' && toDelete.has(def)) {
-          blockers.push({
-            kind: 'template-default',
-            nodeId: null,
-            nodeName: templateLabel(template, templateId),
-            templateId,
-            key,
-            targetId: def,
-            targetName: nameById.get(def) ?? def,
-          })
-        }
-      }
-    }
-
-    return blockers
-  }
-
-  // Return true if candidateId is a descendant of ancestorId.
-  private isDescendant(candidateId: string, ancestorId: string): boolean {
-    return this.collectDescendants(ancestorId).has(candidateId)
-  }
-
-  // Re-assign 0..n-1 order values to siblings of parentId within nodes.
-  private renumberSiblings(nodes: ManifestNode[], parentId: string | null): ManifestNode[] {
-    const siblings = nodes
-      .filter(n => n.parentId === parentId)
-      .sort((a, b) => a.order - b.order)
-      .map((n, i) => ({ ...n, order: i }))
-
-    const siblingsById = new Map(siblings.map(n => [n.id, n]))
-    return nodes.map(n => siblingsById.get(n.id) ?? n)
-  }
-
-  // Case-insensitive sibling name check. excludeId skips self during rename.
-  private hasSiblingNameConflict(
-    name: string,
-    parentId: string | null,
-    excludeId: string | null
-  ): boolean {
-    if (!this.currentProject) return false
-    const lower = name.toLowerCase()
-    return this.currentProject.nodes.some(
-      n =>
-        n.parentId === parentId &&
-        n.id !== excludeId &&
-        n.name.toLowerCase() === lower
-    )
-  }
-
-  // Atomic write: tmp then rename.
-  private async writeManifest(
-    project: Project,
-    options: { touchModified?: boolean; expectedDocumentHash?: string | null } = {}
-  ): Promise<Result<void>> {
-    if (!project.path) {
-      return err(ErrorCode.PROJECT_NOT_FOUND, 'Project has no path — cannot save')
-    }
-    const documentPath = join(project.path, PROJECT_DOCUMENT_FILE)
-    const tmpPath = `${documentPath}.${uuidv7()}.tmp`
-    const touchModified = options.touchModified ?? true
-    try {
-      this.assertDocumentUnchanged(project.path, options.expectedDocumentHash)
-      const persistedProject = {
-        ...project,
-        modified: touchModified ? new Date().toISOString() : project.modified,
-      }
-      const { path: _path, loadWarnings: _warnings, projectWarnings: _projectWarnings, ...persistable } = persistedProject
-      const serialized = JSON.stringify(persistable, null, 2)
-      writeFileSync(tmpPath, serialized, 'utf8')
-      this.assertDocumentUnchanged(project.path, options.expectedDocumentHash)
-      renameSync(tmpPath, documentPath)
-      this.documentVersions.set(documentPath, this.hashDocument(serialized))
-      this.documentSaveError = null
-      if (this.currentProject?.path === project.path && this.currentProject.id === project.id) {
-        this.currentProject = persistedProject
-      }
-      this.logger.debug('project saved', { path: project.path })
-      return ok(undefined as void)
-    } catch (e: unknown) {
-      if (e instanceof ExternalDocumentChangedError) {
-        return err(ErrorCode.EXTERNAL_DOCUMENT_CHANGED, e.message)
-      }
-      const msg = e instanceof Error ? e.message : String(e)
-      this.logger.error('project save failed', { path: project.path, error: msg })
-      return err(ErrorCode.AUTOSAVE_WRITE_FAILED, `Failed to save project: ${msg}`)
-    } finally { try { unlinkSync(tmpPath) } catch { /* Only remove our temporary file. */ } }
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private validateManifest(data: any): Result<void> {
-    if (!data.id || typeof data.id !== 'string') {
-      return err(ErrorCode.VALIDATION_FAILED, 'Missing required field: id')
-    }
-    if (!data.name || typeof data.name !== 'string') {
-      return err(ErrorCode.VALIDATION_FAILED, 'Missing required field: name')
-    }
-    if (!Array.isArray(data.nodes)) {
-      return err(ErrorCode.VALIDATION_FAILED, 'Missing required field: nodes')
-    }
-
-    const ids = new Set<string>()
-    for (const node of data.nodes as ManifestNode[]) {
-      if (!node.id || !node.name || node.order === undefined || node.order === null) {
-        return err(ErrorCode.VALIDATION_FAILED, 'Node missing required fields (id/name/order)')
-      }
-      if (ids.has(node.id)) {
-        this.logger.warn('duplicate node ID detected', { id: node.id })
-      }
-      ids.add(node.id)
-    }
-
-    // Exactly one root node required (v2+).
-    const roots = (data.nodes as ManifestNode[]).filter(n => n.parentId === null)
-    if (roots.length !== 1) {
-      return err(
-        ErrorCode.INVALID_HIERARCHY,
-        `Expected exactly one root node, found ${roots.length}`
-      )
-    }
-
-    if (this.hasCircularRefs(data.nodes)) {
-      return err(ErrorCode.INVALID_HIERARCHY, 'Project contains circular parent references')
-    }
-
-    return ok(undefined as void)
-  }
-
-  // Collect non-fatal, path-qualified warnings about template integrity and
-  // typed-value mismatches. NEVER mutates or coerces — values are left exactly
-  // as written on disk; the app surfaces these to the user.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private collectLoadWarnings(data: any): ManifestWarning[] {
-    const warnings: ManifestWarning[] = []
-    const templates: Record<string, NodeTemplate> =
-      data.templates && typeof data.templates === 'object' ? data.templates : {}
-    const nodes = (data.nodes ?? []) as ManifestNode[]
-
-    // Structurally invalid template definitions.
-    for (const [id, template] of Object.entries(templates)) {
-      const idCheck = validateTemplateId(id)
-      if (!idCheck.valid) {
-        warnings.push({
-          path: `templates.${id}`,
-          code: 'INVALID_TEMPLATE_ID',
-          message: idCheck.message ?? 'Invalid template id',
-        })
-        continue
-      }
-      const tplCheck = validateTemplate(template as NodeTemplate)
-      if (!tplCheck.valid) {
-        warnings.push({
-          path: `templates.${id}`,
-          code: 'INVALID_TEMPLATE',
-          message: tplCheck.message ?? 'Invalid template',
-        })
-        continue
-      }
-      for (const [key, field] of Object.entries(templateFields(template as NodeTemplate))) {
-        if (field.type !== 'reference' || field.default === undefined || field.default === null) {
-          continue
-        }
-        const targetCheck = validateReferenceTarget(field.default, nodes)
-        if (!targetCheck.valid) {
-          warnings.push({
-            path: `templates.${id}.fields.${key}.default`,
-            code: 'INVALID_REFERENCE',
-            message: `${targetCheck.message} (got ${JSON.stringify(field.default)})`,
-          })
-        }
-      }
-    }
-
-    // Per-node: dangling templateId and typed-value mismatches.
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i]
-      const templateId = node.templateId ?? null
-      if (templateId === null) continue
-
-      const template = templates[templateId]
-      if (!template) {
-        warnings.push({
-          path: `nodes[${i}].templateId`,
-          code: 'TEMPLATE_NOT_FOUND',
-          message: `Node references unknown template "${templateId}"`,
-        })
-        continue
-      }
-
-      // The referenced template may itself be structurally invalid (already
-      // warned above). templateFields() is null-safe, so we never throw on a
-      // missing/non-iterable `fields` — load stays non-fatal.
-      const props = node.properties ?? {}
-      for (const [key, field] of Object.entries(templateFields(template))) {
-        const value = props[key]
-        if (value === undefined || value === null || value === '') {
-          // A required field that has no value is a (non-fatal) integrity
-          // warning — this gives the `required` flag a real, surfaced meaning
-          // without hard-blocking edits.
-          if (field.required) {
-            warnings.push({
-              path: `nodes[${i}].properties.${key}`,
-              code: 'MISSING_REQUIRED',
-              message: `Required field "${key}" is not set`,
-            })
-          }
-          continue
-        }
-        const check = validateTypedPropertyValue(value, field)
-        if (!check.valid) {
-          warnings.push({
-            path: `nodes[${i}].properties.${key}`,
-            code: 'INVALID_TYPED_VALUE',
-            message: `${check.message} (got ${JSON.stringify(value)})`,
-          })
-          continue
-        }
-        const targetCheck = field.type === 'reference'
-          ? validateReferenceTarget(value, nodes, node.id)
-          : { valid: true }
-        if (!targetCheck.valid) {
-          warnings.push({
-            path: `nodes[${i}].properties.${key}`,
-            code: 'INVALID_REFERENCE',
-            message: `${targetCheck.message} (got ${JSON.stringify(value)})`,
-          })
-        }
-      }
-    }
-
-    return warnings
-  }
-
-  private collectProjectWarnings(projectPath: string): ProjectWarning[] {
-    const cloudPath = detectCloudSyncPath(projectPath)
-    if (!cloudPath) return []
-
-    return [{
-      code: 'CLOUD_SYNC_PROJECT',
-      title: `Project is inside ${cloudPath.provider}`,
-      message: 'Cloud sync can corrupt Manifest search/history indexes because SQLite WAL files must stay in lockstep. Keep Manifest projects in a local folder and back up/export snapshots separately.',
-      provider: cloudPath.provider,
-      path: projectPath,
-    }]
-  }
-
-  private withProjectWarnings(project: Project, projectWarnings: ProjectWarning[]): Project {
-    if (projectWarnings.length === 0) return project
-    return {
-      ...project,
-      projectWarnings,
-    }
-  }
-
-  private withLoadWarnings(project: Project, loadWarnings: ManifestWarning[]): Project {
-    if (loadWarnings.length === 0) return project
-    return {
-      ...project,
-      loadWarnings,
-    }
-  }
-
-  private hasCircularRefs(nodes: ManifestNode[]): boolean {
-    const parentMap = new Map<string, string | null>()
-    for (const node of nodes) {
-      parentMap.set(node.id, node.parentId ?? null)
-    }
-    for (const node of nodes) {
-      const visited = new Set<string>()
-      let current: string | null = node.id
-      while (current !== null) {
-        if (visited.has(current)) return true
-        visited.add(current)
-        current = parentMap.get(current) ?? null
-      }
-    }
-    return false
-  }
-
 }
 
-// ─── nodeHistory helpers (private, file-scope) ─────────────────────────────
-
-interface NodeStateProjection {
-  presence: 'present' | 'absent'
-  nodeName: string | null
-  parentId: string | null
-  nodeOrder: number | null
-  properties: Record<string, string | number | boolean | null> | null
-  templateId: string | null
-}
-
-function absentState(): NodeStateProjection {
-  return {
-    presence: 'absent',
-    nodeName: null,
-    parentId: null,
-    nodeOrder: null,
-    properties: null,
-    templateId: null,
-  }
-}
-
-function projectStateForNode(project: Project, nodeId: string): NodeStateProjection {
-  const node = project.nodes.find(n => n.id === nodeId)
-  if (!node) return absentState()
-  return {
-    presence: 'present',
-    nodeName: node.name,
-    parentId: node.parentId,
-    nodeOrder: node.order,
-    properties: node.properties,
-    templateId: node.templateId ?? null,
-  }
-}
-
-function statesEqual(a: NodeStateProjection, b: NodeStateProjection): boolean {
-  if (a.presence !== b.presence) return false
-  if (a.nodeName !== b.nodeName) return false
-  if (a.parentId !== b.parentId) return false
-  if (a.nodeOrder !== b.nodeOrder) return false
-  if (a.templateId !== b.templateId) return false
-  return propsEqualOrBothNull(a.properties, b.properties)
-}
-
-// Build a node's initial property map from its template field defaults.
-function seedDefaults(template: NodeTemplate): Record<string, string | number | boolean | null> {
-  const props: Record<string, string | number | boolean | null> = {}
-  // templateFields() is null-safe against malformed templates.
-  for (const [key, field] of Object.entries(templateFields(template))) {
-    if (field.default !== undefined && field.default !== null) {
-      props[key] = field.default
-    }
-  }
-  return props
-}
-
-function propsEqualOrBothNull(
-  a: Record<string, string | number | boolean | null> | null,
-  b: Record<string, string | number | boolean | null> | null,
-): boolean {
-  if (a === null || b === null) return a === b
-  const aKeys = Object.keys(a)
-  const bKeys = Object.keys(b)
-  if (aKeys.length !== bKeys.length) return false
-  for (const key of aKeys) {
-    if (!(key in b)) return false
-    if (a[key] !== b[key]) return false
-  }
-  return true
-}
