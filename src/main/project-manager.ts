@@ -963,6 +963,7 @@ export class ProjectManager {
       skipped: out.skipped.slice(0, CAP),
       warnings: out.warnings.slice(0, CAP),
       capped: out.skipped.length > CAP || out.warnings.length > CAP,
+      ...(out.suggestedNameColumn ? { suggestedNameColumn: out.suggestedNameColumn } : {}),
     })
   }
 

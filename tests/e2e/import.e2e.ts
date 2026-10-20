@@ -123,6 +123,31 @@ test('imported nodes show as added in a snapshot compare', async ({
   await expect(appPage.getByTestId('snapshot-diff-row').filter({ hasText: 'Widget A' })).toBeVisible()
 })
 
+test('repeated names offer a unique column as the name, and the swap imports every row', async ({
+  appPage,
+  electronApp,
+  workspaceDir,
+}) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Asset Lab')
+
+  const csvPath = join(workspaceDir, 'assets.csv')
+  writeFileSync(csvPath, 'Name,Asset Tag\nBulldozer,AT-1\nBulldozer,AT-2\nGrader,AT-3\n', 'utf8')
+  await clickNativeMenuCommand(electronApp, 'project:import')
+  await setDialogPath(electronApp, csvPath)
+  await appPage.getByTestId('import-choose-file').click()
+  await appPage.getByTestId('import-validate').click()
+  const summary = appPage.getByTestId('import-summary')
+  await expect(summary).toContainText('2 will import')
+  await expect(appPage.getByTestId('import-name-suggestion')).toContainText('Asset Tag')
+
+  await appPage.getByTestId('import-use-suggested-name').click()
+  await expect(summary).toContainText('3 will import')
+  await expect(summary).toContainText('0 skipped')
+  await expect(appPage.getByTestId('import-name-suggestion')).toHaveCount(0)
+  await expect(appPage.getByTestId('import-name-column')).toHaveValue('Asset Tag')
+  await expect(appPage.getByTestId('import-col-include-Name')).toBeChecked()
+})
+
 test('a parent_path column defaults to path mode and places rows under the resolved node', async ({
   appPage,
   electronApp,

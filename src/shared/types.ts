@@ -184,6 +184,9 @@ export interface ImportPlan {
   skipped: ImportIssue[]
   warnings: ImportIssue[]
   capped: boolean
+  // A header whose values are unique in every row, offered when rows were
+  // skipped because the chosen name column repeats within the file.
+  suggestedNameColumn?: string
 }
 
 // Outcome of an applied import. Issue arrays are capped for transport (same as

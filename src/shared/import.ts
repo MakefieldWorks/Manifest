@@ -52,6 +52,9 @@ export interface PlanOutput {
   // A mapping-level error (not a per-row problem) — e.g. duplicate keys or a
   // missing name column. When set, nothing is imported.
   mappingError?: string
+  // Set when rows were skipped because the name column repeats within the file
+  // and another column has a unique, valid name in every row (e.g. an asset tag).
+  suggestedNameColumn?: string
 }
 
 const DEFAULT_PATH_SEPARATOR = ' / '
@@ -77,6 +80,8 @@ export function planImport(
   mapping: ImportMapping,
   templates: Record<string, NodeTemplate>,
   nodes: ManifestNode[],
+  // Internal: false when re-planning to verify a suggested name column.
+  suggest = true,
 ): PlanOutput {
   const out: PlanOutput = { create: [], update: [], skipped: [], warnings: [] }
 
@@ -306,6 +311,7 @@ export function planImport(
   }
 
   // ── Per-row planning ────────────────────────────────────────────────────────
+  let inFileCollisions = 0
   rows.forEach((cells, r) => {
     const fileRow = r + 2 // header is file row 1
     const name = (cells[nameIdx] ?? '').trim()
@@ -438,6 +444,9 @@ export function planImport(
         out.skipped.push({ row: fileRow, column: mapping.keyColumn, reason: `no existing node matched ${mapping.keyColumn} "${keyValue}", and a node named "${name}" already exists under the target parent — not created` })
       } else {
         out.skipped.push({ row: fileRow, column: mapping.nameColumn, reason: `name "${name}" already exists under the target parent` })
+        // Only a clash with an earlier row of this file means the name column
+        // itself repeats; a clash with an existing node is a re-import.
+        if (childByName(parentId, name) === undefined) inFileCollisions++
       }
       return
     }
@@ -459,7 +468,83 @@ export function planImport(
     commitKeyClaim?.()
   })
 
+  if (suggest && inFileCollisions > 0 && !updateExisting) {
+    const suggestion = verifiedNameColumn(rows, headers, mapping, templates, nodes, fields, out)
+    if (suggestion) out.suggestedNameColumn = suggestion
+  }
+
   return out
+}
+
+// The mapping the dialog applies when the user accepts a suggested name
+// column: the candidate becomes the name, and the old name column becomes an
+// included property under its suggested key.
+export function swapNameColumn(mapping: ImportMapping, header: string): ImportMapping {
+  const previous = mapping.nameColumn
+  return {
+    ...mapping,
+    nameColumn: header,
+    columns: [
+      ...mapping.columns.filter(c => c.header !== header && c.header !== previous),
+      { header: previous, key: suggestKey(previous), include: true },
+    ],
+  }
+}
+
+// Offer the best-ranked unique column only if re-planning with it actually
+// clears every name clash and skips fewer rows; this rules out candidates that
+// collide with existing nodes or whose swap would break the mapping.
+function verifiedNameColumn(
+  rows: string[][],
+  headers: string[],
+  mapping: ImportMapping,
+  templates: Record<string, NodeTemplate>,
+  nodes: ManifestNode[],
+  fields: ReturnType<typeof templateFields>,
+  out: PlanOutput,
+): string | null {
+  const exclude = new Set([mapping.nameColumn])
+  if (mapping.placement === 'path' && mapping.pathColumn) exclude.add(mapping.pathColumn)
+  // A column feeding a template field would lose that value if it became the name.
+  for (const c of mapping.columns) if (c.include && fields[c.key.trim()]) exclude.add(c.header)
+  for (const header of uniqueNameColumns(rows, headers, exclude).slice(0, 3)) {
+    const trial = planImport(rows, headers, swapNameColumn(mapping, header), templates, nodes, false)
+    if (trial.mappingError) continue
+    if (trial.skipped.length < out.skipped.length && trial.skipped.every(s => s.column !== header)) return header
+  }
+  return null
+}
+
+// Identifier-like headers rank first, so "Asset Tag" beats an incidentally
+// unique column such as "Order Number" or "Purchase Cost".
+const NAME_HINTS = [/tag|hostname|serial/i, /name|\bid\b|code|number/i]
+
+// Columns that could replace the name column without any in-file collisions,
+// best first: every row has a non-empty, valid node name and no two rows share
+// one (case-insensitively, matching how sibling names collide). Headers that
+// appear more than once are ambiguous and never offered.
+export function uniqueNameColumns(rows: string[][], headers: string[], exclude: Set<string>): string[] {
+  if (rows.length < 2) return []
+  const candidates = headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => !exclude.has(h) && headers.indexOf(h) === headers.lastIndexOf(h))
+    .filter(({ i }) => {
+      const seen = new Set<string>()
+      for (const cells of rows) {
+        const v = (cells[i] ?? '').trim()
+        if (!v || !validateNodeName(v).valid) return false
+        const k = v.toLowerCase()
+        if (seen.has(k)) return false
+        seen.add(k)
+      }
+      return true
+    })
+  const rank = (h: string): number => {
+    const hit = NAME_HINTS.findIndex(re => re.test(h))
+    return hit === -1 ? NAME_HINTS.length : hit
+  }
+  candidates.sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
+  return candidates.map(c => c.h)
 }
 
 // Re-exported for callers that want to validate a single value the same way the

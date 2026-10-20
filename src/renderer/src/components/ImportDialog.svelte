@@ -220,6 +220,18 @@
     }
   }
 
+  // Swap in the suggested name column. Mirrors swapNameColumn, the mapping main
+  // verified the suggestion against: the old name column becomes an included
+  // property under its suggested key.
+  async function useSuggestedName(header: string) {
+    const previous = nameColumn
+    nameColumn = header
+    columnKey = { ...columnKey, [previous]: suggestKey(previous) }
+    columnInclude = { ...columnInclude, [previous]: true }
+    touched()
+    await validate()
+  }
+
   async function doImport() {
     if (!filePath) return
     error = null
@@ -469,6 +481,20 @@
                   {/each}
                   {#if plan.skipped.length > 5}<li class="text-xs text-stone-400">…and {plan.skippedCount - 5} more</li>{/if}
                 </ul>
+              {/if}
+              {#if plan.suggestedNameColumn}
+                {@const suggested = plan.suggestedNameColumn}
+                <div class="mt-2 flex items-center gap-2 flex-wrap" data-testid="import-name-suggestion">
+                  <p class="text-xs text-stone-600">
+                    Some rows share a name. “{suggested}” is different in every row.
+                  </p>
+                  <button onclick={() => useSuggestedName(suggested)} disabled={busy}
+                    class="bg-white hover:bg-stone-50 text-stone-700 border border-stone-200 disabled:opacity-50
+                           text-xs font-medium px-2.5 py-1 rounded-md cursor-default"
+                    data-testid="import-use-suggested-name">
+                    Use “{suggested}” as the name
+                  </button>
+                </div>
               {/if}
               {#if plan.capped}
                 <p class="text-xs text-stone-400 mt-1">Counts above are the exact totals; only the first few skipped rows are listed (warnings are counted only).</p>
