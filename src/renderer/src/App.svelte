@@ -8,25 +8,42 @@
   let interruptedHistory = $state(false)
   let externalDocumentConflict = $state(false)
   let archiveOpen = $state(false)
-  import type { EditHistoryState, Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, ReferenceBlocker, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
-  import { isUsableTemplate, templateLabel } from '../../shared/validation'
-  import { CURRENT_PROJECT_REF, snapshotRefLabel } from '../../shared/snapshot-ref'
-  import {
-    createDisabledMenuCommandState,
-    type MenuCommandId,
-    type MenuCommandState,
-  } from '../../shared/menu-commands'
+  import type { EditHistoryState, Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
+  import { isUsableTemplate } from '../../shared/validation'
+  import { CURRENT_PROJECT_REF } from '../../shared/snapshot-ref'
+  import type { MenuCommandId, MenuCommandState } from '../../shared/menu-commands'
   import type { MergedTree } from '../../shared/merged-tree'
   import { computeSubtreeSummaries, templatesForNode } from '../../shared/merged-tree'
   import type { RecentProject, WorkspaceSettings } from '../../shared/ipc'
   import type { BatchPropertyUpdateRequest } from '../../shared/batch-properties'
   import type { ReportFormat } from '../../shared/report'
-  import { hasInventoryFilters, hasPropertyPredicate, type InventoryFilters } from '../../shared/inventory-filters'
+  import { hasInventoryFilters, type InventoryFilters } from '../../shared/inventory-filters'
   import { DEFAULT_INVENTORY_COLUMNS, type InventoryColumn, type InventorySortDirection } from '../../shared/inventory-table'
-  import { buildTree, getSiblingIndex, getAncestorIds } from './lib/tree'
+  import { buildTree, getSiblingIndex, getDescendantIds } from './lib/tree'
   import { flattenTree } from './lib/tree-rows'
   import { isTextEditing } from './lib/edit-focus'
   import { cycleIndex } from './lib/tree-typeahead'
+  import {
+    buildMenuCommandState as buildMenuCommandStateFor,
+    canUndoProject as canUndoProjectFor,
+    editShortcutFor,
+    type AppState,
+    type CommandContext,
+  } from './lib/app-commands'
+  import { pruneSelection, selectWithModifiers, singleSelection, type SelectionState } from './lib/selection'
+  import { expandToReveal, resolveCompareSelectionId, scopeSelectionId, seedCompareExpanded } from './lib/compare-session'
+  import { detailReadOnlyReason, editLockReason, formatProjectMode, isEditingLocked, type CompareLabels, type EditLockState } from './lib/project-status'
+  import { inventoryFilterCount as countInventoryFilters, searchRevealIds } from './lib/inventory-search'
+  import { deleteSubtreeConfirmMessage, referenceBlockersConfirmMessage, referenceBlockersFromContext } from './lib/node-delete'
+  import {
+    DEFAULT_PANEL_WIDTH,
+    DEFAULT_TREE_WIDTH,
+    TABLE_MIN_TREE_WIDTH,
+    WORKSPACE_SETTINGS_SAVE_DELAY_MS,
+    dragPaneWidth,
+    serializeWorkspacePaneSettings,
+    type PaneHandle,
+  } from './lib/pane-layout'
   import ManifestView from './components/ManifestView.svelte'
   import DetailPane from './components/DetailPane.svelte'
   import MoveToDialog from './components/MoveToDialog.svelte'
@@ -40,6 +57,15 @@
   import RecoveryDialog from './components/RecoveryDialog.svelte'
   import RevertDialog from './components/RevertDialog.svelte'
   import SnapshotsPanel from './components/SnapshotsPanel.svelte'
+  import WelcomeScreen from './components/WelcomeScreen.svelte'
+  import CreateProjectForm from './components/CreateProjectForm.svelte'
+  import ProjectTitlebar from './components/ProjectTitlebar.svelte'
+  import ProjectWarningsBanner from './components/ProjectWarningsBanner.svelte'
+  import LoadWarningsBanner from './components/LoadWarningsBanner.svelte'
+  import ImportSummaryBanner from './components/ImportSummaryBanner.svelte'
+  import InventorySearchBar from './components/InventorySearchBar.svelte'
+  import AddChildForm from './components/AddChildForm.svelte'
+  import PaneResizeHandle from './components/PaneResizeHandle.svelte'
 
   let editHistory: EditHistoryState = $state({ undoLabel: null, redoLabel: null })
   let undoRedoBusy = $state(false)
@@ -58,21 +84,12 @@
 
   function handleEditKeydown(event: KeyboardEvent) {
     if (event.isComposing || event.altKey || isTextEditing(document.activeElement)) return
-    const modifier = desktopChrome.platform === 'darwin' ? event.metaKey : event.ctrlKey
-    if (!modifier) return
-    const key = event.key.toLowerCase()
-    if (key === 'd' && !event.shiftKey) {
-      event.preventDefault()
-      event.stopPropagation()
-      void runMenuCommand('node:duplicate')
-      return
-    }
-    const direction = key === 'z' ? (event.shiftKey ? 'redo' : 'undo') :
-      key === 'y' && event.ctrlKey ? 'redo' : null
-    if (!direction) return
+    const shortcut = editShortcutFor(event, desktopChrome.platform)
+    if (!shortcut) return
     event.preventDefault()
     event.stopPropagation()
-    void applyUndoRedo(direction)
+    if (shortcut === 'duplicate') void runMenuCommand('node:duplicate')
+    else void applyUndoRedo(shortcut)
   }
 
   // Cancel stale replies when another edit, close, or project switch wins the race.
@@ -88,9 +105,38 @@
     return () => { cancelled = true }
   })
 
-  const canUndoProject = $derived.by(() => appState === 'open' && project !== null && !editingLocked &&
-    !archiveOpen && !snapshotCreating && !snapshotComparing && !importDialogOpen && !templateManagerOpen &&
-    !duplicateNodeId && !batchDialogOpen && !moveToNodeId && !addingChildTo && !revertDialogSnapshotName && !recoveryDialogPoint)
+  // Everything the command-availability rules in lib/app-commands read. Built
+  // as a $derived so menu state, undo buttons, and keyboard shortcuts all see
+  // the same snapshot of App's state.
+  const commandContext = $derived.by<CommandContext>(() => ({
+    appState,
+    hasProject: project !== null,
+    creating,
+    editingLocked,
+    textEditing,
+    undoRedoBusy,
+    editHistory,
+    archiveOpen,
+    importDialogOpen,
+    templateManagerOpen,
+    batchDialogOpen,
+    duplicateNodeId,
+    moveToNodeId,
+    addingChildTo,
+    revertDialogSnapshotName,
+    recoveryDialogPoint,
+    snapshotCreating,
+    snapshotComparing,
+    snapshotRestoringName,
+    recoveryApplyingId,
+    selectedId,
+    selectedCount: selectedIds.size,
+    selectedNode,
+    compareMode,
+    compareLoaded: mergedTree !== null,
+  }))
+
+  const canUndoProject = $derived(canUndoProjectFor(commandContext))
 
   async function applyUndoRedo(direction: 'undo' | 'redo') {
     if (!canUndoProject || !editHistory[direction === 'undo' ? 'undoLabel' : 'redoLabel']) return
@@ -109,8 +155,6 @@
       showToast(`${direction === 'undo' ? 'Undid' : 'Redid'} ${label?.toLowerCase()}`)
     } finally { undoRedoBusy = false }
   }
-
-  type AppState = 'welcome' | 'creating' | 'loading' | 'open'
 
   // ─── State ────────────────────────────────────────────────────────────────
 
@@ -150,28 +194,13 @@
   let searchInputEl: HTMLInputElement | null = $state(null)
 
   const inventoryFiltersActive = $derived(hasInventoryFilters(searchFilters))
-  const inventoryFilterCount = $derived([
-    searchFilters.subtreeId,
-    searchFilters.templateId,
-    hasPropertyPredicate(searchFilters),
-    searchFilters.missingRequired,
-  ].filter(Boolean).length)
+  const inventoryFilterCount = $derived(countInventoryFilters(searchFilters))
   const searchActive = $derived(searchQuery.trim().length > 0 || inventoryFiltersActive)
   const searchMatchSet = $derived(new Set(searchResults.map(r => r.nodeId)))
   const searchResultMap = $derived(new Map(searchResults.map(r => [r.nodeId, r])))
   const searchIncludeIds = $derived.by(() => {
     if (!project || !searchActive || searching) return null
-    const parentMap = new Map(project.nodes.map(n => [n.id, n.parentId]))
-    const ids = new Set<string>()
-    for (const result of searchResults) {
-      ids.add(result.nodeId)
-      let current = parentMap.get(result.nodeId) ?? null
-      while (current !== null) {
-        ids.add(current)
-        current = parentMap.get(current) ?? null
-      }
-    }
-    return ids
+    return searchRevealIds(project.nodes, searchResults)
   })
 
   // Inline add-child state
@@ -221,8 +250,8 @@
   let compareExpanded: Set<string> = $state(new Set())
 
   // Resizable pane widths (px).
-  let treeWidth:  number = $state(288)  // 18rem default
-  let panelWidth: number = $state(320)  // 20rem default
+  let treeWidth:  number = $state(DEFAULT_TREE_WIDTH)
+  let panelWidth: number = $state(DEFAULT_PANEL_WIDTH)
   let workspaceSettingsLoaded: boolean = $state(false)
   let unsubscribeWindowFocus: (() => void) | null = null
   let unsubscribeLayoutReset: (() => void) | null = null
@@ -235,11 +264,11 @@
   let lensExpandedFolds: Set<string> = $state(new Set())
 
   // Drag-to-resize state.
-  let draggingHandle: 'tree' | 'panel' | null = $state(null)
+  let draggingHandle: PaneHandle | null = $state(null)
   let dragStartX = 0
   let dragStartWidth = 0
 
-  function startDrag(handle: 'tree' | 'panel', e: MouseEvent) {
+  function startDrag(handle: PaneHandle, e: MouseEvent) {
     draggingHandle = handle
     dragStartX = e.clientX
     dragStartWidth = handle === 'tree' ? treeWidth : panelWidth
@@ -248,13 +277,9 @@
 
   function onDragMove(e: MouseEvent) {
     if (!draggingHandle) return
-    const delta = e.clientX - dragStartX
-    if (draggingHandle === 'tree') {
-      treeWidth = Math.max(160, Math.min(520, dragStartWidth + delta))
-    } else {
-      // Panel handle is on its left edge — dragging left grows the panel.
-      panelWidth = Math.max(240, Math.min(600, dragStartWidth - delta))
-    }
+    const width = dragPaneWidth(draggingHandle, dragStartWidth, e.clientX - dragStartX)
+    if (draggingHandle === 'tree') treeWidth = width
+    else panelWidth = width
   }
 
   function onDragEnd() {
@@ -267,7 +292,6 @@
   let unsubscribeMenuCommands: (() => void) | null = null
   let unsubscribeProjectOpenFromOs: (() => void) | null = null
   const brandMark = './manifest-mark.svg'
-  const WORKSPACE_SETTINGS_SAVE_DELAY_MS = 250
   const desktopChrome = window.api.platform
 
   // ─── Derived ──────────────────────────────────────────────────────────────
@@ -319,30 +343,26 @@
     return project
   })
 
-  const projectModeLabel = $derived.by(() => {
-    if (compareMode && mergedTree) {
-      return `Comparing ${snapshotRefLabel(mergedTree.fromSnapshot)} -> ${snapshotRefLabel(mergedTree.toSnapshot)}`
-    }
-    if (workingCopyBaseSnapshot) {
-      return workingCopyDirty ? 'Unsnapshotted changes' : `Current project matches ${workingCopyBaseSnapshot}`
-    }
-    return workingCopyDirty ? 'Unsnapshotted changes' : 'Current Project'
-  })
+  // The loaded comparison's snapshot pair, or null outside compare mode.
+  const compareLabels = $derived<CompareLabels | null>(compareMode && mergedTree ? mergedTree : null)
 
-  // Tree edits are locked while comparing, reverting, or applying a recovery point.
-  // Each of those operations mutates currentProject in main; interleaving a renderer
-  // mutation can leave the project in a half-restored state.
-  const editingLocked = $derived(
-    interruptedHistory || externalDocumentConflict || undoRedoBusy || snapshotCreating || compareMode || snapshotRestoringName !== null || recoveryApplyingId !== null
-  )
+  const projectModeLabel = $derived(formatProjectMode(compareLabels, workingCopyBaseSnapshot, workingCopyDirty))
+
+  // Tree edits are locked while comparing, reverting, or applying a recovery
+  // point; see lib/project-status for why.
+  const editLock = $derived<EditLockState>({
+    interruptedHistory,
+    externalDocumentConflict,
+    undoRedoBusy,
+    snapshotCreating,
+    compareMode,
+    snapshotRestoringName,
+    recoveryApplyingId,
+  })
+  const editingLocked = $derived(isEditingLocked(editLock))
 
   function lockReason(): string {
-    if (interruptedHistory) return 'Review the unfinished history operation before editing.'
-    if (externalDocumentConflict) return 'Resolve the external project change before editing.'
-    if (compareMode) return 'Exit compare to edit the current project.'
-    if (snapshotRestoringName) return 'Wait for revert to finish before editing.'
-    if (recoveryApplyingId) return 'Wait for recovery to finish before editing.'
-    return ''
+    return editLockReason(editLock)
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -480,10 +500,7 @@
     // so don't clobber them just because the live project mutated.
     const isGhostSelection = selectedId?.startsWith('ghost:') ?? false
     if (!isGhostSelection) {
-      const liveIds = new Set(p.nodes.map(node => node.id))
-      selectedIds = new Set([...selectedIds].filter(id => liveIds.has(id)))
-      selectionRecency = selectionRecency.filter(id => liveIds.has(id))
-      if (selectionAnchorId && !liveIds.has(selectionAnchorId)) selectionAnchorId = null
+      applySelection(pruneSelection(currentSelection(), new Set(p.nodes.map(node => node.id))))
     }
     if (selectedId && !isGhostSelection && !p.nodes.find(n => n.id === selectedId)) {
       const root = p.nodes.find(n => n.parentId === null)
@@ -584,43 +601,7 @@
   }
 
   function buildMenuCommandState(): MenuCommandState {
-    const state = createDisabledMenuCommandState()
-    const hasOpenProject = appState === 'open' && project !== null
-    const projectBusy = duplicateNodeId !== null || batchDialogOpen || undoRedoBusy || snapshotCreating || snapshotRestoringName !== null || recoveryApplyingId !== null
-    const canUseProject = hasOpenProject && !projectBusy
-    const canEditProject = canUseProject && !editingLocked
-    const selectedLiveNode = canEditProject && selectedIds.size === 1 && selectedNode && !selectedId?.startsWith('ghost:')
-      ? selectedNode
-      : null
-    const selectedEditableChild = selectedLiveNode !== null && selectedLiveNode.parentId !== null
-    const compareLoaded = hasOpenProject && compareMode && mergedTree !== null
-    const canMutateSelectedChild = Boolean(selectedEditableChild) && !textEditing &&
-      !importDialogOpen && !templateManagerOpen && !moveToNodeId && !addingChildTo &&
-      !snapshotComparing && !revertDialogSnapshotName && !recoveryDialogPoint
-
-    state['project:undo'] = textEditing || (canUndoProject && editHistory.undoLabel !== null)
-    state['project:redo'] = textEditing || (canUndoProject && editHistory.redoLabel !== null)
-    state['project:new'] = appState === 'welcome' && project === null
-    state['project:open'] = appState !== 'loading' && appState !== 'creating' && !creating && !projectBusy
-    state['project:save'] = canUseProject
-    state['project:close'] = canUseProject
-    state['project:import'] = canEditProject
-    state['project:templates'] = canEditProject
-    state['project:snapshots'] = canUseProject
-    state['project:search'] = canUseProject && !compareMode
-    state['compare:exit'] = compareLoaded && !projectBusy
-    state['report:copyMarkdown'] = compareLoaded && !projectBusy
-    state['report:exportMarkdown'] = compareLoaded && !projectBusy
-    state['report:exportCsv'] = compareLoaded && !projectBusy
-    state['report:exportHtml'] = compareLoaded && !projectBusy
-    state['node:addChild'] = selectedLiveNode !== null
-    state['node:rename'] = selectedLiveNode !== null
-    state['node:duplicate'] = canMutateSelectedChild
-    state['node:moveTo'] = canMutateSelectedChild
-    state['node:delete'] = canMutateSelectedChild
-    state['history:reindex'] = canUseProject
-
-    return state
+    return buildMenuCommandStateFor(commandContext)
   }
 
   function canRunMenuCommand(command: MenuCommandId): boolean {
@@ -874,13 +855,6 @@
     workspaceSettingsSaveTimer = null
   }
 
-  function serializeWorkspacePaneSettings(nextTreeWidth: number, nextPanelWidth: number): string {
-    return JSON.stringify({
-      treeWidth: Math.round(nextTreeWidth),
-      panelWidth: Math.round(nextPanelWidth),
-    })
-  }
-
   // ─── Tree actions ─────────────────────────────────────────────────────────
 
   /**
@@ -894,44 +868,29 @@
    * consumes it on entry), so the clear is a no-op there.
    */
   function setSelection(id: string | null): void {
-    selectedId = id
-    selectedIds = id ? new Set([id]) : new Set()
-    selectionRecency = id ? [id] : []
-    selectionAnchorId = id
+    applySelection(singleSelection(id))
     stashedGhostSelection = null
+  }
+
+  function currentSelection(): SelectionState {
+    return { selectedId, selectedIds, selectionRecency, selectionAnchorId }
+  }
+
+  /**
+   * Assign a selection without touching stashedGhostSelection. Compare-mode
+   * entry and exit use this directly because they manage the stash themselves.
+   */
+  function applySelection(next: SelectionState): void {
+    selectedId = next.selectedId
+    selectedIds = next.selectedIds
+    selectionRecency = next.selectionRecency
+    selectionAnchorId = next.selectionAnchorId
   }
 
   function handleSelect(id: string, modifiers?: { toggle: boolean; range: boolean }) {
     selectedScrollAlign = 'auto'
-    if (compareMode || id.startsWith('ghost:') || (!modifiers?.toggle && !modifiers?.range)) {
-      setSelection(id)
-    } else if (modifiers.range && selectedId) {
-      const visibleIds = flatRows.filter(row => !row.id.startsWith('ghost:')).map(row => row.node.id)
-      const anchor = visibleIds.indexOf(selectionAnchorId ?? selectedId)
-      const target = visibleIds.indexOf(id)
-      if (anchor >= 0 && target >= 0) {
-        const [start, end] = anchor < target ? [anchor, target] : [target, anchor]
-        selectedIds = new Set(visibleIds.slice(start, end + 1))
-        selectedId = id
-        selectionRecency = [...selectionRecency.filter(candidate => selectedIds.has(candidate) && candidate !== id), id]
-        stashedGhostSelection = null
-      } else setSelection(id)
-    } else {
-      const next = new Set(selectedIds)
-      if (next.has(id)) {
-        next.delete(id)
-        selectionRecency = selectionRecency.filter(candidate => candidate !== id)
-      } else {
-        next.add(id)
-        selectionRecency = [...selectionRecency.filter(candidate => candidate !== id), id]
-      }
-      selectedIds = next
-      selectedId = next.has(id)
-        ? id
-        : [...selectionRecency].reverse().find(candidate => next.has(candidate)) ?? [...next][0] ?? null
-      selectionAnchorId = selectedId
-      stashedGhostSelection = null
-    }
+    applySelection(selectWithModifiers(currentSelection(), id, modifiers, flatRows, compareMode))
+    stashedGhostSelection = null
     addingChildTo = null
   }
 
@@ -1040,7 +999,7 @@
     duplicateNodeId = null
     const copy = result.data.nodes.find(node => !originalIds.has(node.id) && node.parentId === source.parentId)
     if (copy) {
-      expandedIds = new Set([...expandedIds, ...getAncestorIds(copy.id, result.data.nodes), copy.id])
+      expandedIds = expandToReveal(expandedIds, copy.id, result.data.nodes)
       setSelection(copy.id)
       selectedScrollAlign = 'center'
     }
@@ -1087,13 +1046,10 @@
     const node = project.nodes.find(n => n.id === id)
     if (!node) return
 
-    const children = project.nodes.filter(n => n.parentId === id)
-    const descendantCount = getDescendantCount(id, project.nodes)
+    const descendantCount = getDescendantIds(id, project.nodes).length
 
     if (descendantCount > 0) {
-      const confirmed = window.confirm(
-        `Delete "${node.name}" and its ${descendantCount} descendant${descendantCount === 1 ? '' : 's'}?`
-      )
+      const confirmed = window.confirm(deleteSubtreeConfirmMessage(node.name, descendantCount))
       if (!confirmed) return
     }
 
@@ -1105,25 +1061,9 @@
     }
 
     // Blocked by incoming references? Offer to clear them and force the delete.
-    // Validate the shape — context crosses the IPC boundary as unknown.
-    const rawBlockers = result.error.context?.blockers
-    const blockers = Array.isArray(rawBlockers) ? (rawBlockers as ReferenceBlocker[]) : []
+    const blockers = referenceBlockersFromContext(result.error.context)
     if (blockers.length > 0) {
-      const list = blockers
-        .map(b => {
-          const holder = b.kind === 'template-default' ? `Template "${b.nodeName}" default` : b.nodeName
-          return `• ${holder} → ${b.key} (→ ${b.targetName})`
-        })
-        .join('\n')
-      // Count distinct holders for accurate copy: a holder may contribute more
-      // than one blocker (multiple reference keys), and template defaults aren't
-      // nodes — so blockers.length is not a node count.
-      const n = blockers.length
-      const ref = `reference${n === 1 ? '' : 's'}`
-      const confirmed = window.confirm(
-        `"${node.name}" has ${n} incoming ${ref}:\n\n${list}\n\n` +
-        `Delete "${node.name}" and clear ${n === 1 ? 'it' : `all ${n}`}?`
-      )
+      const confirmed = window.confirm(referenceBlockersConfirmMessage(node.name, blockers))
       if (!confirmed) return
       const forced = await window.api.node.delete(id, { unlinkReferences: true })
       if (forced.ok) {
@@ -1484,27 +1424,11 @@
     if (selectedId?.startsWith('ghost:')) {
       stashedGhostSelection = selectedId
       const root = project?.nodes.find(node => node.parentId === null)
-      selectedId = root?.id ?? null
-      selectedIds = selectedId ? new Set([selectedId]) : new Set()
-      selectionRecency = selectedId ? [selectedId] : []
-      selectionAnchorId = selectedId
+      applySelection(singleSelection(root?.id ?? null))
     } else if (project && selectedId && !project.nodes.find(node => node.id === selectedId)) {
       const root = project.nodes.find(node => node.parentId === null)
-      selectedId = root?.id ?? null
-      selectedIds = selectedId ? new Set([selectedId]) : new Set()
-      selectionRecency = selectedId ? [selectedId] : []
-      selectionAnchorId = selectedId
+      applySelection(singleSelection(root?.id ?? null))
     }
-  }
-
-  function resolveCompareSelectionId(nodeId: string): string {
-    if (!mergedTree) return nodeId
-    if (mergedTree.nodes.some(node => node.id === nodeId)) return nodeId
-
-    const ghostId = `ghost:${nodeId}`
-    if (mergedTree.nodes.some(node => node.id === ghostId)) return ghostId
-
-    return nodeId
   }
 
   async function handleSnapshotCreate(name: string, description: string | null): Promise<boolean> {
@@ -1534,30 +1458,14 @@
 
     if (result.ok) {
       mergedTree = result.data
-      // Seed compareExpanded from normalExpanded ∪ ancestors of every changed node.
-      const changedIds = result.data.nodes
-        .filter(n => n.status !== 'unchanged')
-        .map(n => n.id)
-      const ancestors = new Set<string>()
-      for (const id of changedIds) {
-        for (const aid of getAncestorIds(id, result.data.nodes)) ancestors.add(aid)
-        ancestors.add(id)
-      }
-      compareExpanded = new Set([...expandedIds, ...ancestors])
+      compareExpanded = seedCompareExpanded(expandedIds, result.data.nodes)
       compareMode = true
-      selectedIds = selectedId ? new Set([selectedId]) : new Set()
-      selectionRecency = selectedId ? [selectedId] : []
-      selectionAnchorId = selectedId
+      // Compare mode is single-select: keep the primary, drop the rest.
+      applySelection(singleSelection(selectedId))
       if (result.data.scope) {
-        const scopedSelectionId = result.data.nodes.some(node => node.id === result.data.scope!.nodeId)
-          ? result.data.scope.nodeId
-          : `ghost:${result.data.scope.nodeId}`
-        selectedId = scopedSelectionId
-        selectedIds = new Set([scopedSelectionId])
-        selectionRecency = [scopedSelectionId]
-        selectionAnchorId = scopedSelectionId
-        const scopeAncestors = getAncestorIds(scopedSelectionId, result.data.nodes)
-        compareExpanded = new Set([...compareExpanded, ...scopeAncestors, scopedSelectionId])
+        const scopedSelectionId = scopeSelectionId(result.data.scope.nodeId, result.data.nodes)
+        applySelection(singleSelection(scopedSelectionId))
+        compareExpanded = expandToReveal(compareExpanded, scopedSelectionId, result.data.nodes)
       }
       clearSearch()  // search is a browse-mode aid; don't carry it into compare
 
@@ -1570,13 +1478,9 @@
       // helper would clear it before the side effects below could run.
       if (stashedGhostSelection) {
         if (result.data.nodes.some(n => n.id === stashedGhostSelection)) {
-          selectedId = stashedGhostSelection
-          selectedIds = new Set([stashedGhostSelection])
-          selectionRecency = [stashedGhostSelection]
-          selectionAnchorId = stashedGhostSelection
+          applySelection(singleSelection(stashedGhostSelection))
           // Expand ancestors so the restored ghost is visible.
-          const ghostAncestors = getAncestorIds(stashedGhostSelection, result.data.nodes)
-          compareExpanded = new Set([...compareExpanded, ...ghostAncestors, stashedGhostSelection])
+          compareExpanded = expandToReveal(compareExpanded, stashedGhostSelection, result.data.nodes)
         }
         stashedGhostSelection = null
       }
@@ -1589,16 +1493,14 @@
   /** Called when user clicks a diff row — selects that node in the tree. */
   function handleDiffNodeSelect(nodeId: string) {
     if (compareMode && mergedTree) {
-      const compareSelectionId = resolveCompareSelectionId(nodeId)
+      const compareSelectionId = resolveCompareSelectionId(nodeId, mergedTree.nodes)
       // Inside compare mode, the stash is already null (handleSnapshotCompare
       // consumed it on entry), so setSelection's clear is a defensive no-op.
       setSelection(compareSelectionId)
-      const ancestors = getAncestorIds(compareSelectionId, mergedTree.nodes)
-      compareExpanded = new Set([...compareExpanded, ...ancestors, compareSelectionId])
+      compareExpanded = expandToReveal(compareExpanded, compareSelectionId, mergedTree.nodes)
     } else if (project) {
       setSelection(nodeId)
-      const ancestors = getAncestorIds(nodeId, project.nodes)
-      expandedIds = new Set([...expandedIds, ...ancestors, nodeId])
+      expandedIds = expandToReveal(expandedIds, nodeId, project.nodes)
     }
   }
 
@@ -1703,20 +1605,6 @@
     recoveryDialogPoint = null
     recoveryDialogError = null
   }
-
-  // ─── Utilities ────────────────────────────────────────────────────────────
-
-  function getDescendantCount(nodeId: string, nodes: ManifestNode[]): number {
-    let count = 0
-    const queue = [nodeId]
-    while (queue.length > 0) {
-      const id = queue.shift()!
-      const children = nodes.filter(n => n.parentId === id)
-      count += children.length
-      queue.push(...children.map(c => c.id))
-    }
-    return count
-  }
 </script>
 
 <!-- ─── Window drag region for macOS hidden titlebar ─────────────────────── -->
@@ -1784,162 +1672,29 @@
 <!-- ─── Welcome ────────────────────────────────────────────────────────────── -->
 {#if archiveOpen}<ProjectArchive canExport={appState === 'open' && project !== null} onClose={() => { archiveOpen = false }} />{/if}
 {#if appState === 'welcome'}
-  <div class="flex h-full bg-stone-50">
-    <div class="flex w-full max-w-4xl flex-col px-10 py-10 mx-auto">
-      <header class="flex items-center justify-between border-b border-stone-200 pb-6">
-        <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-white ring-1 ring-stone-200">
-            <img src={brandMark} alt="Manifest logo" class="h-6 w-6" />
-          </div>
-          <div>
-            <h1 class="text-lg font-semibold tracking-tight text-stone-800">Manifest</h1>
-            <p class="mt-0.5 text-sm text-stone-500">Projects</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick={() => { archiveOpen = true }} class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700" data-testid="open-archives-btn">Archives…</button>
-          <button
-            onclick={beginCreateProject}
-            class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100 cursor-default"
-            data-testid="create-project-btn"
-          >
-            New Project…
-          </button>
-          <button
-            onclick={openProject}
-            class="rounded-lg bg-stone-800 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-700 cursor-default"
-            data-testid="open-project-btn"
-          >
-            Open Project…
-          </button>
-        </div>
-      </header>
-
-      {#if error}
-        <div class="mt-6 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 rounded-lg">
-          {error}
-        </div>
-      {/if}
-
-      <main class="pt-8">
-        <h2 class="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Recent projects</h2>
-        {#if recentProjects.length > 0}
-          <div class="mt-3 overflow-hidden rounded-lg border border-stone-200 bg-white" data-testid="recent-project-list">
-            {#each recentProjects as recentProject, index (recentProject.path)}
-              <button
-                onclick={() => openRecentProject(recentProject)}
-                disabled={!recentProject.exists}
-                class="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:opacity-50 {index > 0 ? 'border-t border-stone-100' : ''}"
-                data-testid={index === 0 ? 'reopen-last-project-btn' : 'recent-project-btn'}
-              >
-                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-stone-100 text-xs font-semibold text-stone-500">
-                  {recentProject.name.slice(0, 1).toUpperCase()}
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="truncate text-sm font-medium text-stone-800">{recentProject.name}</div>
-                  <div class="mt-0.5 truncate text-xs text-stone-500">{recentProject.path}</div>
-                </div>
-                {#if !recentProject.exists}
-                  <span class="text-xs font-medium text-stone-400">Unavailable</span>
-                {/if}
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <div class="mt-3 rounded-lg border border-dashed border-stone-300 bg-white px-5 py-8 text-sm text-stone-500" data-testid="empty-recent-projects">
-            <p>No recent projects. Open an existing project or create a new one to get started.</p>
-            <button
-              onclick={openExampleProject}
-              class="mt-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100"
-              data-testid="open-example-project-btn"
-            >
-              Open Example Project
-            </button>
-            <p class="mt-2 text-xs text-stone-400">Explore templates and snapshot history in a reusable sample saved to your Documents folder.</p>
-          </div>
-        {/if}
-      </main>
-    </div>
-  </div>
+  <WelcomeScreen
+    {brandMark}
+    {error}
+    {recentProjects}
+    onOpenArchives={() => { archiveOpen = true }}
+    onCreateProject={beginCreateProject}
+    onOpenProject={openProject}
+    onOpenRecent={openRecentProject}
+    onOpenExample={openExampleProject}
+  />
 
 <!-- ─── Create project form ───────────────────────────────────────────────── -->
 {:else if appState === 'creating'}
-  <div class="flex flex-col h-full items-center justify-center bg-stone-50">
-    <div class="flex flex-col gap-5 w-full max-w-sm px-6">
-
-      <div class="flex items-center gap-3">
-        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white ring-1 ring-stone-200">
-          <img src={brandMark} alt="Manifest logo" class="h-7 w-7" />
-        </div>
-        <div>
-          <h2 class="text-lg font-semibold text-stone-800">New Project</h2>
-          <p class="text-sm text-stone-400 mt-0.5">A folder will be created at the chosen location.</p>
-        </div>
-      </div>
-
-      {#if error}
-        <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      {/if}
-
-      <div class="flex flex-col gap-1.5">
-        <label class="text-xs font-medium text-stone-600 uppercase tracking-wide" for="proj-name">
-          Project Name
-        </label>
-        <input
-          id="proj-name"
-          type="text"
-          bind:value={newName}
-          placeholder="Lab Bench A"
-          class="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm
-                 text-stone-800 placeholder-stone-300 focus:outline-none focus:ring-2
-                 focus:ring-stone-400 focus:border-transparent selectable"
-          onkeydown={(e) => e.key === 'Enter' && createProject()}
-          data-testid="project-name-input"
-        />
-      </div>
-
-      <div class="flex flex-col gap-1.5">
-        <span class="text-xs font-medium text-stone-600 uppercase tracking-wide">Location</span>
-        <div class="flex gap-2">
-          <div class="flex-1 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm
-                      text-stone-500 truncate min-w-0" data-testid="selected-path">
-            {newPath || 'No folder selected'}
-          </div>
-          <button
-            onclick={selectFolder}
-            class="shrink-0 bg-white hover:bg-stone-50 text-stone-600 text-sm
-                   px-3 py-2 rounded-lg border border-stone-200 transition-colors cursor-default"
-            data-testid="choose-folder-btn"
-          >
-            Choose…
-          </button>
-        </div>
-      </div>
-
-      <div class="flex gap-2 pt-1">
-        <button
-          onclick={() => { appState = 'welcome'; error = null }}
-          class="flex-1 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium
-                 px-4 py-2.5 rounded-lg border border-stone-200 transition-colors cursor-default"
-        >
-          Cancel
-        </button>
-        <button
-          onclick={createProject}
-          disabled={!newName.trim() || !newPath || creating}
-          class="flex-1 bg-stone-800 hover:bg-stone-700 disabled:bg-stone-300
-                 text-white text-sm font-medium px-4 py-2.5 rounded-lg
-                 transition-colors cursor-default disabled:cursor-not-allowed"
-          data-testid="create-btn"
-        >
-          {creating ? 'Creating…' : 'Create'}
-        </button>
-      </div>
-
-    </div>
-  </div>
+  <CreateProjectForm
+    {brandMark}
+    {error}
+    bind:name={newName}
+    path={newPath}
+    {creating}
+    onChooseFolder={selectFolder}
+    onCancel={() => { appState = 'welcome'; error = null }}
+    onCreate={createProject}
+  />
 
 <!-- ─── Loading ───────────────────────────────────────────────────────────── -->
 {:else if appState === 'loading'}
@@ -1952,66 +1707,23 @@
   <div class="flex flex-col h-full bg-white" data-testid="project-view">
 
     <!-- Titlebar -->
-    <div
-      class="flex items-center justify-between pr-4 py-2.5 border-b border-stone-200 bg-white
-             shrink-0 {desktopChrome.reservesTrafficLightSpace ? 'pl-20 [-webkit-app-region:drag]' : 'pl-4'}"
-      data-testid="project-titlebar"
-    >
-      <div class="flex items-center gap-3 [-webkit-app-region:no-drag]">
-        <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-50 ring-1 ring-stone-200">
-          <img src={brandMark} alt="Manifest logo" class="h-5 w-5" />
-        </div>
-        <div class="flex flex-col">
-          <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">Manifest</span>
-          <span class="text-sm font-semibold text-stone-800">{project.name}</span>
-          <span class="text-xs text-stone-400">{project.nodes.length} nodes</span>
-        </div>
-        <div
-          class="max-w-[320px] truncate rounded-full border px-2.5 py-1 text-xs font-medium
-                 {compareMode ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}"
-          data-testid="project-mode-badge"
-          title={projectModeLabel}
-        >
-          {projectModeLabel}
-        </div>
-      </div>
-      <div class="flex items-center gap-2 [-webkit-app-region:no-drag]">
-        <button onclick={() => { archiveOpen = true }} class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600" data-testid="open-archives-btn">Archives…</button>
-        <button
-          onclick={() => applyUndoRedo('undo')}
-          disabled={!canUndoProject || !editHistory.undoLabel}
-          title={editHistory.undoLabel ? `Undo ${editHistory.undoLabel.toLowerCase()}` : 'Nothing to undo'}
-          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600 disabled:opacity-40"
-          data-testid="project-undo-btn"
-        >Undo</button>
-        <button
-          onclick={() => applyUndoRedo('redo')}
-          disabled={!canUndoProject || !editHistory.redoLabel}
-          title={editHistory.redoLabel ? `Redo ${editHistory.redoLabel.toLowerCase()}` : 'Nothing to redo'}
-          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600 disabled:opacity-40"
-          data-testid="project-redo-btn"
-        >Redo</button>
-        <button
-          onclick={toggleSnapshots}
-          aria-pressed={snapshotPanelOpen ? 'true' : 'false'}
-          class="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600
-                 transition-colors hover:bg-stone-50 cursor-default"
-          data-testid="open-snapshots-btn"
-        >
-          Snapshots
-        </button>
-        {#if compareMode && mergedTree}
-          <button
-            onclick={exitCompareMode}
-            class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700
-                   transition-colors hover:bg-sky-100 cursor-default"
-            data-testid="exit-compare-btn"
-          >
-            Exit Compare
-          </button>
-        {/if}
-      </div>
-    </div>
+    <ProjectTitlebar
+      {brandMark}
+      projectName={project.name}
+      nodeCount={project.nodes.length}
+      modeLabel={projectModeLabel}
+      {compareMode}
+      compareLoaded={compareMode && mergedTree !== null}
+      reservesTrafficLightSpace={desktopChrome.reservesTrafficLightSpace}
+      canUndo={canUndoProject}
+      {editHistory}
+      {snapshotPanelOpen}
+      onOpenArchives={() => { archiveOpen = true }}
+      onUndo={() => applyUndoRedo('undo')}
+      onRedo={() => applyUndoRedo('redo')}
+      onToggleSnapshots={toggleSnapshots}
+      onExitCompare={exitCompareMode}
+    />
 
     <!-- Project-level warnings banner (non-blocking; environmental risk) -->
     {#key project.path}
@@ -2028,98 +1740,17 @@
       }} />
     {/key}
     {#if showProjectWarnings}
-      <div
-        class="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900"
-        data-testid="project-warnings-banner"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="font-semibold">
-              {projectWarnings[0].title}
-              <span class="font-normal text-amber-700">— local indexes may corrupt under partial sync.</span>
-            </p>
-            <p class="mt-1 text-amber-800">
-              {projectWarnings[0].message}
-            </p>
-          </div>
-          <button
-            onclick={() => { projectWarningsDismissed = true }}
-            class="shrink-0 text-amber-700 hover:text-amber-900 cursor-default"
-            aria-label="Dismiss project warning"
-            data-testid="dismiss-project-warning"
-          >✕</button>
-        </div>
-      </div>
+      <ProjectWarningsBanner warning={projectWarnings[0]} onDismiss={() => { projectWarningsDismissed = true }} />
     {/if}
 
     <!-- Load-time warnings banner (non-blocking; values left as-on-disk) -->
     {#if showLoadWarnings}
-      <div
-        class="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900"
-        data-testid="load-warnings-banner"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="font-semibold">
-              {loadWarnings.length} data issue{loadWarnings.length === 1 ? '' : 's'} found on open
-              <span class="font-normal text-amber-700">— values were left exactly as written on disk.</span>
-            </p>
-            <ul class="mt-1 space-y-0.5">
-              {#each loadWarnings.slice(0, 5) as w (w.path)}
-                <li class="truncate">
-                  <span class="font-mono text-amber-700">{w.path}</span>
-                  <span class="text-amber-800"> — {w.message}</span>
-                </li>
-              {/each}
-              {#if loadWarnings.length > 5}
-                <li class="text-amber-700">…and {loadWarnings.length - 5} more</li>
-              {/if}
-            </ul>
-          </div>
-          <button
-            onclick={() => { loadWarningsDismissed = true }}
-            class="shrink-0 text-amber-700 hover:text-amber-900 cursor-default"
-            aria-label="Dismiss warnings"
-            data-testid="dismiss-load-warnings"
-          >✕</button>
-        </div>
-      </div>
+      <LoadWarningsBanner warnings={loadWarnings} onDismiss={() => { loadWarningsDismissed = true }} />
     {/if}
 
     <!-- Post-import summary -->
     {#if showImportSummary && importSummary}
-      <div
-        class="shrink-0 border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-900"
-        data-testid="import-summary-banner"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="font-semibold">
-              Imported {importSummary.created} node{importSummary.created === 1 ? '' : 's'}
-              {#if importSummary.updated > 0}<span class="font-normal text-emerald-800"> · {importSummary.updated} updated</span>{/if}
-              {#if importSummary.createdParents > 0}<span class="font-normal text-emerald-800"> · {importSummary.createdParents} parent{importSummary.createdParents === 1 ? '' : 's'} created</span>{/if}
-              {#if importSummary.skippedCount > 0}<span class="font-normal text-emerald-800"> · {importSummary.skippedCount} skipped</span>{/if}
-              {#if importSummary.warningCount > 0}<span class="font-normal text-amber-700"> · {importSummary.warningCount} warnings</span>{/if}
-            </p>
-            {#if importSummary.skipped.length > 0}
-              <ul class="mt-1 space-y-0.5">
-                {#each importSummary.skipped.slice(0, 5) as s (s.row + (s.column ?? ''))}
-                  <li class="truncate text-emerald-800">row {s.row}{s.column ? ` · ${s.column}` : ''} — {s.reason}</li>
-                {/each}
-                {#if importSummary.skippedCount > 5}
-                  <li class="text-emerald-700">…and {importSummary.skippedCount - 5} more</li>
-                {/if}
-              </ul>
-            {/if}
-          </div>
-          <button
-            onclick={() => { importSummaryDismissed = true }}
-            class="shrink-0 text-emerald-700 hover:text-emerald-900 cursor-default"
-            aria-label="Dismiss import summary"
-            data-testid="dismiss-import-summary"
-          >✕</button>
-        </div>
-      </div>
+      <ImportSummaryBanner summary={importSummary} onDismiss={() => { importSummaryDismissed = true }} />
     {/if}
 
     <!-- Three-pane body — tree | drag | detail | drag | snapshots -->
@@ -2131,108 +1762,35 @@
 
       <!-- ── Left pane: tree + search ──────────────────────────────────── -->
       <div
-        style="width: {inventoryViewMode === 'table' && !compareMode ? Math.max(treeWidth, 520) : treeWidth}px"
+        style="width: {inventoryViewMode === 'table' && !compareMode ? Math.max(treeWidth, TABLE_MIN_TREE_WIDTH) : treeWidth}px"
         class="shrink-0 flex flex-col bg-stone-50 overflow-hidden"
       >
 
         <!-- Search bar -->
-        <div class="px-3 py-2 border-b border-stone-200">
-          <div class="flex gap-1.5">
-            <div class="relative min-w-0 flex-1">
-              <input
-                bind:this={searchInputEl}
-                type="text"
-                value={searchQuery}
-                oninput={handleSearchInput}
-                onkeydown={handleSearchKeydown}
-                placeholder="Search nodes…"
-                class="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-8 py-1.5
-                       text-sm text-stone-700 placeholder-stone-300 focus:outline-none
-                       focus:ring-1 focus:ring-stone-400 selectable"
-                data-testid="search-input"
-              />
-              <svg class="absolute left-2.5 top-2 w-3.5 h-3.5 text-stone-400" fill="none" viewBox="0 0 16 16">
-                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-              {#if searchQuery}
-                <button
-                  class="absolute right-2.5 top-1.5 text-stone-400 hover:text-stone-600 text-xs"
-                  onclick={() => { searchQuery = ''; runSearch('') }}
-                  aria-label="Clear search text"
-                >✕</button>
-              {/if}
-            </div>
-            <button
-              type="button"
-              class="rounded-lg border px-2 py-1.5 text-xs font-medium"
-              class:border-stone-700={inventoryFiltersOpen || inventoryFiltersActive}
-              class:bg-stone-800={inventoryFiltersOpen || inventoryFiltersActive}
-              class:text-white={inventoryFiltersOpen || inventoryFiltersActive}
-              class:border-stone-200={!inventoryFiltersOpen && !inventoryFiltersActive}
-              class:bg-white={!inventoryFiltersOpen && !inventoryFiltersActive}
-              class:text-stone-600={!inventoryFiltersOpen && !inventoryFiltersActive}
-              disabled={compareMode}
-              aria-expanded={inventoryFiltersOpen}
-              onclick={() => { inventoryFiltersOpen = !inventoryFiltersOpen }}
-              data-testid="inventory-filter-toggle"
-            >Filter{inventoryFilterCount ? ` ${inventoryFilterCount}` : ''}</button>
-            <div class="flex rounded-lg border border-stone-200 bg-white p-0.5" aria-label="Inventory view">
-              <button
-                type="button"
-                class="rounded px-1.5 py-1 text-[10px] font-medium"
-                class:bg-stone-800={inventoryViewMode === 'tree'}
-                class:text-white={inventoryViewMode === 'tree'}
-                class:text-stone-500={inventoryViewMode !== 'tree'}
-                onclick={() => { inventoryViewMode = 'tree' }}
-                data-testid="inventory-view-tree"
-              >Tree</button>
-              <button
-                type="button"
-                class="rounded px-1.5 py-1 text-[10px] font-medium"
-                class:bg-stone-800={inventoryViewMode === 'table'}
-                class:text-white={inventoryViewMode === 'table'}
-                class:text-stone-500={inventoryViewMode !== 'table'}
-                disabled={compareMode}
-                onclick={() => { inventoryViewMode = 'table' }}
-                data-testid="inventory-view-table"
-              >Table</button>
-            </div>
-          </div>
-          {#if inventoryFiltersOpen && project && !compareMode}
-            <InventoryFilterPanel
-              {project}
-              {selectedId}
-              filters={searchFilters}
-              onChange={handleInventoryFiltersChange}
-            />
-          {/if}
-          {#if searchActive}
-            <div class="mt-2 flex items-center justify-between gap-2">
-              <p class="truncate text-xs text-stone-500">
-                {#if searching}
-                  Searching…
-                {:else if searchResults.length === 0}
-                  {searchQuery.trim() ? `No results for "${searchQuery}"` : 'No nodes match these filters'}
-                {:else}
-                  Result {searchResultIndex + 1} of {searchTotal}{searchQuery.trim() ? ` for "${searchQuery}"` : ''}
-                  {#if searchResults.length < searchTotal} · {searchResults.length} loaded{/if}
-                {/if}
-              </p>
-              {#if searchResults.length > 1}
-                <span class="shrink-0 text-[10px] text-stone-400">Enter next · Shift+Enter prev</span>
-              {/if}
-            </div>
-            {#if searchHasMore}
-              <button
-                class="mt-1 text-xs font-medium text-stone-600 hover:text-stone-900 disabled:text-stone-300"
-                disabled={searchLoadingMore}
-                onclick={() => { void loadMoreSearchResults() }}
-                data-testid="search-load-more"
-              >{searchLoadingMore ? 'Loading…' : `Load more results (${searchResults.length} of ${searchTotal})`}</button>
-            {/if}
-          {/if}
-        </div>
+        <InventorySearchBar
+          {project}
+          {selectedId}
+          query={searchQuery}
+          filters={searchFilters}
+          filtersActive={inventoryFiltersActive}
+          filterCount={inventoryFilterCount}
+          {compareMode}
+          active={searchActive}
+          {searching}
+          loadedCount={searchResults.length}
+          resultIndex={searchResultIndex}
+          total={searchTotal}
+          hasMore={searchHasMore}
+          loadingMore={searchLoadingMore}
+          bind:inputEl={searchInputEl}
+          bind:filtersOpen={inventoryFiltersOpen}
+          bind:viewMode={inventoryViewMode}
+          onInput={handleSearchInput}
+          onKeydown={handleSearchKeydown}
+          onClearQuery={() => { searchQuery = ''; runSearch('') }}
+          onFiltersChange={handleInventoryFiltersChange}
+          onLoadMore={() => { void loadMoreSearchResults() }}
+        />
 
         <!-- Inventory tree/table -->
         <div class="flex-1 flex flex-col overflow-hidden" data-testid="tree">
@@ -2299,62 +1857,27 @@
 
             <!-- Inline add-child input — rendered below the tree, always visible -->
             {#if addingChildTo && inventoryViewMode === 'tree'}
-              <div class="border-t border-stone-200 px-3 py-2 flex flex-col gap-1 bg-stone-50 shrink-0">
-                <input
-                  type="text"
-                  bind:this={addChildInput}
-                  bind:value={addingChildName}
-                  placeholder="Node name"
-                  class="w-full text-sm border border-stone-300 rounded px-2 py-1
-                         focus:outline-none focus:ring-1 focus:ring-stone-400 selectable"
-                  data-testid="add-child-input"
-                  onkeydown={(e) => {
-                    if (e.key === 'Enter') commitAddChild()
-                    if (e.key === 'Escape') cancelAddChild()
-                  }}
-                />
-                {#if addingChildError}
-                  <p class="text-xs text-red-600">{addingChildError}</p>
-                {/if}
-                {#if addChildTemplateIds.length > 0}
-                  <select
-                    bind:value={addingChildTemplateId}
-                    class="w-full text-sm border border-stone-300 rounded px-2 py-1 bg-white
-                           focus:outline-none focus:ring-1 focus:ring-stone-400"
-                    data-testid="add-child-template"
-                  >
-                    <option value={null}>Freeform (no template)</option>
-                    {#each addChildTemplateIds as id (id)}
-                      <option value={id}>{templateLabel(project?.templates?.[id], id)}</option>
-                    {/each}
-                  </select>
-                {/if}
-                <div class="flex gap-1">
-                  <button
-                    onclick={commitAddChild}
-                    class="text-xs bg-stone-800 text-white px-2 py-1 rounded cursor-default"
-                    data-testid="add-child-commit"
-                  >Add</button>
-                  <button
-                    onclick={cancelAddChild}
-                    class="text-xs text-stone-500 px-2 py-1 rounded hover:bg-stone-100 cursor-default"
-                  >Cancel</button>
-                </div>
-              </div>
+              <AddChildForm
+                bind:name={addingChildName}
+                bind:templateId={addingChildTemplateId}
+                bind:inputEl={addChildInput}
+                error={addingChildError}
+                templateIds={addChildTemplateIds}
+                templates={project.templates ?? {}}
+                onCommit={commitAddChild}
+                onCancel={cancelAddChild}
+              />
             {/if}
         </div>
 
       </div>
 
       <!-- ── Drag handle: tree | detail ────────────────────────────────── -->
-      <button
-        type="button"
-        aria-label="Resize tree panel"
-        class="w-1 shrink-0 cursor-col-resize bg-stone-200 hover:bg-sky-400
-               transition-colors duration-100 p-0"
-        class:bg-sky-500={draggingHandle === 'tree'}
-        onmousedown={(e) => startDrag('tree', e)}
-      ></button>
+      <PaneResizeHandle
+        label="Resize tree panel"
+        active={draggingHandle === 'tree'}
+        onStart={(e) => startDrag('tree', e)}
+      />
 
       <!-- ── Right pane: detail ─────────────────────────────────────────── -->
       <div class="flex-1 overflow-hidden" data-testid="detail-pane">
@@ -2373,13 +1896,7 @@
               project={detailProject}
               {renameRequestId}
               readOnly={editingLocked}
-              readOnlyReason={compareMode && mergedTree
-                ? `Viewing ${snapshotRefLabel(mergedTree.fromSnapshot)} -> ${snapshotRefLabel(mergedTree.toSnapshot)}. Snapshots are read-only; exit compare to edit the current project.`
-                : snapshotRestoringName
-                  ? 'Reverting current project — editing will resume when revert finishes.'
-                  : recoveryApplyingId
-                    ? 'Applying recovery point — editing will resume when recovery finishes.'
-                    : undefined}
+              readOnlyReason={detailReadOnlyReason(compareLabels, snapshotRestoringName, recoveryApplyingId)}
               onUpdate={handleNodeUpdate}
               onPromoteField={handlePromoteField}
               onError={showToast}
@@ -2391,14 +1908,11 @@
       <!-- ── Snapshots panel (docked, non-blocking) ─────────────────────── -->
       {#if snapshotPanelOpen}
         <!-- Drag handle: detail | panel -->
-        <button
-          type="button"
-          aria-label="Resize snapshots panel"
-          class="w-1 shrink-0 cursor-col-resize bg-stone-200 hover:bg-sky-400
-                 transition-colors duration-100 p-0"
-          class:bg-sky-500={draggingHandle === 'panel'}
-          onmousedown={(e) => startDrag('panel', e)}
-        ></button>
+        <PaneResizeHandle
+          label="Resize snapshots panel"
+          active={draggingHandle === 'panel'}
+          onStart={(e) => startDrag('panel', e)}
+        />
 
         <!-- Controlled-width wrapper — SnapshotsPanel fills it with w-full -->
         <div style="width: {panelWidth}px" class="shrink-0 overflow-hidden">
