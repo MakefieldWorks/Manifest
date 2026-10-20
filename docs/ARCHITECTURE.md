@@ -177,6 +177,14 @@ manifest/
 
 If the codebase grows, shared logic can later move into separate packages. It should not start as a premature monorepo.
 
+`src/main/project-manager.ts` owns the open project's mutable state and the
+order of side effects (history journal, search index, document write, history
+metadata). The computation it orchestrates lives in `src/main/project/`:
+planners that turn the current project plus a request into the next project
+(nodes, templates, imports), document parsing and validation, compare and
+reports, and the read-only history and recovery reviews. New logic that does
+not need manager state belongs in that folder.
+
 ---
 
 ## Data model direction
