@@ -321,10 +321,13 @@
               <p class="text-xs text-stone-500 mt-0.5">
                 {netboxPlan.sites} sites · {netboxPlan.locations} locations · {netboxPlan.racks} racks · {netboxPlan.devices} devices
               </p>
-              <ImportIssueList title="Skipped" issues={netboxPlan.skipped} total={netboxPlan.skippedCount}
-                showRow={false} testid="netbox-skipped" />
-              <ImportIssueList title="Warnings" issues={netboxPlan.warnings} total={netboxPlan.warningCount}
-                showRow={false} testid="netbox-warnings" />
+              <!-- Keyed on the plan so a re-validate starts the lists collapsed. -->
+              {#key netboxPlan}
+                <ImportIssueList title="Skipped" issues={netboxPlan.skipped} total={netboxPlan.skippedCount}
+                  showRow={false} testid="netbox-skipped" />
+                <ImportIssueList title="Warnings" issues={netboxPlan.warnings} total={netboxPlan.warningCount}
+                  showRow={false} testid="netbox-warnings" />
+              {/key}
             </div>
           {/if}
 
@@ -468,10 +471,12 @@
                 · <span class="text-amber-700">{plan.warningCount} warnings</span>
                 {#if plan.createdParents > 0}· <span class="text-sky-700">{plan.createdParents} parents created</span>{/if}
               </p>
-              <ImportIssueList title="Skipped" issues={plan.skipped} total={plan.skippedCount}
-                showRow testid="import-skipped" />
-              <ImportIssueList title="Warnings" issues={plan.warnings} total={plan.warningCount}
-                showRow testid="import-warnings" />
+              {#key plan}
+                <ImportIssueList title="Skipped" issues={plan.skipped} total={plan.skippedCount}
+                  showRow testid="import-skipped" />
+                <ImportIssueList title="Warnings" issues={plan.warnings} total={plan.warningCount}
+                  showRow testid="import-warnings" />
+              {/key}
               {#if plan.suggestedNameColumn}
                 {@const suggested = plan.suggestedNameColumn}
                 <div class="mt-2 flex items-center gap-2 flex-wrap" data-testid="import-name-suggestion">

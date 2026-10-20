@@ -32,13 +32,13 @@
       {/each}
     </ul>
     {#if issues.length > PREVIEW}
-      <button onclick={() => (expanded = !expanded)}
+      <button onclick={() => (expanded = !expanded)} aria-expanded={expanded}
         class="text-xs text-sky-700 hover:underline cursor-default" data-testid={`${testid}-toggle`}>
-        {expanded ? 'Show fewer' : `Show all ${issues.length}`}
+        {expanded ? 'Show fewer' : total > issues.length ? `Show ${issues.length} of ${total}` : `Show all ${total}`}
       </button>
     {/if}
-    {#if expanded && total > issues.length}
-      <p class="text-xs text-stone-400">Only the first {issues.length} of {total} are listed.</p>
+    {#if total > issues.length}
+      <p class="text-xs text-stone-400" data-testid={`${testid}-capped`}>Only the first {issues.length} of {total} can be listed.</p>
     {/if}
   </div>
 {/if}

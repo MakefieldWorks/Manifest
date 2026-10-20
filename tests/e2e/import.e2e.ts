@@ -423,3 +423,32 @@ test('NetBox validation lists its warnings, with a toggle to show them all', asy
   await expect(warnings.locator('li')).toHaveCount(7)
   await expect(warnings).toContainText('Panduit 48-Port Patch Panel (16)')
 })
+
+test('more skipped rows than can be sent says so before and after expanding', async ({
+  appPage,
+  electronApp,
+  workspaceDir,
+}) => {
+  await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Cap Lab')
+
+  // 150 rows with the same name: one imports, 149 are skipped, and main sends
+  // only the first 100 of them.
+  const csvPath = join(workspaceDir, 'many.csv')
+  writeFileSync(csvPath, 'name\n' + 'Same\n'.repeat(150), 'utf8')
+  await clickNativeMenuCommand(electronApp, 'project:import')
+  await setDialogPath(electronApp, csvPath)
+  await appPage.getByTestId('import-choose-file').click()
+  await appPage.getByTestId('import-validate').click()
+  await expect(appPage.getByTestId('import-summary')).toContainText('149 skipped')
+
+  const toggle = appPage.getByTestId('import-skipped-toggle')
+  await expect(toggle).toHaveText('Show 100 of 149')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(appPage.getByTestId('import-skipped-capped')).toContainText('Only the first 100 of 149')
+  await toggle.click()
+  await expect(appPage.getByTestId('import-skipped').locator('li')).toHaveCount(100)
+
+  // Re-validating starts the list collapsed again.
+  await appPage.getByTestId('import-validate').click()
+  await expect(appPage.getByTestId('import-skipped').locator('li')).toHaveCount(5)
+})
