@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planImport, suggestKey, suggestUniqueNameColumn } from '../../../src/shared/import'
+import { planImport, suggestKey, uniqueNameColumns } from '../../../src/shared/import'
 import type { ManifestNode, NodeTemplate, ImportMapping } from '../../../src/shared/types'
 
 function node(id: string, parentId: string | null, name: string): ManifestNode {
@@ -715,10 +715,51 @@ describe('planImport — suggested name column', () => {
     expect(out.suggestedNameColumn).toBeUndefined()
   })
 
-  it('skips columns with blanks, repeats, slashes or that are already used', () => {
-    const h = ['Name', 'Blank', 'Repeat', 'Slash', 'Path', 'Serial']
-    const r = [['a', '', 'r', 'x/1', 'p1', 'S1'], ['b', 'v', 'R', 'x/2', 'p2', 'S2']]
-    expect(suggestUniqueNameColumn(r, h, new Set(['Name', 'Path', 'Serial']))).toBeNull()
-    expect(suggestUniqueNameColumn(r, h, new Set(['Name']))).toBe('Serial')
+  it('skips columns with blanks, repeats, slashes, duplicate headers or that are already used', () => {
+    const h = ['Name', 'Blank', 'Repeat', 'Slash', 'Path', 'Serial', 'Dup', 'Dup']
+    const r = [['a', '', 'r', 'x/1', 'p1', 'S1', 'd1', 'e1'], ['b', 'v', 'R', 'x/2', 'p2', 'S2', 'd2', 'e2']]
+    expect(uniqueNameColumns(r, h, new Set(['Name', 'Path', 'Serial']))).toEqual([])
+    expect(uniqueNameColumns(r, h, new Set(['Name']))).toEqual(['Serial', 'Path'])
+  })
+
+  it('only counts clashes between rows that share a parent (path placement)', () => {
+    const h = ['Name', 'Path', 'Serial']
+    const r = [['Board', 'Room A', 'S1'], ['Board', 'Room B', 'S2'], ['Existing Board', 'Room A / Rack A-01', 'S3']]
+    const out = planImport(r, h, mapping({
+      placement: 'path', baseParentId: 'root', nameColumn: 'Name', pathColumn: 'Path',
+      columns: [{ header: 'Serial', key: 'serial', include: true }],
+    }), {}, NODES)
+    expect(out.skipped).toHaveLength(1)   // only the clash with the existing node
+    expect(out.suggestedNameColumn).toBeUndefined()
+  })
+
+  it('does not suggest a column whose values collide with existing nodes', () => {
+    const out = planImport([['X', 'Existing Board'], ['X', 'Other']], ['Name', 'Code'],
+      mapping({ nameColumn: 'Name', columns: [{ header: 'Code', key: 'code', include: true }] }), {}, NODES)
+    expect(out.skipped).toHaveLength(1)
+    expect(out.suggestedNameColumn).toBeUndefined()
+  })
+
+  it('does not suggest in update-on-key mode or a column feeding a template field', () => {
+    const upd = planImport(rows, headers, mapping({
+      nameColumn: 'Name', columns: cols('Name'), updateExisting: true, keyColumn: 'Name',
+    }), {}, NODES)
+    expect(upd.suggestedNameColumn).toBeUndefined()
+
+    const templated = planImport(rows, headers, mapping({
+      nameColumn: 'Name', templateId: 'board',
+      columns: cols('Name').map(c => c.header === 'Asset Tag' ? { ...c, key: 'sku' } : c),
+    }), TEMPLATES, NODES)
+    expect(templated.suggestedNameColumn).toBe('Order Number')
+  })
+
+  it('does not suggest when the swap would break the mapping', () => {
+    // The old name column would come back as property key "name", which an
+    // included column already uses.
+    const out = planImport([['A', 'T1', 'n'], ['A', 'T2', 'n']], ['Name', 'Tag', 'Other'], mapping({
+      nameColumn: 'Name', columns: [{ header: 'Tag', key: 'tag', include: true }, { header: 'Other', key: 'name', include: true }],
+    }), {}, NODES)
+    expect(out.skipped).toHaveLength(1)
+    expect(out.suggestedNameColumn).toBeUndefined()
   })
 })

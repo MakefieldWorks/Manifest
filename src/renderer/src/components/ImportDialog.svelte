@@ -220,13 +220,14 @@
     }
   }
 
-  // Swap in the suggested name column; the old name column becomes an ordinary
-  // property column (its include/key mapping was seeded by initMapping).
+  // Swap in the suggested name column. Mirrors swapNameColumn, the mapping main
+  // verified the suggestion against: the old name column becomes an included
+  // property under its suggested key.
   async function useSuggestedName(header: string) {
     const previous = nameColumn
     nameColumn = header
+    columnKey = { ...columnKey, [previous]: suggestKey(previous) }
     columnInclude = { ...columnInclude, [previous]: true }
-    if (keyColumn === previous) keyColumn = header
     touched()
     await validate()
   }
