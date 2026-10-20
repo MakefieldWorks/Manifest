@@ -96,7 +96,9 @@ export function formatComparisonReport(
   to: string,
   format: ReportFormat,
   snapshots: Snapshot[],
-  fallbackProjectName: string,
+  // Read only when the newer side has no name, so a caller's state is not
+  // touched on the common path.
+  fallbackProjectName: () => string,
 ): { content: string; suggestedName: string } {
   const { projectA, projectB, diffs, templateDiffs, scope } = loaded
   const meta = (name: string) => {
@@ -115,7 +117,7 @@ export function formatComparisonReport(
   }
 
   const ctx: ReportContext = {
-    projectName: projectB.name || fallbackProjectName,
+    projectName: projectB.name || fallbackProjectName(),
     from: meta(from),
     to: meta(to),
     generatedAt: new Date().toISOString(),

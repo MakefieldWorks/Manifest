@@ -1319,7 +1319,7 @@ export class ProjectManager {
       // for the report header (date + short commit hash).
       const listed = await this.snapshotList()
       if (!listed.ok) return listed as Result<{ content: string; suggestedName: string }>
-      return ok(formatComparisonReport(loaded.data, from, to, format, listed.data, this.currentProject.name))
+      return ok(formatComparisonReport(loaded.data, from, to, format, listed.data, () => this.currentProject!.name))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.error('report build failed', { path: this.currentProject.path, from, to, format, error: msg })
