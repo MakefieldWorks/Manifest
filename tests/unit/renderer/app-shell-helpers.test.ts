@@ -4,7 +4,7 @@ import { detailReadOnlyReason, editLockReason, formatProjectMode, isEditingLocke
 import { inventoryFilterCount, searchRevealIds } from '../../../src/renderer/src/lib/inventory-search'
 import { deleteSubtreeConfirmMessage, referenceBlockersConfirmMessage, referenceBlockersFromContext } from '../../../src/renderer/src/lib/node-delete'
 import { dragPaneWidth, serializeWorkspacePaneSettings } from '../../../src/renderer/src/lib/pane-layout'
-import { CURRENT_PROJECT_REF } from '../../../src/shared/snapshot-ref'
+import { CURRENT_PROJECT_REF, snapshotRefLabel } from '../../../src/shared/snapshot-ref'
 import type { MergedTreeNode } from '../../../src/shared/merged-tree'
 import type { ManifestNode, ReferenceBlocker } from '../../../src/shared/types'
 
@@ -65,7 +65,7 @@ describe('project-status', () => {
 
   it('labels a comparison with the current-project ref spelled out', () => {
     const label = formatProjectMode({ fromSnapshot: 'v1', toSnapshot: CURRENT_PROJECT_REF }, 'v1', false)
-    expect(label).toMatch(/^Comparing v1 -> /)
+    expect(label).toBe(`Comparing v1 -> ${snapshotRefLabel(CURRENT_PROJECT_REF)}`)
     expect(label).not.toContain(CURRENT_PROJECT_REF)
   })
 

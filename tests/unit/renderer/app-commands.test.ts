@@ -77,6 +77,27 @@ describe('buildMenuCommandState', () => {
     expect(state['node:delete']).toBe(false)
   })
 
+  it('disables node commands for a ghost selection', () => {
+    const state = buildMenuCommandState(ctx({ selectedId: 'ghost:child' }))
+    expect(state['node:addChild']).toBe(false)
+    expect(state['node:rename']).toBe(false)
+    expect(state['node:delete']).toBe(false)
+  })
+
+  it('blocks duplicate, move, and delete while a snapshot dialog or compare load is pending', () => {
+    for (const overrides of [
+      { snapshotComparing: true },
+      { revertDialogSnapshotName: 'v1' },
+      { recoveryDialogPoint: { id: 'r1' } },
+    ]) {
+      const state = buildMenuCommandState(ctx(overrides))
+      expect(state['node:duplicate']).toBe(false)
+      expect(state['node:moveTo']).toBe(false)
+      expect(state['node:delete']).toBe(false)
+      expect(state['node:rename']).toBe(true)
+    }
+  })
+
   it('disables single-node commands for a multi-selection', () => {
     const state = buildMenuCommandState(ctx({ selectedCount: 2 }))
     expect(state['node:addChild']).toBe(false)

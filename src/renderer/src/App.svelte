@@ -889,7 +889,7 @@
 
   function handleSelect(id: string, modifiers?: { toggle: boolean; range: boolean }) {
     selectedScrollAlign = 'auto'
-    applySelection(selectWithModifiers(currentSelection(), id, modifiers, flatRows, compareMode))
+    applySelection(selectWithModifiers(currentSelection(), id, modifiers, () => flatRows, compareMode))
     stashedGhostSelection = null
     addingChildTo = null
   }

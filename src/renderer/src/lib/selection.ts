@@ -37,24 +37,23 @@ export function singleSelection(id: string | null): SelectionState {
 
 /**
  * Apply a click on `id` with optional Cmd/Ctrl (toggle) or Shift (range)
- * modifiers. Compare mode and ghost rows always single-select, because a
- * batch edit cannot target a snapshot.
+ * modifiers. Compare mode and ghost rows always single-select.
  *
- * `rows` is read only for a range click, so callers may pass the full visible
- * row list without filtering it first.
+ * `rows` is called only for a range click, so a plain click never forces the
+ * visible row list to be computed.
  */
 export function selectWithModifiers(
   current: SelectionState,
   id: string,
   modifiers: SelectModifiers | undefined,
-  rows: readonly SelectableRow[],
+  rows: () => readonly SelectableRow[],
   compareMode: boolean,
 ): SelectionState {
   if (compareMode || id.startsWith('ghost:') || (!modifiers?.toggle && !modifiers?.range)) {
     return singleSelection(id)
   }
   if (modifiers.range && current.selectedId) {
-    const visibleIds = rows.filter(row => !row.id.startsWith('ghost:')).map(row => row.node.id)
+    const visibleIds = rows().filter(row => !row.id.startsWith('ghost:')).map(row => row.node.id)
     const anchor = visibleIds.indexOf(current.selectionAnchorId ?? current.selectedId)
     const target = visibleIds.indexOf(id)
     if (anchor < 0 || target < 0) return singleSelection(id)

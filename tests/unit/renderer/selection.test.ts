@@ -23,7 +23,7 @@ describe('singleSelection', () => {
 })
 
 describe('selectWithModifiers', () => {
-  const visible = rows('root', 'a', 'b', 'c', 'd')
+  const visible = () => rows('root', 'a', 'b', 'c', 'd')
 
   it('single-selects on a plain click', () => {
     expect(selectWithModifiers(state('a', ['a', 'b']), 'c', undefined, visible, false)).toEqual(singleSelection('c'))
@@ -72,9 +72,21 @@ describe('selectWithModifiers', () => {
   })
 
   it('skips ghost rows when computing a range', () => {
-    const withGhost = rows('a', 'ghost:gone', 'b')
+    const withGhost = () => rows('a', 'ghost:gone', 'b')
     const next = selectWithModifiers(state('a', ['a']), 'b', RANGE, withGhost, false)
     expect([...next.selectedIds]).toEqual(['a', 'b'])
+  })
+
+  it('ranges from the primary when there is no anchor, and leaves the anchor unset', () => {
+    const next = selectWithModifiers(state('b', ['b'], ['b'], null), 'd', RANGE, visible, false)
+    expect([...next.selectedIds]).toEqual(['b', 'c', 'd'])
+    expect(next.selectionAnchorId).toBeNull()
+  })
+
+  it('does not read the row list for a plain or toggle click', () => {
+    const untouched = () => { throw new Error('rows read') }
+    expect(() => selectWithModifiers(state('a', ['a']), 'b', undefined, untouched, false)).not.toThrow()
+    expect(() => selectWithModifiers(state('a', ['a']), 'b', TOGGLE, untouched, false)).not.toThrow()
   })
 
   it('falls back to a single selection when the anchor is not visible', () => {
