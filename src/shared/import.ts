@@ -52,6 +52,9 @@ export interface PlanOutput {
   // A mapping-level error (not a per-row problem) — e.g. duplicate keys or a
   // missing name column. When set, nothing is imported.
   mappingError?: string
+  // Set when rows were skipped because the name column repeats within the file
+  // and another column has a unique, valid name in every row (e.g. an asset tag).
+  suggestedNameColumn?: string
 }
 
 const DEFAULT_PATH_SEPARATOR = ' / '
@@ -306,6 +309,7 @@ export function planImport(
   }
 
   // ── Per-row planning ────────────────────────────────────────────────────────
+  let nameCollisions = 0
   rows.forEach((cells, r) => {
     const fileRow = r + 2 // header is file row 1
     const name = (cells[nameIdx] ?? '').trim()
@@ -438,6 +442,7 @@ export function planImport(
         out.skipped.push({ row: fileRow, column: mapping.keyColumn, reason: `no existing node matched ${mapping.keyColumn} "${keyValue}", and a node named "${name}" already exists under the target parent — not created` })
       } else {
         out.skipped.push({ row: fileRow, column: mapping.nameColumn, reason: `name "${name}" already exists under the target parent` })
+        nameCollisions++
       }
       return
     }
@@ -459,7 +464,55 @@ export function planImport(
     commitKeyClaim?.()
   })
 
+  if (nameCollisions > 0 && hasDuplicateValues(rows, nameIdx)) {
+    const exclude = new Set([mapping.nameColumn, ...(mapping.placement === 'path' && mapping.pathColumn ? [mapping.pathColumn] : [])])
+    const suggestion = suggestUniqueNameColumn(rows, headers, exclude)
+    if (suggestion) out.suggestedNameColumn = suggestion
+  }
+
   return out
+}
+
+function hasDuplicateValues(rows: string[][], idx: number): boolean {
+  const seen = new Set<string>()
+  for (const cells of rows) {
+    const v = (cells[idx] ?? '').trim().toLowerCase()
+    if (!v) continue
+    if (seen.has(v)) return true
+    seen.add(v)
+  }
+  return false
+}
+
+// Identifier-like headers rank first, so "Asset Tag" beats an incidentally
+// unique column such as "Order Number" or "Purchase Cost".
+const NAME_HINTS = [/tag|hostname|serial/i, /name|\bid\b|code|number/i]
+
+// A column that could replace the name column without any collisions: every
+// row has a non-empty, valid node name and no two rows share one
+// (case-insensitively, matching how sibling names collide).
+export function suggestUniqueNameColumn(rows: string[][], headers: string[], exclude: Set<string>): string | null {
+  if (rows.length < 2) return null
+  const candidates = headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h, i }) => !exclude.has(h) && headers.indexOf(h) === i)
+    .filter(({ i }) => {
+      const seen = new Set<string>()
+      for (const cells of rows) {
+        const v = (cells[i] ?? '').trim()
+        if (!v || !validateNodeName(v).valid) return false
+        const k = v.toLowerCase()
+        if (seen.has(k)) return false
+        seen.add(k)
+      }
+      return true
+    })
+  const rank = (h: string): number => {
+    const hit = NAME_HINTS.findIndex(re => re.test(h))
+    return hit === -1 ? NAME_HINTS.length : hit
+  }
+  candidates.sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
+  return candidates[0]?.h ?? null
 }
 
 // Re-exported for callers that want to validate a single value the same way the
