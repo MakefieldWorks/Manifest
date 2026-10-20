@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { collectProjectOpenTargets } from '../../../src/main/launch-arguments'
+import { collectProjectOpenTargets, isDefaultAppPathTarget } from '../../../src/main/launch-arguments'
+import { resolve } from 'path'
 
 const appPath = '/Applications/Manifest.app'
 
@@ -42,5 +43,17 @@ describe('collectProjectOpenTargets', () => {
       defaultApp: false,
       appPath,
     })).toEqual(['/Applications/Manifest.app/Contents/Resources/example.js'])
+  })
+})
+
+describe('isDefaultAppPathTarget', () => {
+  it('ignores an open-file for the unpackaged app folder (macOS `electron .`)', () => {
+    expect(isDefaultAppPathTarget('.', { defaultApp: true, appPath: process.cwd() })).toBe(true)
+    expect(isDefaultAppPathTarget(resolve('.') + '/', { defaultApp: true, appPath: process.cwd() })).toBe(true)
+  })
+
+  it('keeps real targets, and every target in a packaged app', () => {
+    expect(isDefaultAppPathTarget('/Users/robert/Documents/Network Lab', { defaultApp: true, appPath: process.cwd() })).toBe(false)
+    expect(isDefaultAppPathTarget('.', { defaultApp: false, appPath: process.cwd() })).toBe(false)
   })
 })

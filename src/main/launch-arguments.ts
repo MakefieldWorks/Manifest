@@ -28,3 +28,12 @@ function isRuntimeEntrypointArg(arg: string, appPath: string): boolean {
   if (extension !== '.js' && extension !== '.mjs' && extension !== '.cjs') return false
   return resolve(arg).startsWith(resolve(appPath))
 }
+
+/**
+ * True when an OS open request names the unpackaged app folder itself. On
+ * macOS, `electron .` (how `bun run dev` launches) can also deliver that `.`
+ * argument as an `open-file` event, which is not a request to open a project.
+ */
+export function isDefaultAppPathTarget(target: string, environment: LaunchArgumentEnvironment): boolean {
+  return environment.defaultApp && resolve(target) === resolve(environment.appPath)
+}

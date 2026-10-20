@@ -13,7 +13,7 @@ import {
   updateApplicationMenuState,
 } from './app-menu'
 import { resolveProjectOpenTarget } from './project-open-target'
-import { collectProjectOpenTargets } from './launch-arguments'
+import { collectProjectOpenTargets, isDefaultAppPathTarget, type LaunchArgumentEnvironment } from './launch-arguments'
 import { openExampleProject } from './example-project'
 import { isTrustedRendererNavigationUrl } from './renderer-navigation'
 import { RecentProjectsStore, getRecentDocumentPath } from './recent-projects'
@@ -713,6 +713,7 @@ if (!hasSingleInstanceLock) {
 
 app.on('open-file', (event, path) => {
   event.preventDefault()
+  if (isDefaultAppPathTarget(path, launchEnvironment())) return
   queueOpenTarget(path)
 })
 
@@ -1138,9 +1139,10 @@ function focusMainWindow(): void {
   win.focus()
 }
 
+function launchEnvironment(): LaunchArgumentEnvironment {
+  return { defaultApp: process.defaultApp === true, appPath: app.getAppPath() }
+}
+
 function collectOpenTargetsFromArgv(argv: string[]): string[] {
-  return collectProjectOpenTargets(argv, {
-    defaultApp: process.defaultApp === true,
-    appPath: app.getAppPath(),
-  })
+  return collectProjectOpenTargets(argv, launchEnvironment())
 }
