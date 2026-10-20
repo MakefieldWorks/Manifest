@@ -6,7 +6,7 @@
 //   - currentProject holds the in-memory project after open/create.
 //   - All node mutations update currentProject then schedule an autosave.
 //   - Autosave is debounced (AUTOSAVE_DEBOUNCE_MS). On close/quit,
-//     call flushAutosave() to write immediately before clearing state.
+//     call flushAndClose() to write immediately before clearing state.
 //
 // ┌─────────────────────────────────────────────┐
 // │  IPC call (node:create / update / delete…)  │
@@ -402,7 +402,6 @@ export class ProjectManager {
 
   discardCurrentProject(): void {
     this.cancelAutosave()
-    this.backfill.cancel()  // signal any in-flight backfill to exit early
     this.edits.clear()
     this.currentProject = null
     this.documentSaveError = null
@@ -410,6 +409,7 @@ export class ProjectManager {
     this.conflictLocalCopy = null
     this.search.close()
     this.history.close()
+    this.backfill.cancel()  // signal any in-flight backfill to exit early
   }
 
   getHistoryBackfillStatus(): HistoryBackfillStatus {
@@ -1141,6 +1141,8 @@ export class ProjectManager {
     try {
       const history = this.readSnapshotHistory()
       const listed = await this.git.listSnapshots(this.currentProject.path)
+      // Re-read after the await, as before the split: metadata comes from the
+      // history as it is now, events from the read above.
       const snapshots = withSnapshotMetadata(listed, this.readSnapshotHistory())
       // Recorded events keep their push order (the order they actually happened).
       // Sorting them by createdAt would shuffle revert/recover events relative to
