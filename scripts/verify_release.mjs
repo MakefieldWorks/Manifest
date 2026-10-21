@@ -8,7 +8,7 @@
 //
 // Linux AppImages are not signed, so --require-signed is a no-op there.
 
-import { execFileSync } from 'child_process'
+import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
@@ -26,21 +26,16 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-// Runs a command and returns stdout+stderr instead of throwing, because
-// codesign and spctl report their findings on stderr and signal failure
-// through the exit code.
+// Runs a command and returns its exit status with stdout and stderr combined.
+// codesign and spctl write their findings to stderr even on success, which
+// execFileSync would drop, so this uses spawnSync and never throws.
 function probe(command, args, env = {}) {
-  try {
-    const output = execFileSync(command, args, {
-      encoding: 'utf8',
-      env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    return { ok: true, output }
-  }
-  catch (error) {
-    return { ok: false, output: `${error.stdout ?? ''}${error.stderr ?? ''}` }
-  }
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  })
+  if (result.error) return { ok: false, output: String(result.error) }
+  return { ok: result.status === 0, output: `${result.stdout}${result.stderr}` }
 }
 
 function releaseAssets() {
