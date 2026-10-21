@@ -95,7 +95,9 @@ jobs:
             else
               # Without a certificate, build unsigned rather than letting
               # electron-builder pick up whatever identity the runner has.
-              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              # Ad-hoc sign instead, so the dry-run app still launches after
+              # the tester approves it with Open Anyway.
+              export CSC_IDENTITY_AUTO_DISCOVERY=false MANIFEST_ADHOC_SIGN=1
               args+=(-c.mac.identity=null)
             fi
             if [ "$HAS_NOTARY_KEY" = true ]; then

@@ -9,6 +9,8 @@ artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 # better-sqlite3 ships prebuilt Node-API binaries that load in any Electron
 # version, so there is nothing to recompile while packaging.
 npmRebuild: false
+# Ad-hoc signs unsigned macOS builds; a no-op unless MANIFEST_ADHOC_SIGN=1.
+afterPack: scripts/adhoc-sign-mac.cjs
 
 directories:
   output: dist

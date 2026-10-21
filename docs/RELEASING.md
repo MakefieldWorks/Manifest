@@ -21,6 +21,9 @@ Every release also carries `SHA256SUMS.txt` covering all assets.
   Developer ID Application identity in the login keychain, electron-builder
   signs with it automatically; it notarizes only when the `APPLE_API_*`
   variables below are set. Without them it logs "skipped macOS notarization".
+  Without a certificate, run it as `CSC_IDENTITY_AUTO_DISCOVERY=false
+  MANIFEST_ADHOC_SIGN=1 bun run package` to get an ad-hoc signed app that
+  launches after Open Anyway (`scripts/adhoc-sign-mac.cjs`).
 - Release builds come only from the release workflow, so every published asset
   is built from a tagged commit on clean runners.
 
@@ -62,9 +65,9 @@ the job and deletes it afterwards. The certificate goes to electron-builder as
 2. Optional dry run: **Actions → Release → Run workflow** on `main`. It builds
    and verifies all three platforms and uploads them as workflow artifacts,
    without creating a release, even when started from a tag. It checks the
-   pipeline only: the macOS build is never signed in a dry run, and an
-   unsigned mac app downloaded from the artifacts will not launch (macOS
-   reports it as damaged).
+   pipeline only: the macOS build is never Developer ID signed in a dry run.
+   It is ad-hoc signed instead, so a tester can launch it after approving it
+   under System Settings → Privacy & Security → Open Anyway.
 3. Tag the merged commit and push the tag:
 
    ```bash

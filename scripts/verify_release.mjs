@@ -64,8 +64,12 @@ function verifyMac() {
     const signed = details.ok && details.output.includes('Authority=Developer ID Application')
 
     if (!signed) {
-      console.log(`${app}: unsigned (no Developer ID signature)`)
       assert(!REQUIRE_SIGNED, `${app} is not signed with a Developer ID Application certificate`)
+      // An unsigned build is ad-hoc signed by scripts/adhoc-sign-mac.cjs; a
+      // broken seal would make macOS report the app as damaged.
+      const adhoc = probe('codesign', ['--verify', '--deep', '--strict', app])
+      assert(adhoc.ok, `${app} has no valid ad-hoc signature:\n${adhoc.output}`)
+      console.log(`${app}: ad-hoc signed only (no Developer ID signature)`)
       continue
     }
 
