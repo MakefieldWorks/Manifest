@@ -40,9 +40,10 @@ jobs:
       # set as plain booleans.
       HAS_MAC_CERT: ${{ secrets.MAC_CSC_LINK != '' }}
       HAS_NOTARY_KEY: ${{ secrets.APPLE_API_KEY_P8 != '' }}
-      # A tagged mac build must come out signed and notarized. Windows and
+      # A tag push must produce a signed, notarized mac build. A manual
+      # dispatch never does, even when started from a tag. Windows and
       # Linux ship unsigned for the alpha (docs/RELEASING.md).
-      REQUIRE_SIGNED: ${{ github.ref_type == 'tag' && matrix.os == 'mac' }}
+      REQUIRE_SIGNED: ${{ github.event_name == 'push' && matrix.os == 'mac' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -135,7 +136,7 @@ jobs:
   publish:
     name: Draft GitHub release
     needs: build
-    if: github.ref_type == 'tag'
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -163,4 +164,10 @@ jobs:
           case "$GITHUB_REF_NAME" in
             *-*) flags+=(--prerelease) ;;
           esac
-          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" "${flags[@]}"
+          # A re-run after the draft exists replaces its assets instead of
+          # failing on the existing release.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" "${flags[@]}"
+          fi

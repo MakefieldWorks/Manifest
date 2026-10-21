@@ -46,8 +46,9 @@ roll back safely, restore a project-folder copy made before that newer version
 opened it. Do not rely on an older app to reverse a migration.
 
 Release assets are built by the release workflow described in
-[RELEASING.md](RELEASING.md): macOS DMGs are signed and notarized, while the
-Windows installer and Linux AppImage are unsigned during the alpha. Each release
+[RELEASING.md](RELEASING.md): the macOS app inside each DMG is signed and
+notarized, while the Windows installer and Linux AppImage are unsigned during
+the alpha. Each release
 lists a `SHA256SUMS.txt` for checking a download. Automated update delivery is
 separate work; this page describes the manual pilot flow rather than promising
 a supported public release channel.

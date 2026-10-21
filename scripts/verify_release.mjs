@@ -35,7 +35,7 @@ function probe(command, args, env = {}) {
     env: { ...process.env, ...env },
   })
   if (result.error) return { ok: false, output: String(result.error) }
-  return { ok: result.status === 0, output: `${result.stdout}${result.stderr}` }
+  return { ok: result.status === 0, output: `${result.stdout}${result.stderr}`, stdout: result.stdout }
 }
 
 function releaseAssets() {
@@ -89,10 +89,12 @@ function authenticodeStatus(path) {
   // powershell -Command joins any trailing arguments into the script text, so
   // the path travels through an environment variable instead of being spliced
   // into code. -LiteralPath keeps [] and spaces from acting as wildcards.
-  const script = '(Get-AuthenticodeSignature -LiteralPath $env:MANIFEST_SIGN_TARGET).Status'
+  // Windows PowerShell can write CLIXML progress records to stderr on a fresh
+  // runner, so silence progress and read the status from stdout only.
+  const script = "$ProgressPreference = 'SilentlyContinue'; (Get-AuthenticodeSignature -LiteralPath $env:MANIFEST_SIGN_TARGET).Status"
   const result = probe('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { MANIFEST_SIGN_TARGET: path })
   assert(result.ok, `Get-AuthenticodeSignature failed for ${path}:\n${result.output}`)
-  return result.output.trim()
+  return result.stdout.trim()
 }
 
 function verifyWindows(assets) {

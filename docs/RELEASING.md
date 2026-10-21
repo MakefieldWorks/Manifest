@@ -6,7 +6,7 @@ ordinary push or PR (see the CI policy in `CLAUDE.md`).
 
 | Platform | Asset | Alpha signing |
 |----------|-------|---------------|
-| macOS (arm64, x64) | `Manifest-<version>-mac-<arch>.dmg` | Developer ID signed, hardened runtime, notarized and stapled |
+| macOS (arm64, x64) | `Manifest-<version>-mac-<arch>.dmg` | The app inside is Developer ID signed (hardened runtime), notarized and stapled; the DMG image itself is unsigned |
 | Windows (x64) | `Manifest-<version>-win-x64.exe` (NSIS) | Unsigned; SmartScreen warns on first launch |
 | Linux (x64) | `Manifest-<version>-linux-x86_64.AppImage` | Unsigned (AppImage has no platform signing) |
 
@@ -61,7 +61,10 @@ the job and deletes it afterwards. The certificate goes to electron-builder as
    `package.json` disagree.
 2. Optional dry run: **Actions → Release → Run workflow** on `main`. It builds
    and verifies all three platforms and uploads them as workflow artifacts,
-   without creating a release.
+   without creating a release, even when started from a tag. It checks the
+   pipeline only: the macOS build is never signed in a dry run, and an
+   unsigned mac app downloaded from the artifacts will not launch (macOS
+   reports it as damaged).
 3. Tag the merged commit and push the tag:
 
    ```bash
