@@ -1063,6 +1063,7 @@ function normalizeWorkspaceSettingsPatch(input: unknown): WorkspaceSettingsPatch
   const source = input as Record<string, unknown>
   const patch: WorkspaceSettingsPatch = {}
   if (typeof source.treeWidth === 'number') patch.treeWidth = source.treeWidth
+  if (typeof source.tableWidth === 'number') patch.tableWidth = source.tableWidth
   if (typeof source.panelWidth === 'number') patch.panelWidth = source.panelWidth
   if (source.lastOpenDirectory === null || typeof source.lastOpenDirectory === 'string') {
     patch.lastOpenDirectory = source.lastOpenDirectory

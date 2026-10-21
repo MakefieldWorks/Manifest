@@ -137,6 +137,7 @@ export interface LastWorkspaceProject {
 
 export interface WorkspaceSettings {
   treeWidth: number
+  tableWidth: number
   panelWidth: number
   lastOpenDirectory: string | null
   lastCreateDirectory: string | null
@@ -145,6 +146,7 @@ export interface WorkspaceSettings {
 
 export interface WorkspaceSettingsPatch {
   treeWidth?: number
+  tableWidth?: number
   panelWidth?: number
   lastOpenDirectory?: string | null
   lastCreateDirectory?: string | null
