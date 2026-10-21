@@ -6,6 +6,7 @@ import {
   normalizeAppearancePreference,
   type AppearancePreference,
 } from '../shared/theme'
+import { clampPaneWidth, PANE_WIDTH_LIMITS } from '../shared/pane-layout'
 import { findProjectDocument } from './project-launcher'
 
 export interface WindowBounds {
@@ -33,6 +34,7 @@ export interface LastProjectState {
 
 export interface WorkspaceSettings {
   treeWidth: number
+  tableWidth: number
   panelWidth: number
   lastOpenDirectory: string | null
   lastCreateDirectory: string | null
@@ -49,6 +51,7 @@ interface StoredSettings {
   preferences: AppPreferences
   workspace: {
     treeWidth: number
+    tableWidth: number
     panelWidth: number
     lastOpenDirectory: string | null
     lastCreateDirectory: string | null
@@ -58,6 +61,7 @@ interface StoredSettings {
 
 export interface WorkspaceSettingsPatch {
   treeWidth?: number
+  tableWidth?: number
   panelWidth?: number
   lastOpenDirectory?: string | null
   lastCreateDirectory?: string | null
@@ -75,8 +79,9 @@ export interface AppPreferencesPatch {
   appearance?: Partial<AppearancePreference>
 }
 
-const DEFAULT_TREE_WIDTH = 288
-const DEFAULT_PANEL_WIDTH = 320
+const DEFAULT_TREE_WIDTH = PANE_WIDTH_LIMITS.tree.default
+const DEFAULT_TABLE_WIDTH = PANE_WIDTH_LIMITS.table.default
+const DEFAULT_PANEL_WIDTH = PANE_WIDTH_LIMITS.panel.default
 
 function defaultSettings(): StoredSettings {
   return {
@@ -87,6 +92,7 @@ function defaultSettings(): StoredSettings {
     },
     workspace: {
       treeWidth: DEFAULT_TREE_WIDTH,
+      tableWidth: DEFAULT_TABLE_WIDTH,
       panelWidth: DEFAULT_PANEL_WIDTH,
       lastOpenDirectory: null,
       lastCreateDirectory: null,
@@ -142,6 +148,7 @@ export class AppSettingsStore {
     const workspace = this.settings.workspace
     return {
       treeWidth: workspace.treeWidth,
+      tableWidth: workspace.tableWidth,
       panelWidth: workspace.panelWidth,
       lastOpenDirectory: workspace.lastOpenDirectory,
       lastCreateDirectory: workspace.lastCreateDirectory,
@@ -162,6 +169,13 @@ export class AppSettingsStore {
       const next = clampTreeWidth(patch.treeWidth)
       if (workspace.treeWidth !== next) {
         workspace.treeWidth = next
+        changed = true
+      }
+    }
+    if (typeof patch.tableWidth === 'number') {
+      const next = clampTableWidth(patch.tableWidth)
+      if (workspace.tableWidth !== next) {
+        workspace.tableWidth = next
         changed = true
       }
     }
@@ -191,6 +205,7 @@ export class AppSettingsStore {
   resetLayout(): WorkspaceSettings {
     this.settings.window = null
     this.settings.workspace.treeWidth = DEFAULT_TREE_WIDTH
+    this.settings.workspace.tableWidth = DEFAULT_TABLE_WIDTH
     this.settings.workspace.panelWidth = DEFAULT_PANEL_WIDTH
     this.save()
     return this.getWorkspaceSettings()
@@ -268,6 +283,9 @@ function normalizeSettings(raw: unknown): StoredSettings {
     if (typeof workspace.treeWidth === 'number') {
       settings.workspace.treeWidth = clampTreeWidth(workspace.treeWidth)
     }
+    if (typeof workspace.tableWidth === 'number') {
+      settings.workspace.tableWidth = clampTableWidth(workspace.tableWidth)
+    }
     if (typeof workspace.panelWidth === 'number') {
       settings.workspace.panelWidth = clampPanelWidth(workspace.panelWidth)
     }
@@ -322,11 +340,15 @@ function intersects(a: WindowBounds, b: WindowBounds): boolean {
 }
 
 function clampTreeWidth(width: number): number {
-  return Math.max(160, Math.min(520, Math.round(width)))
+  return clampPaneWidth('tree', Math.round(width))
+}
+
+function clampTableWidth(width: number): number {
+  return clampPaneWidth('table', Math.round(width))
 }
 
 function clampPanelWidth(width: number): number {
-  return Math.max(240, Math.min(600, Math.round(width)))
+  return clampPaneWidth('panel', Math.round(width))
 }
 
 function isStoredLastProject(value: unknown): value is StoredLastProject {

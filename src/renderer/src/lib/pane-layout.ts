@@ -1,30 +1,42 @@
 // Resizable pane widths for the project window and how they are persisted.
+// The limits themselves live in shared/pane-layout so main clamps saved
+// settings to the same ranges.
 
-export const DEFAULT_TREE_WIDTH = 288   // 18rem
-export const DEFAULT_PANEL_WIDTH = 320  // 20rem
+import { clampPaneWidth, PANE_WIDTH_LIMITS, type PaneHandle } from '../../../shared/pane-layout'
+
+export type { PaneHandle }
+
+export const DEFAULT_TREE_WIDTH = PANE_WIDTH_LIMITS.tree.default
+export const DEFAULT_TABLE_WIDTH = PANE_WIDTH_LIMITS.table.default
+export const DEFAULT_PANEL_WIDTH = PANE_WIDTH_LIMITS.panel.default
 export const WORKSPACE_SETTINGS_SAVE_DELAY_MS = 250
-
-/** The table view needs more room than the tree, so it widens the left pane. */
-export const TABLE_MIN_TREE_WIDTH = 520
-
-export type PaneHandle = 'tree' | 'panel'
 
 /**
  * Width after dragging a handle by `delta` px from where the drag started.
  * The snapshots panel's handle is on its left edge, so dragging left grows it.
  */
 export function dragPaneWidth(handle: PaneHandle, startWidth: number, delta: number): number {
-  if (handle === 'tree') return Math.max(160, Math.min(520, startWidth + delta))
-  return Math.max(240, Math.min(600, startWidth - delta))
+  return clampPaneWidth(handle, handle === 'panel' ? startWidth - delta : startWidth + delta)
+}
+
+export interface PaneWidths {
+  treeWidth: number
+  tableWidth: number
+  panelWidth: number
 }
 
 /**
  * The persisted form of the pane widths, rounded to whole pixels. App compares
  * these strings to skip saving when nothing changed.
  */
-export function serializeWorkspacePaneSettings(treeWidth: number, panelWidth: number): string {
-  return JSON.stringify({
-    treeWidth: Math.round(treeWidth),
-    panelWidth: Math.round(panelWidth),
-  })
+export function serializeWorkspacePaneSettings(widths: PaneWidths): string {
+  return JSON.stringify(roundPaneWidths(widths))
+}
+
+export function roundPaneWidths(widths: PaneWidths): PaneWidths {
+  return {
+    treeWidth: Math.round(widths.treeWidth),
+    tableWidth: Math.round(widths.tableWidth),
+    panelWidth: Math.round(widths.panelWidth),
+  }
 }

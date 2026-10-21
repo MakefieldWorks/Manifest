@@ -141,7 +141,14 @@ describe('pane-layout', () => {
     expect(dragPaneWidth('panel', 320, -500)).toBe(600)
   })
 
+  it('lets the Table view pane grow past the tree maximum but not below its minimum', () => {
+    expect(dragPaneWidth('table', 520, 120)).toBe(640)
+    expect(dragPaneWidth('table', 520, -100)).toBe(520)
+    expect(dragPaneWidth('table', 520, 2000)).toBe(960)
+  })
+
   it('serializes rounded widths', () => {
-    expect(serializeWorkspacePaneSettings(288.4, 320.6)).toBe('{"treeWidth":288,"panelWidth":321}')
+    expect(serializeWorkspacePaneSettings({ treeWidth: 288.4, tableWidth: 600.5, panelWidth: 320.6 }))
+      .toBe('{"treeWidth":288,"tableWidth":601,"panelWidth":321}')
   })
 })

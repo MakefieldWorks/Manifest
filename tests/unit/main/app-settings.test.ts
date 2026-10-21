@@ -47,6 +47,7 @@ describe('AppSettingsStore', () => {
     })
     store.updateWorkspaceSettings({
       treeWidth: 360,
+      tableWidth: 700,
       panelWidth: 420,
       lastOpenDirectory: '/tmp/open',
       lastCreateDirectory: '/tmp/create',
@@ -61,6 +62,7 @@ describe('AppSettingsStore', () => {
     })
     expect(reloaded.getWorkspaceSettings()).toMatchObject({
       treeWidth: 360,
+      tableWidth: 700,
       panelWidth: 420,
       lastOpenDirectory: '/tmp/open',
       lastCreateDirectory: '/tmp/create',
@@ -70,12 +72,14 @@ describe('AppSettingsStore', () => {
   it('clamps pane widths to supported layout ranges', () => {
     const store = new AppSettingsStore(storePath())
 
-    const low = store.updateWorkspaceSettings({ treeWidth: 1, panelWidth: 1 })
-    const high = store.updateWorkspaceSettings({ treeWidth: 9999, panelWidth: 9999 })
+    const low = store.updateWorkspaceSettings({ treeWidth: 1, tableWidth: 1, panelWidth: 1 })
+    const high = store.updateWorkspaceSettings({ treeWidth: 9999, tableWidth: 9999, panelWidth: 9999 })
 
     expect(low.treeWidth).toBe(160)
+    expect(low.tableWidth).toBe(520)
     expect(low.panelWidth).toBe(240)
     expect(high.treeWidth).toBe(520)
+    expect(high.tableWidth).toBe(960)
     expect(high.panelWidth).toBe(600)
   })
 
@@ -168,7 +172,7 @@ describe('AppSettingsStore', () => {
       isMaximized: true,
       isFullScreen: false,
     })
-    store.updateWorkspaceSettings({ treeWidth: 400, panelWidth: 500 })
+    store.updateWorkspaceSettings({ treeWidth: 400, tableWidth: 800, panelWidth: 500 })
     store.recordLastProject(project(projectDir))
 
     const reset = store.resetLayout()
@@ -176,6 +180,7 @@ describe('AppSettingsStore', () => {
     expect(store.getWindowState()).toBeNull()
     expect(reset).toMatchObject({
       treeWidth: 288,
+      tableWidth: 520,
       panelWidth: 320,
       lastProject: { path: projectDir, exists: true },
     })
@@ -210,6 +215,7 @@ describe('AppSettingsStore', () => {
     expect(store.getWindowState()).toBeNull()
     expect(store.getWorkspaceSettings()).toMatchObject({
       treeWidth: 288,
+      tableWidth: 520,
       panelWidth: 320,
       lastProject: null,
     })

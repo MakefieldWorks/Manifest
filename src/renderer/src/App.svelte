@@ -37,10 +37,11 @@
   import { deleteSubtreeConfirmMessage, referenceBlockersConfirmMessage, referenceBlockersFromContext } from './lib/node-delete'
   import {
     DEFAULT_PANEL_WIDTH,
+    DEFAULT_TABLE_WIDTH,
     DEFAULT_TREE_WIDTH,
-    TABLE_MIN_TREE_WIDTH,
     WORKSPACE_SETTINGS_SAVE_DELAY_MS,
     dragPaneWidth,
+    roundPaneWidths,
     serializeWorkspacePaneSettings,
     type PaneHandle,
   } from './lib/pane-layout'
@@ -251,6 +252,9 @@
 
   // Resizable pane widths (px).
   let treeWidth:  number = $state(DEFAULT_TREE_WIDTH)
+  // The left pane's width in Table view, kept apart from treeWidth so a wide
+  // table doesn't make the tree wide when switching back.
+  let tableWidth: number = $state(DEFAULT_TABLE_WIDTH)
   let panelWidth: number = $state(DEFAULT_PANEL_WIDTH)
   let workspaceSettingsLoaded: boolean = $state(false)
   let unsubscribeWindowFocus: (() => void) | null = null
@@ -268,10 +272,14 @@
   let dragStartX = 0
   let dragStartWidth = 0
 
+  // Which width the left pane shows and its resize handle drags. Compare mode
+  // always shows the tree.
+  const leftPaneHandle = $derived.by<PaneHandle>(() => inventoryViewMode === 'table' && !compareMode ? 'table' : 'tree')
+
   function startDrag(handle: PaneHandle, e: MouseEvent) {
     draggingHandle = handle
     dragStartX = e.clientX
-    dragStartWidth = handle === 'tree' ? treeWidth : panelWidth
+    dragStartWidth = handle === 'tree' ? treeWidth : handle === 'table' ? tableWidth : panelWidth
     e.preventDefault()
   }
 
@@ -279,6 +287,7 @@
     if (!draggingHandle) return
     const width = dragPaneWidth(draggingHandle, dragStartWidth, e.clientX - dragStartX)
     if (draggingHandle === 'tree') treeWidth = width
+    else if (draggingHandle === 'table') tableWidth = width
     else panelWidth = width
   }
 
@@ -392,7 +401,7 @@
     if (settings.ok) {
       applyWorkspaceSettings(settings.data)
     } else {
-      lastSentWorkspaceSettings = serializeWorkspacePaneSettings(treeWidth, panelWidth)
+      lastSentWorkspaceSettings = serializeWorkspacePaneSettings({ treeWidth, tableWidth, panelWidth })
     }
     workspaceSettingsLoaded = true
 
@@ -695,7 +704,7 @@
   let workspaceSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
   $effect(() => {
     if (!workspaceSettingsLoaded) return
-    const serialized = serializeWorkspacePaneSettings(treeWidth, panelWidth)
+    const serialized = serializeWorkspacePaneSettings({ treeWidth, tableWidth, panelWidth })
     if (serialized === lastSentWorkspaceSettings) {
       clearWorkspaceSettingsSaveTimer()
       return
@@ -703,8 +712,8 @@
     clearWorkspaceSettingsSaveTimer()
     workspaceSettingsSaveTimer = setTimeout(() => {
       workspaceSettingsSaveTimer = null
-      const next = { treeWidth: Math.round(treeWidth), panelWidth: Math.round(panelWidth) }
-      const nextSerialized = serializeWorkspacePaneSettings(next.treeWidth, next.panelWidth)
+      const next = roundPaneWidths({ treeWidth, tableWidth, panelWidth })
+      const nextSerialized = serializeWorkspacePaneSettings(next)
       if (nextSerialized === lastSentWorkspaceSettings) return
       lastSentWorkspaceSettings = nextSerialized
       void window.api.settings.updateWorkspace(next)
@@ -843,8 +852,9 @@
 
   function applyWorkspaceSettings(settings: WorkspaceSettings) {
     treeWidth = settings.treeWidth
+    tableWidth = settings.tableWidth
     panelWidth = settings.panelWidth
-    lastSentWorkspaceSettings = serializeWorkspacePaneSettings(settings.treeWidth, settings.panelWidth)
+    lastSentWorkspaceSettings = serializeWorkspacePaneSettings(settings)
     lastCreateDirectory = settings.lastCreateDirectory
     lastWorkspaceProject = settings.lastProject
   }
@@ -1762,7 +1772,7 @@
 
       <!-- ── Left pane: tree + search ──────────────────────────────────── -->
       <div
-        style="width: {inventoryViewMode === 'table' && !compareMode ? Math.max(treeWidth, TABLE_MIN_TREE_WIDTH) : treeWidth}px"
+        style="width: {leftPaneHandle === 'table' ? tableWidth : treeWidth}px"
         class="shrink-0 flex flex-col bg-stone-50 overflow-hidden"
       >
 
@@ -1875,8 +1885,8 @@
       <!-- ── Drag handle: tree | detail ────────────────────────────────── -->
       <PaneResizeHandle
         label="Resize tree panel"
-        active={draggingHandle === 'tree'}
-        onStart={(e) => startDrag('tree', e)}
+        active={draggingHandle === leftPaneHandle}
+        onStart={(e) => startDrag(leftPaneHandle, e)}
       />
 
       <!-- ── Right pane: detail ─────────────────────────────────────────── -->
