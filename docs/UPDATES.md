@@ -45,6 +45,9 @@ with a newer Manifest version may migrate its document or history format. To
 roll back safely, restore a project-folder copy made before that newer version
 opened it. Do not rely on an older app to reverse a migration.
 
-Signed, notarized release artifacts and automated update delivery are separate
-release-readiness work. Until those are in place, this page describes the
-manual pilot flow rather than promising a supported public release channel.
+Release assets are built by the release workflow described in
+[RELEASING.md](RELEASING.md): macOS DMGs are signed and notarized, while the
+Windows installer and Linux AppImage are unsigned during the alpha. Each release
+lists a `SHA256SUMS.txt` for checking a download. Automated update delivery is
+separate work; this page describes the manual pilot flow rather than promising
+a supported public release channel.

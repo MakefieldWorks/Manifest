@@ -1,5 +1,11 @@
-appId: com.manifest.app
+# Reverse-DNS identity for the macOS bundle ID and the Windows installer GUID.
+# Do not change it after a release ships: macOS and Windows treat a new ID as a
+# different app.
+appId: com.makefieldworks.manifest
 productName: Manifest
+# One naming scheme for every release asset, with no spaces, so release pages
+# and SHA256SUMS list e.g. Manifest-0.1.0-alpha.1-mac-arm64.dmg.
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 # better-sqlite3 ships prebuilt Node-API binaries that load in any Electron
 # version, so there is nothing to recompile while packaging.
 npmRebuild: false
@@ -12,6 +18,11 @@ files:
   - out/**/*
   - package.json
   - resources/icon.png
+  # better-sqlite3 ships its C++ sources and a prebuilt binary for every
+  # platform. Only the binaries are needed at runtime, and each platform section
+  # below drops the foreign ones so macOS signing never meets an ELF or PE file.
+  - "!node_modules/better-sqlite3/{deps,src}/**"
+  - "!node_modules/better-sqlite3/binding.gyp"
 
 fileAssociations:
   - ext: manifestproject
@@ -23,6 +34,16 @@ mac:
   category: public.app-category.productivity
   icon: resources/icon.icns
   minimumSystemVersion: 13.0
+  # Signing uses CSC_LINK/CSC_KEY_PASSWORD (a Developer ID Application .p12)
+  # when present, and notarization uses APPLE_API_KEY/APPLE_API_KEY_ID/
+  # APPLE_API_ISSUER. Without them the build is unsigned; see docs/RELEASING.md.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  notarize: true
+  files:
+    - "!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*"
   target:
     - target: dmg
       arch:
@@ -31,6 +52,8 @@ mac:
 
 win:
   icon: resources/icon.ico
+  files:
+    - "!node_modules/better-sqlite3/prebuilds/{darwin,linux,linuxmusl}-*"
   target:
     - target: nsis
       arch:
@@ -38,6 +61,9 @@ win:
 
 linux:
   icon: resources/icon.png
+  category: Office
+  files:
+    - "!node_modules/better-sqlite3/prebuilds/{darwin,win32}-*"
   target:
     - target: AppImage
       arch:
