@@ -68,7 +68,7 @@ function verifyMac() {
       // An unsigned build is ad-hoc signed by scripts/adhoc-sign-mac.cjs; a
       // broken seal would make macOS report the app as damaged.
       const adhoc = probe('codesign', ['--verify', '--deep', '--strict', app])
-      assert(adhoc.ok, `${app} has no valid ad-hoc signature:\n${adhoc.output}`)
+      assert(adhoc.ok, `${app} has no Developer ID signature and its ad-hoc seal is broken (was the certificate the wrong type?):\n${adhoc.output}`)
       console.log(`${app}: ad-hoc signed only (no Developer ID signature)`)
       continue
     }
