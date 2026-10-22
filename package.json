@@ -1,7 +1,9 @@
 {
   "name": "manifest",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "Local-first desktop app for structured project management",
+  "author": "MakefieldWorks",
+  "homepage": "https://github.com/MakefieldWorks/Manifest",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
