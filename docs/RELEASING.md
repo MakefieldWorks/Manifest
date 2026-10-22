@@ -64,10 +64,11 @@ the job and deletes it afterwards. The certificate goes to electron-builder as
    `package.json` disagree.
 2. Optional dry run: **Actions → Release → Run workflow** on `main`. It builds
    and verifies all three platforms and uploads them as workflow artifacts,
-   without creating a release, even when started from a tag. It checks the
-   pipeline only: the macOS build is never Developer ID signed in a dry run.
-   It is ad-hoc signed instead, so a tester can launch it after approving it
-   under System Settings → Privacy & Security → Open Anyway.
+   without creating a release, even when started from a tag. With the signing
+   secrets set, the macOS build is signed and notarized just like a release,
+   but an unsigned result does not fail the run. Without the certificate it is
+   ad-hoc signed, so a tester can launch it after approving it under System
+   Settings → Privacy & Security → Open Anyway.
 3. Tag the merged commit and push the tag:
 
    ```bash
