@@ -7,7 +7,7 @@ ordinary push or PR (see the CI policy in `CLAUDE.md`).
 | Platform | Asset | Alpha signing |
 |----------|-------|---------------|
 | macOS (arm64, x64) | `Manifest-<version>-mac-<arch>.dmg` | The app inside is Developer ID signed (hardened runtime), notarized and stapled; the DMG image itself is unsigned |
-| Windows (x64) | `Manifest-<version>-win-x64.exe` (NSIS) | The app and installer are Authenticode signed through Azure Trusted Signing. SmartScreen may still warn until the certificate builds download reputation |
+| Windows (x64) | `Manifest-<version>-win-x64.exe` (NSIS) | The app and installer are Authenticode signed through Azure Trusted Signing when it is configured (see below); otherwise they are unsigned. SmartScreen may still warn until the certificate builds download reputation |
 | Linux (x64) | `Manifest-<version>-linux-x86_64.AppImage` | Unsigned (AppImage has no platform signing) |
 
 Every release also carries `SHA256SUMS.txt` covering all assets.

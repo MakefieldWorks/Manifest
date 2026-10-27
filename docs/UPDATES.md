@@ -48,7 +48,7 @@ opened it. Do not rely on an older app to reverse a migration.
 Release assets are built by the release workflow described in
 [RELEASING.md](RELEASING.md): the macOS app inside each DMG is signed and
 notarized, the Windows app and installer are Authenticode signed through Azure
-Trusted Signing, and the Linux AppImage is unsigned. Each release
+Trusted Signing when the repository has it configured, and the Linux AppImage is unsigned. Each release
 lists a `SHA256SUMS.txt` for checking a download. Automated update delivery is
 separate work; this page describes the manual pilot flow rather than promising
 a supported public release channel.
