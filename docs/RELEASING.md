@@ -7,7 +7,7 @@ ordinary push or PR (see the CI policy in `CLAUDE.md`).
 | Platform | Asset | Alpha signing |
 |----------|-------|---------------|
 | macOS (arm64, x64) | `Manifest-<version>-mac-<arch>.dmg` | The app inside is Developer ID signed (hardened runtime), notarized and stapled; the DMG image itself is unsigned |
-| Windows (x64) | `Manifest-<version>-win-x64.exe` (NSIS) | Unsigned; SmartScreen warns on first launch |
+| Windows (x64) | `Manifest-<version>-win-x64.exe` (NSIS) | The app and installer are Authenticode signed through Azure Trusted Signing when it is configured (see below); otherwise they are unsigned. SmartScreen may still warn until the certificate builds download reputation |
 | Linux (x64) | `Manifest-<version>-linux-x86_64.AppImage` | Unsigned (AppImage has no platform signing) |
 
 Every release also carries `SHA256SUMS.txt` covering all assets.
@@ -30,13 +30,15 @@ Every release also carries `SHA256SUMS.txt` covering all assets.
 `node scripts/verify_release.mjs` checks whatever electron-builder put in
 `dist/` and writes `dist/SHA256SUMS-<os>.txt`. With `--require-signed` it fails
 on an unsigned or unnotarized macOS app or an unsigned Windows executable. The
-release workflow passes that flag for tagged macOS builds.
+release workflow passes that flag for tagged macOS builds, and for tagged
+Windows builds once `AZURE_SIGNING_ENDPOINT` is set.
 
 ## Signing secrets
 
-Add these under **Settings → Secrets and variables → Actions → Repository
-secrets**. Missing macOS secrets produce an unsigned build, which a tagged
-release then rejects.
+Add these under **Settings → Secrets and variables → Actions**. The macOS
+values below are all **Repository secrets**; the Windows section says which of
+its values are variables. Missing macOS secrets produce an unsigned build,
+which a tagged release then rejects.
 
 | Secret | Value |
 |--------|-------|
@@ -53,9 +55,42 @@ from App Store Connect → Users and Access → Integrations → App Store Conne
 API; a key with the Developer role can notarize. Apple lets you download the
 `.p8` once, so keep the original somewhere safe outside the repository.
 
+Notarization runs in `scripts/notarize-mac.cjs` (an `afterSign` hook) rather
+than electron-builder's built-in `notarize`, so that stapling can be retried
+when `xcrun stapler` loses its connection to Apple's ticket service. If it
+still fails, the build continues with a notarized but unstapled app; a dry run
+reports that, and a tag push fails in the verify step.
+
 The workflow writes the `.p8` to the runner's temp directory for the duration of
 the job and deletes it afterwards. The certificate goes to electron-builder as
 `CSC_LINK`, which imports it into a temporary keychain.
+
+### Windows (Azure Trusted Signing)
+
+Windows builds are signed by an Azure Trusted Signing certificate profile, so
+no certificate file ever leaves Azure. The account and profile names are not
+secret and go under **Repository variables**; the service principal that is
+allowed to sign goes under **Repository secrets**.
+
+| Name | Kind | Value |
+|------|------|-------|
+| `AZURE_SIGNING_ENDPOINT` | Variable | The Trusted Signing account's regional endpoint, such as `https://eus.codesigning.azure.net/` (Account URI on the account's Overview page) |
+| `AZURE_SIGNING_ACCOUNT` | Variable | The Trusted Signing account name |
+| `AZURE_SIGNING_PROFILE` | Variable | The certificate profile name inside that account |
+| `AZURE_TENANT_ID` | Secret | Directory (tenant) ID of the app registration |
+| `AZURE_CLIENT_ID` | Secret | Application (client) ID of the app registration |
+| `AZURE_CLIENT_SECRET` | Secret | A client secret value for that app registration |
+
+The app registration needs the **Artifact Signing Certificate Profile Signer**
+role (formerly Trusted Signing Certificate Profile Signer; Microsoft renamed
+Trusted Signing to Artifact Signing) on the certificate profile (Access control (IAM) on the profile or the
+account). electron-builder installs the `TrustedSigning` PowerShell module on
+the runner, signs `Manifest.exe`, the uninstaller and the installer, and
+timestamps them with `http://timestamp.acs.microsoft.com`. Client secrets
+expire, so note the expiry date and rotate the secret before it lapses.
+
+Once `AZURE_SIGNING_ENDPOINT` is set, a tag push fails if the Windows build is
+not signed. Without it, Windows builds stay unsigned and are not enforced.
 
 ## Cutting a release
 

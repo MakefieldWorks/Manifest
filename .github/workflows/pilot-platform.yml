@@ -30,8 +30,8 @@ jobs:
         os: [macos-15, windows-2022]
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22.20.0
       - uses: oven-sh/setup-bun@v2
@@ -57,7 +57,7 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-${{ matrix.os }}
           path: .playwright-artifacts/

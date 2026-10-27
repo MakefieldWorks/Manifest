@@ -11,6 +11,9 @@ artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 npmRebuild: false
 # Ad-hoc signs unsigned macOS builds; a no-op unless MANIFEST_ADHOC_SIGN=1.
 afterPack: ./scripts/adhoc-sign-mac.cjs
+# Notarizes and staples with retries; see the script for why it replaces
+# electron-builder's built-in notarize.
+afterSign: ./scripts/notarize-mac.cjs
 
 directories:
   output: dist
@@ -43,7 +46,7 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
-  notarize: true
+  notarize: false
   files:
     - "!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*"
   target:
