@@ -40,10 +40,12 @@ jobs:
       # set as plain booleans.
       HAS_MAC_CERT: ${{ secrets.MAC_CSC_LINK != '' }}
       HAS_NOTARY_KEY: ${{ secrets.APPLE_API_KEY_P8 != '' }}
-      # A tag push must produce a signed, notarized mac build. A manual
-      # dispatch never does, even when started from a tag. Windows and
-      # Linux ship unsigned for the alpha (docs/RELEASING.md).
-      REQUIRE_SIGNED: ${{ github.event_name == 'push' && matrix.os == 'mac' }}
+      HAS_AZURE_SIGNING: ${{ vars.AZURE_SIGNING_ENDPOINT != '' && secrets.AZURE_CLIENT_SECRET != '' }}
+      # A tag push must produce a signed, notarized mac build, and a signed
+      # Windows build once Azure Trusted Signing is configured (the endpoint
+      # variable is set). A manual dispatch never enforces signing, even when
+      # started from a tag. Linux ships unsigned (docs/RELEASING.md).
+      REQUIRE_SIGNED: ${{ github.event_name == 'push' && (matrix.os == 'mac' || (matrix.os == 'win' && vars.AZURE_SIGNING_ENDPOINT != '')) }}
 
     steps:
       - uses: actions/checkout@v5
@@ -87,6 +89,12 @@ jobs:
           MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
           args=("--${{ matrix.os }}" --publish never)
           if [ "${{ matrix.os }}" = mac ]; then
@@ -107,6 +115,21 @@ jobs:
             fi
           else
             unset APPLE_API_KEY_ID APPLE_API_ISSUER
+          fi
+          if [ "${{ matrix.os }}" = win ] && [ "$HAS_AZURE_SIGNING" = true ]; then
+            # Azure Trusted Signing: electron-builder installs the TrustedSigning
+            # PowerShell module and authenticates with the AZURE_TENANT_ID,
+            # AZURE_CLIENT_ID and AZURE_CLIENT_SECRET service principal. Keys
+            # beyond the first three pass straight to Invoke-TrustedSigning.
+            args+=(
+              "-c.win.azureSignOptions.endpoint=$AZURE_SIGNING_ENDPOINT"
+              "-c.win.azureSignOptions.codeSigningAccountName=$AZURE_SIGNING_ACCOUNT"
+              "-c.win.azureSignOptions.certificateProfileName=$AZURE_SIGNING_PROFILE"
+              "-c.win.azureSignOptions.TimestampRfc3161=http://timestamp.acs.microsoft.com"
+              "-c.win.azureSignOptions.TimestampDigest=SHA256"
+            )
+          else
+            unset AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET
           fi
           node node_modules/electron-builder/cli.js "${args[@]}"
 
