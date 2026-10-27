@@ -35,9 +35,10 @@ Windows builds once `AZURE_SIGNING_ENDPOINT` is set.
 
 ## Signing secrets
 
-Add these under **Settings → Secrets and variables → Actions → Repository
-secrets**. Missing macOS secrets produce an unsigned build, which a tagged
-release then rejects.
+Add these under **Settings → Secrets and variables → Actions**. The macOS
+values below are all **Repository secrets**; the Windows section says which of
+its values are variables. Missing macOS secrets produce an unsigned build,
+which a tagged release then rejects.
 
 | Secret | Value |
 |--------|-------|

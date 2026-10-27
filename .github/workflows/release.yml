@@ -40,7 +40,7 @@ jobs:
       # set as plain booleans.
       HAS_MAC_CERT: ${{ secrets.MAC_CSC_LINK != '' }}
       HAS_NOTARY_KEY: ${{ secrets.APPLE_API_KEY_P8 != '' }}
-      HAS_AZURE_SIGNING: ${{ vars.AZURE_SIGNING_ENDPOINT != '' && secrets.AZURE_CLIENT_SECRET != '' }}
+      HAS_AZURE_SIGNING: ${{ vars.AZURE_SIGNING_ENDPOINT != '' && vars.AZURE_SIGNING_ACCOUNT != '' && vars.AZURE_SIGNING_PROFILE != '' && secrets.AZURE_CLIENT_SECRET != '' }}
       # A tag push must produce a signed, notarized mac build, and a signed
       # Windows build once Azure Trusted Signing is configured (the endpoint
       # variable is set). A manual dispatch never enforces signing, even when
