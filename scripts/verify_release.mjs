@@ -85,7 +85,7 @@ function verifyMac() {
     }
 
     const authority = details.output.match(/Authority=(Developer ID Application[^\n]*)/)[1]
-    console.log(`${app}: signed by ${authority}; notarized ${stapled.ok ? 'and stapled' : 'NO'}; Gatekeeper ${gatekeeper.ok ? 'accepts' : 'REJECTS'}`)
+    console.log(`${app}: signed by ${authority}; notarization ticket ${stapled.ok ? 'stapled' : 'NOT stapled'}; Gatekeeper ${gatekeeper.ok ? 'accepts' : 'REJECTS'}`)
   }
 }
 

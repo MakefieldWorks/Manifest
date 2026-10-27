@@ -55,6 +55,12 @@ from App Store Connect → Users and Access → Integrations → App Store Conne
 API; a key with the Developer role can notarize. Apple lets you download the
 `.p8` once, so keep the original somewhere safe outside the repository.
 
+Notarization runs in `scripts/notarize-mac.cjs` (an `afterSign` hook) rather
+than electron-builder's built-in `notarize`, so that stapling can be retried
+when `xcrun stapler` loses its connection to Apple's ticket service. If it
+still fails, the build continues with a notarized but unstapled app; a dry run
+reports that, and a tag push fails in the verify step.
+
 The workflow writes the `.p8` to the runner's temp directory for the duration of
 the job and deletes it afterwards. The certificate goes to electron-builder as
 `CSC_LINK`, which imports it into a temporary keychain.
