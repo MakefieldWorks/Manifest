@@ -75,8 +75,9 @@ allowed to sign goes under **Repository secrets**.
 | `AZURE_CLIENT_ID` | Secret | Application (client) ID of the app registration |
 | `AZURE_CLIENT_SECRET` | Secret | A client secret value for that app registration |
 
-The app registration needs the **Trusted Signing Certificate Profile Signer**
-role on the certificate profile (Access control (IAM) on the profile or the
+The app registration needs the **Artifact Signing Certificate Profile Signer**
+role (formerly Trusted Signing Certificate Profile Signer; Microsoft renamed
+Trusted Signing to Artifact Signing) on the certificate profile (Access control (IAM) on the profile or the
 account). electron-builder installs the `TrustedSigning` PowerShell module on
 the runner, signs `Manifest.exe`, the uninstaller and the installer, and
 timestamps them with `http://timestamp.acs.microsoft.com`. Client secrets
