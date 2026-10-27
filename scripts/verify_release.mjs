@@ -55,6 +55,19 @@ function macAppBundles() {
     .filter((path) => existsSync(path))
 }
 
+// `stapler validate` checks the stapled ticket against Apple's ticket service,
+// which drops connections now and then (Error 68), so retry before concluding
+// the ticket is missing.
+function stapleValidate(app) {
+  let result
+  for (const delaySeconds of [0, 15, 30, 60]) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delaySeconds * 1000)
+    result = probe('xcrun', ['stapler', 'validate', app])
+    if (result.ok) return result
+  }
+  return result
+}
+
 function verifyMac() {
   const bundles = macAppBundles()
   assert(bundles.length > 0, `No Manifest.app bundles under ${DIST_DIR}/mac*`)
@@ -77,7 +90,7 @@ function verifyMac() {
     assert(verify.ok, `codesign --verify failed for ${app}:\n${verify.output}`)
     assert(/flags=0x10000\(runtime\)/.test(details.output), `${app} is signed without the hardened runtime`)
 
-    const stapled = probe('xcrun', ['stapler', 'validate', app])
+    const stapled = stapleValidate(app)
     const gatekeeper = probe('spctl', ['--assess', '--type', 'execute', '--verbose=2', app])
     if (REQUIRE_SIGNED) {
       assert(stapled.ok, `${app} has no stapled notarization ticket:\n${stapled.output}`)
@@ -86,6 +99,7 @@ function verifyMac() {
 
     const authority = details.output.match(/Authority=(Developer ID Application[^\n]*)/)[1]
     console.log(`${app}: signed by ${authority}; notarization ticket ${stapled.ok ? 'stapled' : 'NOT stapled'}; Gatekeeper ${gatekeeper.ok ? 'accepts' : 'REJECTS'}`)
+    if (!stapled.ok) console.log(stapled.output)
   }
 }
 

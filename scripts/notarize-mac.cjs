@@ -43,7 +43,8 @@ function submit(app) {
     const zip = join(workDir, 'Manifest.zip')
     execFileSync('ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, zip])
     console.log(`  • notarizing ${app}`)
-    const result = notarytool(['submit', zip, '--wait'])
+    const result = notarytool(['submit', zip, '--wait', '--timeout', '30m'])
+    if (!result.id) throw new Error(`notarytool submit returned no submission:\n${JSON.stringify(result, null, 2)}`)
     if (result.status !== 'Accepted') {
       let log
       try {
@@ -85,6 +86,13 @@ exports.default = async function notarizeMac(context) {
   }
 
   const app = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
+  // electron-builder runs afterSign even when it skipped signing, so only
+  // submit an app that actually carries a Developer ID signature.
+  const signature = spawnSync('codesign', ['--display', '--verbose=2', app], { encoding: 'utf8' })
+  if (!`${signature.stdout}${signature.stderr}`.includes('Authority=Developer ID Application')) {
+    console.log('  • skipped macOS notarization (the app has no Developer ID signature)')
+    return
+  }
   submit(app)
   await staple(app)
 }
