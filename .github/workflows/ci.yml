@@ -58,6 +58,17 @@ jobs:
       # through its executable rather than the development build.
       - name: Verify Linux package
         run: bun run package:verify
+
+      # Build the actual distributable formats on every Ubuntu PR/push. The
+      # unpacked package above catches launch regressions; this catches desktop
+      # entry, icon, and MIME integration regressions before release time.
+      - name: Verify Linux desktop integration artifacts
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes rpm rpm2cpio cpio
+          node node_modules/electron-builder/cli.js --linux --publish never
+          bun run package:verify:linux-desktop
+
       - name: Generate dogfood fixture
         run: bun run generate:project -- --output ./tmp/pilot-dogfood --name "Pilot Lab Inventory" --nodes 750 --depth 6 --branching 4 --snapshots 4 --seed 20260424
       - name: Packaged dogfood

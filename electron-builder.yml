@@ -31,6 +31,9 @@ files:
 
 fileAssociations:
   - ext: manifestproject
+    # Linux packages emit a shared-mime-info XML definition only when this is
+    # explicit. It also becomes the desktop entry's MimeType field.
+    mimeType: application/x-manifestproject
     name: Manifest Project
     description: Manifest project document
     role: Editor
@@ -67,9 +70,22 @@ win:
 linux:
   icon: resources/icon.png
   category: Office
+  synopsis: Local-first desktop app for structured project management
+  # FPM requires a maintainer for deb/rpm metadata. Keep the release contact
+  # explicit so package builds do not depend on package.json author parsing.
+  maintainer: MakefieldWorks <robertg@digwave.com>
   files:
     - "!node_modules/better-sqlite3/prebuilds/{darwin,win32}-*"
   target:
     - target: AppImage
+      arch:
+        - x64
+    # Native packages register the launcher, icon, and Manifest project MIME
+    # association with the desktop environment. The AppImage remains the
+    # portable option for distributions outside the supported package families.
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
       arch:
         - x64

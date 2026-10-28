@@ -82,6 +82,15 @@ jobs:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: printf '%s\n' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
 
+      # FPM needs the host rpm tooling to create an RPM from the Ubuntu
+      # builder. rpm2cpio/cpio are also used to inspect its payload below.
+      - name: Install Linux package tools
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes rpm rpm2cpio cpio
+
       - name: Package
         shell: bash
         env:
@@ -142,6 +151,14 @@ jobs:
             node scripts/verify_release.mjs
           fi
 
+      # The package payloads contain the desktop entry and MIME definition;
+      # inspect them on the Linux builder rather than treating a successful
+      # electron-builder invocation as proof of desktop integration.
+      - name: Verify Linux desktop integration metadata
+        if: matrix.os == 'linux'
+        shell: bash
+        run: bun run package:verify:linux-desktop
+
       - name: Remove notarization key
         if: always() && matrix.os == 'mac'
         shell: bash
@@ -154,6 +171,8 @@ jobs:
             dist/Manifest-*.dmg
             dist/Manifest-*.exe
             dist/Manifest-*.AppImage
+            dist/Manifest-*.deb
+            dist/Manifest-*.rpm
             dist/SHA256SUMS-*.txt
           if-no-files-found: error
           retention-days: 14

@@ -59,7 +59,7 @@ You will need:
 - macOS 13 or newer, Windows, or Linux for Electron development
 
 `better-sqlite3` is a native dependency, but it ships prebuilt Node-API binaries, so no rebuild step is needed. `bun install` also downloads the Electron binary for your platform. `trustedDependencies` in `package.json` replaces Bun's default trusted list so no dependency install scripts run, which keeps Bun from compiling better-sqlite3 from source; the root `postinstall` downloads Electron (see `docs/ARCHITECTURE.md`).
-On Linux, Electron uses Wayland by default; use `--ozone-platform=x11` on X11-only systems.
+On Linux, Electron uses Wayland by default; use `--ozone-platform=x11` on X11-only systems. Alpha and beta releases support x86_64 Ubuntu LTS and Fedora Workstation; use the `.deb` or `.rpm` there for desktop integration, or the AppImage as a portable fallback.
 
 ## Quick Start
 

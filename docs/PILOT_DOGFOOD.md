@@ -42,6 +42,46 @@ The default Linux CI job runs `package:verify` and the packaged dogfood test
 on every PR. On Linux the packaged executable is `dist/linux-unpacked/manifest`;
 run the test under `xvfb-run --auto-servernum` when no display is available.
 
+## Linux Desktop Handoff
+
+Linux alpha and beta support is limited to **x86_64 Ubuntu LTS** and **x86_64
+Fedora Workstation**. AppImage remains available as a portable fallback, but
+only the native package is expected to register the launcher, icon, and
+`.manifestproject` association persistently.
+
+Build the Linux release artifacts from a clean checkout, then inspect them
+before testing:
+
+```bash
+bun run build
+node node_modules/electron-builder/cli.js --linux --publish never
+bun run package:verify:linux-desktop
+```
+
+On Ubuntu, install the generated `.deb`; on Fedora, install the generated
+`.rpm`. For each system, verify all of the following before publishing a
+release:
+
+- The application launcher is named **Manifest**, appears in the Office or
+  Productivity category, and shows the Manifest icon at normal and high-DPI
+  sizes.
+- A `Manifest.manifestproject` file displays the Manifest document icon,
+  appears as a Manifest Project (or equivalent desktop label), opens by
+  double-clicking, and opens from `xdg-open`. Opening it while Manifest is
+  already running focuses the existing window and loads the selected project.
+- The native frame/titlebar, File/Edit/Project menus, keyboard accelerators,
+  modal dialogs, and folder/file pickers work under both the default Wayland
+  session and an X11 session (`--ozone-platform=x11`).
+- The packaged dogfood scenario completes and a replacement package preserves
+  projects outside the install directory. Confirm the AppImage also launches,
+  while recording any desktop-integration behavior supplied by the user's
+  desktop environment rather than promising it.
+
+Record distro and version, desktop environment, session type (Wayland/X11),
+graphics stack, tested package version, and any deviations. Xvfb CI validates
+packaged application behavior but cannot substitute for this desktop-session
+matrix.
+
 Add the `ci:full` label to a PR, or dispatch `Pilot platform checks` manually,
 to run these checks on fresh macOS and Windows runners. The workflow generates
 the fixture without `--force` because each runner starts clean; use `--force`

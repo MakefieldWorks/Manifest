@@ -8,7 +8,7 @@ ordinary push or PR (see the CI policy in `CLAUDE.md`).
 |----------|-------|---------------|
 | macOS (arm64, x64) | `Manifest-<version>-mac-<arch>.dmg` | The app inside is Developer ID signed (hardened runtime), notarized and stapled; the DMG image itself is unsigned |
 | Windows (x64) | `Manifest-<version>-win-x64.exe` (NSIS) | The app and installer are Authenticode signed through Azure Trusted Signing when it is configured (see below); otherwise they are unsigned. SmartScreen may still warn until the certificate builds download reputation |
-| Linux (x64) | `Manifest-<version>-linux-x86_64.AppImage` | Unsigned (AppImage has no platform signing) |
+| Linux (x64) | `Manifest-<version>-linux-x86_64.AppImage`, `.deb`, `.rpm` | Unsigned; verify the published SHA256SUMS before installing any Linux asset |
 
 Every release also carries `SHA256SUMS.txt` covering all assets.
 
@@ -118,7 +118,9 @@ not signed. Without it, Windows builds stay unsigned and are not enforced.
 5. Download the DMG on a Mac that has never run a development build, open it,
    and launch Manifest from Applications. Gatekeeper should open it without a
    warning. Check the Windows installer and AppImage the same way, then edit
-   the notes and publish the draft.
+   the notes and publish the draft. For Linux, install the `.deb` on Ubuntu and
+   the `.rpm` on Fedora, then follow the Linux desktop checklist in
+   [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md) before publishing.
 
 A published release is public and cannot be fully recalled once people have
 downloaded it. If an asset is wrong, delete the draft and the tag, fix, and tag

@@ -20,7 +20,7 @@ const VERSION = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8'))
 const REQUIRE_SIGNED = process.argv.includes('--require-signed')
 
 const OS = { darwin: 'mac', win32: 'win', linux: 'linux' }[process.platform]
-const ASSET_EXTENSIONS = { mac: ['.dmg'], win: ['.exe'], linux: ['.AppImage'] }[OS]
+const ASSET_EXTENSIONS = { mac: ['.dmg'], win: ['.exe'], linux: ['.AppImage', '.deb', '.rpm'] }[OS]
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -131,12 +131,19 @@ function verifyWindows(assets) {
 }
 
 function verifyLinux(assets) {
-  for (const path of assets) {
-    // Browsers drop the executable bit on download anyway, but a non-executable
-    // build output means electron-builder did not finish the AppImage.
-    assert((statSync(path).mode & 0o111) !== 0, `${path} is not executable`)
-    console.log(`${path}: AppImage (unsigned by design)`)
-  }
+  const appImages = assets.filter(path => path.endsWith('.AppImage'))
+  const debs = assets.filter(path => path.endsWith('.deb'))
+  const rpms = assets.filter(path => path.endsWith('.rpm'))
+  assert(appImages.length === 1, `Expected one Linux AppImage, found ${appImages.length}`)
+  assert(debs.length === 1, `Expected one Linux deb package, found ${debs.length}`)
+  assert(rpms.length === 1, `Expected one Linux rpm package, found ${rpms.length}`)
+
+  // Browsers drop the executable bit on download anyway, but a non-executable
+  // build output means electron-builder did not finish the AppImage.
+  assert((statSync(appImages[0]).mode & 0o111) !== 0, `${appImages[0]} is not executable`)
+  console.log(`${appImages[0]}: AppImage (unsigned by design)`)
+  console.log(`${debs[0]}: deb package`)
+  console.log(`${rpms[0]}: rpm package`)
 }
 
 function writeChecksums(assets) {
