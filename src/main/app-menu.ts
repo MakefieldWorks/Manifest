@@ -9,6 +9,7 @@ import {
 import { buildAppMenuTemplate } from './app-menu-template'
 import type { RecentProjectMenuEntry } from './recent-projects'
 import type { Logger } from './logger'
+import { isHelpWindow } from './help-window'
 
 let commandItems = new Map<MenuCommandId, MenuItem>()
 let commandState = normalizeMenuCommandState(null)
@@ -21,7 +22,8 @@ let installOptions: {
   openRecentProject(path: string): void
   clearRecentProjects(): void
   openPreferences(): void
-  openDocumentation(): void
+  openHelp(): void
+  openOnlineDocumentation(): void
   openReleasesPage(): void
   reportIssue(): void
   copyDiagnostics(): void
@@ -41,7 +43,8 @@ export function installApplicationMenu(options: {
   openRecentProject(path: string): void
   clearRecentProjects(): void
   openPreferences(): void
-  openDocumentation(): void
+  openHelp(): void
+  openOnlineDocumentation(): void
   openReleasesPage(): void
   reportIssue(): void
   copyDiagnostics(): void
@@ -55,7 +58,8 @@ export function installApplicationMenu(options: {
     openRecentProject: options.openRecentProject,
     clearRecentProjects: options.clearRecentProjects,
     openPreferences: options.openPreferences,
-    openDocumentation: options.openDocumentation,
+    openHelp: options.openHelp,
+    openOnlineDocumentation: options.openOnlineDocumentation,
     openReleasesPage: options.openReleasesPage,
     reportIssue: options.reportIssue,
     copyDiagnostics: options.copyDiagnostics,
@@ -81,7 +85,8 @@ function rebuildApplicationMenu(): void {
     openRecentProject: options.openRecentProject,
     clearRecentProjects: options.clearRecentProjects,
     openPreferences: options.openPreferences,
-    openDocumentation: options.openDocumentation,
+    openHelp: options.openHelp,
+    openOnlineDocumentation: options.openOnlineDocumentation,
     openReleasesPage: options.openReleasesPage,
     reportIssue: options.reportIssue,
     openLogsFolder: () => {
@@ -106,7 +111,7 @@ export function updateApplicationMenuState(nextState: unknown): void {
   for (const id of MENU_COMMAND_IDS) {
     const item = commandItems.get(id)
     if (item) item.enabled = commandState[id] ||
-      ((id === 'project:undo' || id === 'project:redo') && Boolean(BrowserWindow.getFocusedWindow()?.getParentWindow()))
+      (isUndoRedo(id) && editsOwnContents(BrowserWindow.getFocusedWindow()))
   }
 }
 
@@ -115,14 +120,28 @@ export function currentApplicationMenuState(): MenuCommandState {
 }
 
 function dispatchMenuCommand(command: MenuCommandId): void {
-  const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const focused = BrowserWindow.getFocusedWindow()
+  // Project commands chosen while Help is in front still apply to the project.
+  const target = focused && (!isHelpWindow(focused) || isUndoRedo(command))
+    ? focused
+    : BrowserWindow.getAllWindows().find(win => !isHelpWindow(win))
   if (!target || target.isDestroyed()) return
-  if (target.getParentWindow() && (command === 'project:undo' || command === 'project:redo')) {
+  if (editsOwnContents(target) && isUndoRedo(command)) {
     target.webContents[command === 'project:undo' ? 'undo' : 'redo']()
     return
   }
   if (!commandState[command]) return
   target.webContents.send(IPC.MENU_COMMAND, command)
+}
+
+function isUndoRedo(command: MenuCommandId): boolean {
+  return command === 'project:undo' || command === 'project:redo'
+}
+
+// Settings (a child window) and Help have their own text fields, so undo and
+// redo there edit those fields and never the project.
+function editsOwnContents(win: BrowserWindow | null): boolean {
+  return Boolean(win?.getParentWindow()) || isHelpWindow(win)
 }
 
 function errorMessage(error: unknown): string {

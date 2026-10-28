@@ -15,7 +15,8 @@ Every release also carries `SHA256SUMS.txt` covering all assets.
 ## Local builds versus release builds
 
 - `bun run package:verify` builds an **unsigned** unpacked app for the host
-  platform. On macOS it disables identity discovery and ad-hoc signs the
+  platform and checks that its `app.asar` holds the icons and the complete
+  offline Help bundle. On macOS it disables identity discovery and ad-hoc signs the
   bundle, so it never touches your keychain. Use it for local testing only.
 - `bun run package` runs electron-builder with the full config. On a Mac with a
   Developer ID Application identity in the login keychain, electron-builder
@@ -97,6 +98,8 @@ not signed. Without it, Windows builds stay unsigned and are not enforced.
 1. Set `version` in `package.json` to the release version (for example
    `0.1.0-alpha.2`) in a PR, and merge it. The workflow fails if the tag and
    `package.json` disagree.
+   If the website docs changed since the last refresh, update the offline Help
+   bundle first (`bun run help:update`; see [OFFLINE_HELP.md](OFFLINE_HELP.md)).
 2. Optional dry run: **Actions → Release → Run workflow** on `main`. It builds
    and verifies all three platforms and uploads them as workflow artifacts,
    without creating a release, even when started from a tag. With the

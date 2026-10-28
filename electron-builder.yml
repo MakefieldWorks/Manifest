@@ -23,6 +23,9 @@ files:
   - out/**/*
   - package.json
   - resources/icon.png
+  # Offline Help (Help → Manifest Help), generated from the website docs; see
+  # docs/OFFLINE_HELP.md. Served from app.asar by src/main/help-window.ts.
+  - resources/help/**/*
   # better-sqlite3 ships its C++ sources and a prebuilt binary for every
   # platform. Only the binaries are needed at runtime, and each platform section
   # below drops the foreign ones so macOS signing never meets an ELF or PE file.

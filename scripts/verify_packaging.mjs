@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
-import { join } from 'path'
+import { join, relative, sep } from 'path'
 import { fileURLToPath } from 'url'
 
 import { listPackage } from '@electron/asar'
@@ -107,12 +107,34 @@ function verifyAsarAssets(asarPath) {
     asarEntries.has('/out/renderer/favicon.png') || asarEntries.has('out/renderer/favicon.png'),
     'Packaged app.asar is missing the branded favicon asset'
   )
+  verifyAsarOfflineHelp(asarEntries)
+}
+
+// Help → Manifest Help reads the bundle from app.asar, so every file of the
+// committed bundle must be packaged, not just its entry page.
+function verifyAsarOfflineHelp(asarEntries) {
+  const helpDir = join(ROOT_DIR, 'resources', 'help')
+  const info = JSON.parse(readFileSync(join(helpDir, 'offline-help.json'), 'utf8'))
+  const entryPage = `resources/help${info.entry}index.html`
+  const missing = listFiles(helpDir)
+    .map(path => `resources/help/${relative(helpDir, path).split(sep).join('/')}`)
+    .filter(path => !asarEntries.has(`/${path}`) && !asarEntries.has(path))
+  assert(missing.length === 0, `Packaged app.asar is missing offline Help files:\n  ${missing.join('\n  ')}`)
+  assert(asarEntries.has(`/${entryPage}`) || asarEntries.has(entryPage), `Packaged app.asar is missing ${entryPage}`)
+}
+
+function listFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const path = join(dir, entry.name)
+    return entry.isDirectory() ? listFiles(path) : [path]
+  })
 }
 
 function verifyWindowsBundle() {
   const unpackedDir = join(DIST_DIR, 'win-unpacked')
   assert(existsSync(unpackedDir), `Could not find Windows unpacked output at ${unpackedDir}`)
   ensureFile(join(unpackedDir, 'Manifest.exe'))
+  verifyAsarAssets(join(unpackedDir, 'resources', 'app.asar'))
 }
 
 // buildHostPackage passes --dir, so Linux produces linux-unpacked rather than
@@ -132,7 +154,7 @@ function main() {
   else if (process.platform === 'win32') verifyWindowsBundle()
   else verifyLinuxBundle()
 
-  console.log(`Verified packaged branding assets for ${process.platform}`)
+  console.log(`Verified packaged branding assets and offline Help for ${process.platform}`)
 }
 
 main()

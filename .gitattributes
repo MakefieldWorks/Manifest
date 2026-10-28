@@ -1,0 +1,3 @@
+# Generated from the website docs by `bun run help:update`; see docs/OFFLINE_HELP.md.
+# Collapsed in GitHub diffs so PRs show the source changes first.
+resources/help/** linguist-generated=true

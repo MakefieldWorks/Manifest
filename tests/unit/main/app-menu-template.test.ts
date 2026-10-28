@@ -8,6 +8,7 @@ function templateFor(
   platform: NodeJS.Platform,
   isDev = false,
   recentProjects: RecentProjectMenuEntry[] = [],
+  calls: string[] = [],
 ): MenuItemConstructorOptions[] {
   return buildAppMenuTemplate({
     platform,
@@ -18,11 +19,12 @@ function templateFor(
     openRecentProject: () => {},
     clearRecentProjects: () => {},
     openPreferences: () => {},
-    openDocumentation: () => {},
-    openReleasesPage: () => {},
-    reportIssue: () => {},
-    openLogsFolder: () => {},
-    copyDiagnostics: () => {},
+    openHelp: () => { calls.push('openHelp') },
+    openOnlineDocumentation: () => { calls.push('openOnlineDocumentation') },
+    openReleasesPage: () => { calls.push('openReleasesPage') },
+    reportIssue: () => { calls.push('reportIssue') },
+    openLogsFolder: () => { calls.push('openLogsFolder') },
+    copyDiagnostics: () => { calls.push('copyDiagnostics') },
   })
 }
 
@@ -130,20 +132,56 @@ describe('buildAppMenuTemplate', () => {
     expect(items[3]).toMatchObject({ label: 'Clear Menu' })
   })
 
-  it('renders desktop help actions', () => {
-    const helpMenu = templateFor('linux').find(item => item.label === 'Help')
+  it.each(['linux', 'win32'] as const)('puts local Help first and About last on %s', (platform) => {
+    const helpMenu = templateFor(platform).find(item => item.label === 'Help')
     if (!helpMenu) throw new Error('Help menu not found')
 
-    expect(submenu(helpMenu).map(item => item.label)).toEqual([
+    expect(submenu(helpMenu).map(item => item.label ?? item.role ?? item.type)).toEqual([
+      'Manifest Help',
+      'Online Documentation',
+      'separator',
       'Check for Updates...',
-      undefined,
-      'Manifest Documentation',
       'Report an Issue...',
-      undefined,
+      'separator',
       'Open Logs Folder',
       'Copy Diagnostics',
-      undefined,
-      undefined,
+      'separator',
+      'about',
+    ])
+  })
+
+  it('leaves About in the app menu on macOS', () => {
+    const helpMenu = templateFor('darwin').find(item => item.label === 'Help')
+    if (!helpMenu) throw new Error('Help menu not found')
+
+    expect(submenu(helpMenu).map(item => item.label ?? item.type)).toEqual([
+      'Manifest Help',
+      'Online Documentation',
+      'separator',
+      'Check for Updates...',
+      'Report an Issue...',
+      'separator',
+      'Open Logs Folder',
+      'Copy Diagnostics',
+    ])
+  })
+
+  it('wires each Help item to its own action', () => {
+    const calls: string[] = []
+    const helpMenu = templateFor('linux', false, [], calls).find(item => item.label === 'Help')
+    if (!helpMenu) throw new Error('Help menu not found')
+
+    for (const item of submenu(helpMenu)) {
+      if (typeof item.click === 'function') (item.click as () => void)()
+    }
+
+    expect(calls).toEqual([
+      'openHelp',
+      'openOnlineDocumentation',
+      'openReleasesPage',
+      'reportIssue',
+      'openLogsFolder',
+      'copyDiagnostics',
     ])
   })
 })
