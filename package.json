@@ -21,7 +21,8 @@
     "test:e2e": "bun run build && playwright test",
     "test:dogfood": "node scripts/run-dogfood.mjs",
     "package": "electron-vite build && electron-builder",
-    "package:verify": "node scripts/verify_packaging.mjs"
+    "package:verify": "node scripts/verify_packaging.mjs",
+    "package:verify:linux-desktop": "node scripts/verify_linux_desktop_integration.mjs"
   },
   "dependencies": {
     "@tanstack/svelte-virtual": "^3.13.23",
