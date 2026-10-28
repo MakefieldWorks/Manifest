@@ -73,6 +73,9 @@ let quitAfterFinalSave = false
 let finalQuitInProgress = false
 const approvedWindowCloses = new WeakSet<BrowserWindow>()
 let windowStateSaveTimer: ReturnType<typeof setTimeout> | null = null
+// Until startup creates the project window, it loads whatever project is open
+// by then; afterwards a missing project window means only Help is left open.
+let startupWindowCreated = false
 
 function createWindow(): BrowserWindow {
   const iconPath = getBrandIconPath()
@@ -701,6 +704,7 @@ app.whenReady().then(async () => {
   await drainPendingOpenTargets()
   await reopenLastProjectIfRequested()
   createWindow()
+  startupWindowCreated = true
 
   app.on('activate', () => {
     // Help can stay open after the project window closes on macOS.
@@ -1194,16 +1198,20 @@ function notifyProjectOpenFromOs(
   options: { notifyRenderer: boolean }
 ): void {
   if (!options.notifyRenderer) return
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0]
+  // Not getAllWindows()[0]: on macOS that can be Help, which has no project UI.
+  const win = mainWindow
   if (!win || win.isDestroyed()) {
-    if (!result.ok) {
-      void dialog.showMessageBox({
-        type: 'error',
-        title: 'Could Not Open Project',
-        message: result.error.message,
-        buttons: ['OK'],
-      })
+    // A new project window loads the open project itself.
+    if (result.ok) {
+      if (startupWindowCreated) createWindow()
+      return
     }
+    void dialog.showMessageBox({
+      type: 'error',
+      title: 'Could Not Open Project',
+      message: result.error.message,
+      buttons: ['OK'],
+    })
     return
   }
   if (!result.ok) {
@@ -1220,8 +1228,12 @@ function notifyProjectOpenFromOs(
 
 function focusMainWindow(): void {
   if (e2eBackground) return
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0]
-  if (!win || win.isDestroyed()) return
+  const win = mainWindow
+  if (!win || win.isDestroyed()) {
+    // Only Help is open (macOS keeps the app running): bring the project window back.
+    if (startupWindowCreated) createWindow()
+    return
+  }
   if (win.isMinimized()) win.restore()
   win.show()
   win.focus()

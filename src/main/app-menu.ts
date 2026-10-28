@@ -131,6 +131,8 @@ function dispatchMenuCommand(command: MenuCommandId): void {
     return
   }
   if (!commandState[command]) return
+  // A command chosen from Help acts on the project window, so show it.
+  if (target !== focused) target.focus()
   target.webContents.send(IPC.MENU_COMMAND, command)
 }
 

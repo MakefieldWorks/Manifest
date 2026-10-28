@@ -35,6 +35,14 @@ if (status && !allowDirty) {
   fail(`${websiteDir} has uncommitted changes. Commit them, or pass --allow-dirty for a local preview that must not be committed.`)
 }
 
+// The website squash-merges, so only commits on its main survive. A bundle
+// built from a PR branch would record a commit that later disappears.
+try {
+  execFileSync('git', ['merge-base', '--is-ancestor', 'HEAD', 'origin/main'], { cwd: websiteDir, stdio: 'ignore' })
+} catch {
+  console.warn(`help:update: warning: ${websiteDir} HEAD is not on origin/main. Commit the refreshed bundle only after rebuilding from the website's main.`)
+}
+
 execFileSync('bun', ['run', 'build:offline-help'], { cwd: websiteDir, stdio: 'inherit' })
 
 const info = JSON.parse(readFileSync(join(outputDir, 'offline-help.json'), 'utf8'))

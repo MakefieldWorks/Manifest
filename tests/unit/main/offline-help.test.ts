@@ -56,17 +56,17 @@ describe('resolveHelpRequest', () => {
   })
 
   it('never resolves outside the bundle', () => {
+    // URL parsing drops literal ".." segments, so these stay inside the root.
+    expect(resolveHelpRequest(ROOT, 'manifest-help://help/../../etc/passwd')).toBe(join(ROOT, 'etc', 'passwd'))
+    expect(resolveHelpRequest(ROOT, 'manifest-help://help/%2e%2e/%2e%2e/etc/passwd')).toBe(join(ROOT, 'etc', 'passwd'))
+    // Encoded separators survive parsing and only become ".." after decoding.
     for (const url of [
-      'manifest-help://help/../../etc/passwd',
-      'manifest-help://help/%2e%2e/%2e%2e/etc/passwd',
-      'manifest-help://help/docs/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd',
       'manifest-help://help/..%2F..%2Fsecret',
+      'manifest-help://help/docs/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd',
+      'manifest-help://help/%2e%2e',
     ]) {
-      const resolved = resolveHelpRequest(ROOT, url)
-      if (resolved !== null) expect(resolved.startsWith(ROOT + path.sep)).toBe(true)
+      expect(resolveHelpRequest(ROOT, url), url).toBeNull()
     }
-    expect(resolveHelpRequest(ROOT, 'manifest-help://help/..%2F..%2Fsecret')).toBeNull()
-    expect(resolveHelpRequest(ROOT, 'manifest-help://help/%2e%2e')).toBeNull()
   })
 
   it('keeps Windows separators inside the bundle', () => {

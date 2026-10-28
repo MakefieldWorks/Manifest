@@ -98,7 +98,9 @@ function verifyMacBundle() {
 function verifyAsarAssets(asarPath) {
   ensureFile(asarPath)
 
-  const asarEntries = new Set(listPackage(asarPath))
+  // listPackage joins entries with the host separator, so Windows reports
+  // \resources\icon.png; compare with forward slashes everywhere.
+  const asarEntries = new Set(listPackage(asarPath).map(entry => entry.replaceAll('\\', '/')))
   assert(
     asarEntries.has('/resources/icon.png') || asarEntries.has('resources/icon.png'),
     'Packaged app.asar is missing resources/icon.png for runtime icon usage'
