@@ -695,6 +695,7 @@ app.whenReady().then(async () => {
     openReleasesPage: openReleasesPage,
     reportIssue: reportIssue,
     copyDiagnostics: copyDiagnostics,
+    showProjectWindow: focusMainWindow,
   })
   const iconPath = getBrandIconPath()
   configureAboutPanel(iconPath)

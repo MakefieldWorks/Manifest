@@ -27,6 +27,7 @@ let installOptions: {
   openReleasesPage(): void
   reportIssue(): void
   copyDiagnostics(): void
+  showProjectWindow(): void
 } | null = null
 let recentProjects: RecentProjectMenuEntry[] = []
 
@@ -48,6 +49,7 @@ export function installApplicationMenu(options: {
   openReleasesPage(): void
   reportIssue(): void
   copyDiagnostics(): void
+  showProjectWindow(): void
 }): void {
   installOptions = {
     platform: options.platform,
@@ -63,6 +65,7 @@ export function installApplicationMenu(options: {
     openReleasesPage: options.openReleasesPage,
     reportIssue: options.reportIssue,
     copyDiagnostics: options.copyDiagnostics,
+    showProjectWindow: options.showProjectWindow,
   }
   recentProjects = options.recentProjects
   rebuildApplicationMenu()
@@ -125,14 +128,23 @@ function dispatchMenuCommand(command: MenuCommandId): void {
   const target = focused && (!isHelpWindow(focused) || isUndoRedo(command))
     ? focused
     : BrowserWindow.getAllWindows().find(win => !isHelpWindow(win))
-  if (!target || target.isDestroyed()) return
+  if (!target || target.isDestroyed()) {
+    // On macOS Help can outlive the project window. Bring the project window
+    // back; its project hub offers New and Open itself.
+    installOptions?.showProjectWindow()
+    return
+  }
   if (editsOwnContents(target) && isUndoRedo(command)) {
     target.webContents[command === 'project:undo' ? 'undo' : 'redo']()
     return
   }
   if (!commandState[command]) return
   // A command chosen from Help acts on the project window, so show it.
-  if (target !== focused) target.focus()
+  if (target !== focused) {
+    if (target.isMinimized()) target.restore()
+    target.show()
+    target.focus()
+  }
   target.webContents.send(IPC.MENU_COMMAND, command)
 }
 

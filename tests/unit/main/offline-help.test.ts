@@ -63,7 +63,7 @@ describe('resolveHelpRequest', () => {
     for (const url of [
       'manifest-help://help/..%2F..%2Fsecret',
       'manifest-help://help/docs/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd',
-      'manifest-help://help/%2e%2e',
+      'manifest-help://help/docs/..%2f..%2f..%2fpackage.json',
     ]) {
       expect(resolveHelpRequest(ROOT, url), url).toBeNull()
     }
