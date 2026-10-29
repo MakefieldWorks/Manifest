@@ -22,7 +22,8 @@
     "test:dogfood": "node scripts/run-dogfood.mjs",
     "package": "electron-vite build && electron-builder",
     "package:verify": "node scripts/verify_packaging.mjs",
-    "package:verify:linux-desktop": "node scripts/verify_linux_desktop_integration.mjs"
+    "package:verify:linux-desktop": "node scripts/verify_linux_desktop_integration.mjs",
+    "help:update": "node scripts/update_offline_help.mjs"
   },
   "dependencies": {
     "@tanstack/svelte-virtual": "^3.13.23",

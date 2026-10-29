@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "entry": "/docs/start/introduction/",
+  "site": "https://manifest.makefieldworks.com",
+  "source": {
+    "repository": "manifest-website",
+    "commit": "66e15ea53cae4ad2784cccff1b3ac4af85115087",
+    "dirty": false
+  }
+}

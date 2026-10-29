@@ -38,7 +38,9 @@ import type { Project, Result, NodeTemplate, ImportMapping, NetboxImportOptions 
 import type { BatchPropertyUpdateRequest } from '../shared/batch-properties'
 import { isReportFormat } from '../shared/report'
 import { isE2eBackground } from './e2e-background'
-import { DOCUMENTATION_URL, REPORT_ISSUE_URL, RELEASES_URL } from '../shared/external-links'
+import { DOCUMENTATION_URL, REPORT_ISSUE_URL, RELEASES_URL, WEBSITE_URL } from '../shared/external-links'
+import { closeHelpWindow, installHelpProtocol, openHelpWindow, registerHelpScheme } from './help-window'
+import { helpRootFor, readOfflineHelpInfo } from './offline-help'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,8 @@ const SETTINGS_WINDOW_WIDTH = 760
 const SETTINGS_WINDOW_HEIGHT = 560
 const e2eBackground = isE2eBackground(process.env)
 
+registerHelpScheme()
+
 // ─── Window ──────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null
@@ -69,6 +73,9 @@ let quitAfterFinalSave = false
 let finalQuitInProgress = false
 const approvedWindowCloses = new WeakSet<BrowserWindow>()
 let windowStateSaveTimer: ReturnType<typeof setTimeout> | null = null
+// Until startup creates the project window, it loads whatever project is open
+// by then; afterwards a missing project window means only Help is left open.
+let startupWindowCreated = false
 
 function createWindow(): BrowserWindow {
   const iconPath = getBrandIconPath()
@@ -123,6 +130,9 @@ function createWindow(): BrowserWindow {
   })
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
+    // Elsewhere the app quits with its last window, so Help must not keep it
+    // running once the project window is gone.
+    if (process.platform !== 'darwin') closeHelpWindow()
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -669,6 +679,7 @@ app.whenReady().then(async () => {
   }
 
   registerIpcHandlers()
+  installHelpProtocol(helpRootFor(__dirname), appLogger)
   installApplicationMenu({
     platform: process.platform,
     isDev: Boolean(process.env['ELECTRON_RENDERER_URL']),
@@ -679,10 +690,12 @@ app.whenReady().then(async () => {
     openRecentProject: openRecentProject,
     clearRecentProjects: clearRecentProjects,
     openPreferences: openPreferences,
-    openDocumentation: openDocumentation,
+    openHelp: openHelp,
+    openOnlineDocumentation: openOnlineDocumentation,
     openReleasesPage: openReleasesPage,
     reportIssue: reportIssue,
     copyDiagnostics: copyDiagnostics,
+    showProjectWindow: focusMainWindow,
   })
   const iconPath = getBrandIconPath()
   configureAboutPanel(iconPath)
@@ -692,9 +705,11 @@ app.whenReady().then(async () => {
   await drainPendingOpenTargets()
   await reopenLastProjectIfRequested()
   createWindow()
+  startupWindowCreated = true
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    // Help can stay open after the project window closes on macOS.
+    if (!mainWindow) createWindow()
   })
 })
 
@@ -756,7 +771,7 @@ function configureAboutPanel(iconPath: string | undefined): void {
     applicationVersion: app.getVersion(),
     version: app.getVersion(),
     copyright: `Copyright © ${new Date().getFullYear()} Manifest contributors`,
-    website: DOCUMENTATION_URL,
+    website: WEBSITE_URL,
     iconPath,
   })
 }
@@ -919,8 +934,54 @@ function openPreferences(): void {
   createSettingsWindow()
 }
 
-function openDocumentation(): void {
-  openExternalSafely(DOCUMENTATION_URL, 'documentation link')
+function openHelp(): void {
+  const root = helpRootFor(__dirname)
+  const info = readOfflineHelpInfo(root)
+  if (!info) {
+    appLogger.error('offline help bundle is missing or invalid', { root })
+    void showHelpUnavailable()
+    return
+  }
+  openHelpWindow({
+    root,
+    info,
+    show: !e2eBackground,
+    icon: getBrandIconPath(),
+    backgroundColor: windowBackgroundColor(),
+    logger: appLogger,
+  })
+}
+
+async function showHelpUnavailable(): Promise<void> {
+  const owner = mainWindow ?? BrowserWindow.getFocusedWindow()
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    title: 'Help Not Available',
+    message: 'This copy of Manifest does not include its offline Help.',
+    detail: `The same documentation is online at:\n${DOCUMENTATION_URL}`,
+    buttons: ['Open Online Documentation', 'Close'],
+    defaultId: 0,
+    cancelId: 1,
+  }
+  const result = owner && !owner.isDestroyed()
+    ? await dialog.showMessageBox(owner, options)
+    : await dialog.showMessageBox(options)
+  if (result.response === 0) await openOnlineDocumentation()
+}
+
+async function openOnlineDocumentation(): Promise<void> {
+  try {
+    await shell.openExternal(DOCUMENTATION_URL)
+  } catch (error: unknown) {
+    appLogger.error('failed to open online documentation', { error: errorMessage(error), url: DOCUMENTATION_URL })
+    await showMessageBoxSafely('online documentation error dialog', mainWindow ?? BrowserWindow.getFocusedWindow(), {
+      type: 'error',
+      title: 'Could Not Open Documentation',
+      message: 'Manifest could not open the online documentation in your browser.',
+      detail: `Open this address in a browser:\n${DOCUMENTATION_URL}\n\nHelp → Manifest Help has the same documentation and works without internet access.`,
+      buttons: ['OK'],
+    })
+  }
 }
 
 async function openReleasesPage(): Promise<void> {
@@ -939,8 +1000,35 @@ async function openReleasesPage(): Promise<void> {
   }
 }
 
-function reportIssue(): void {
-  openExternalSafely(REPORT_ISSUE_URL, 'issue report link')
+async function reportIssue(): Promise<void> {
+  try {
+    await shell.openExternal(REPORT_ISSUE_URL)
+    return
+  } catch (error: unknown) {
+    appLogger.error('failed to open issue report link', { error: errorMessage(error), url: REPORT_ISSUE_URL })
+  }
+
+  // Without a browser the user files the report from another device, so put
+  // the details they would otherwise have to collect on the clipboard.
+  let copied = false
+  try {
+    await clipboard.writeText(await collectDiagnostics())
+    copied = true
+  } catch (error: unknown) {
+    appLogger.error('failed to copy diagnostics for issue report', { error: errorMessage(error) })
+  }
+  await showMessageBoxSafely('issue report error dialog', mainWindow ?? BrowserWindow.getFocusedWindow(), {
+    type: 'error',
+    title: 'Could Not Open Issue Form',
+    message: 'Manifest could not open the issue form in your browser.',
+    detail: [
+      `Open this address in a browser to report an issue:\n${REPORT_ISSUE_URL}`,
+      copied
+        ? 'Diagnostics were copied to the clipboard. Paste them into the report so it includes your app version and system details.'
+        : 'Diagnostics could not be copied. Use Help → Copy Diagnostics, then paste them into the report.',
+    ].join('\n\n'),
+    buttons: ['OK'],
+  })
 }
 
 function copyDiagnostics(): void {
@@ -949,8 +1037,8 @@ function copyDiagnostics(): void {
   })
 }
 
-async function copyDiagnosticsToClipboard(): Promise<void> {
-  const diagnostics = buildDiagnostics({
+async function collectDiagnostics(): Promise<string> {
+  return buildDiagnostics({
     appName: app.name || 'Manifest',
     appVersion: app.getVersion(),
     platform: process.platform,
@@ -963,6 +1051,10 @@ async function copyDiagnosticsToClipboard(): Promise<void> {
     logsPath: logDir,
     userDataPath: userData,
   })
+}
+
+async function copyDiagnosticsToClipboard(): Promise<void> {
+  const diagnostics = await collectDiagnostics()
   await clipboard.writeText(diagnostics)
 
   const owner = mainWindow ?? BrowserWindow.getFocusedWindow()
@@ -1107,16 +1199,20 @@ function notifyProjectOpenFromOs(
   options: { notifyRenderer: boolean }
 ): void {
   if (!options.notifyRenderer) return
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0]
+  // Not getAllWindows()[0]: on macOS that can be Help, which has no project UI.
+  const win = mainWindow
   if (!win || win.isDestroyed()) {
-    if (!result.ok) {
-      void dialog.showMessageBox({
-        type: 'error',
-        title: 'Could Not Open Project',
-        message: result.error.message,
-        buttons: ['OK'],
-      })
+    // A new project window loads the open project itself.
+    if (result.ok) {
+      if (startupWindowCreated) createWindow()
+      return
     }
+    void dialog.showMessageBox({
+      type: 'error',
+      title: 'Could Not Open Project',
+      message: result.error.message,
+      buttons: ['OK'],
+    })
     return
   }
   if (!result.ok) {
@@ -1133,8 +1229,12 @@ function notifyProjectOpenFromOs(
 
 function focusMainWindow(): void {
   if (e2eBackground) return
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0]
-  if (!win || win.isDestroyed()) return
+  const win = mainWindow
+  if (!win || win.isDestroyed()) {
+    // Only Help is open (macOS keeps the app running): bring the project window back.
+    if (startupWindowCreated) createWindow()
+    return
+  }
   if (win.isMinimized()) win.restore()
   win.show()
   win.focus()

@@ -6,7 +6,7 @@
 // source files that TypeScript/unit tests can exercise.
 
 import { execFileSync, spawnSync } from 'child_process'
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'fs'
+import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync } from 'fs'
 import { tmpdir } from 'os'
 import { basename, join, relative } from 'path'
 import { fileURLToPath } from 'url'
@@ -130,16 +130,37 @@ function verifyDeb(path) {
 
 function verifyRpm(path) {
   withTemporaryDirectory('manifest-rpm-', directory => {
-    const archive = run('rpm2cpio', [path], { encoding: 'buffer' })
-    const unpack = spawnSync('cpio', ['--extract', '--make-directories', '--quiet'], {
-      cwd: directory,
-      input: archive,
-      encoding: 'utf8',
-    })
+    // The cpio stream is the whole uncompressed app (hundreds of MB), far past
+    // what execFileSync will buffer, so rpm2cpio writes it to a file instead.
+    const archivePath = join(directory, 'payload.cpio')
+    const archive = openSync(archivePath, 'w')
+    let extract
+    try {
+      extract = spawnSync('rpm2cpio', [path], { stdio: ['ignore', archive, 'pipe'], encoding: 'utf8' })
+    } finally {
+      closeSync(archive)
+    }
+    if (extract.error || extract.status !== 0) {
+      throw new Error(`rpm2cpio could not read ${basename(path)}: ${extract.stderr || extract.error}`)
+    }
+
+    const root = join(directory, 'root')
+    mkdirSync(root)
+    const input = openSync(archivePath, 'r')
+    let unpack
+    try {
+      unpack = spawnSync('cpio', ['--extract', '--make-directories', '--quiet'], {
+        cwd: root,
+        stdio: [input, 'ignore', 'pipe'],
+        encoding: 'utf8',
+      })
+    } finally {
+      closeSync(input)
+    }
     if (unpack.error || unpack.status !== 0) {
       throw new Error(`cpio could not extract ${basename(path)}: ${unpack.stderr || unpack.error}`)
     }
-    verifyTree(directory, 'rpm', { requireMimeDefinition: true })
+    verifyTree(root, 'rpm', { requireMimeDefinition: true })
   })
 }
 

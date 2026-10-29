@@ -11,7 +11,8 @@ export interface AppMenuTemplateOptions {
   openRecentProject(path: string): void
   clearRecentProjects(): void
   openPreferences(): void
-  openDocumentation(): void
+  openHelp(): void
+  openOnlineDocumentation(): void
   openReleasesPage(): void
   reportIssue(): void
   openLogsFolder(): void
@@ -201,13 +202,17 @@ export function buildAppMenuTemplate(options: AppMenuTemplateOptions): MenuItemC
     label: 'Help',
     submenu: [
       {
-        label: 'Check for Updates...',
-        click: options.openReleasesPage,
+        label: 'Manifest Help',
+        click: options.openHelp,
+      },
+      {
+        label: 'Online Documentation',
+        click: options.openOnlineDocumentation,
       },
       separator(),
       {
-        label: 'Manifest Documentation',
-        click: options.openDocumentation,
+        label: 'Check for Updates...',
+        click: options.openReleasesPage,
       },
       {
         label: 'Report an Issue...',

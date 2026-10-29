@@ -39,6 +39,7 @@ The core idea is simple. Your project lives as a readable `Manifest.manifestproj
 - Compare snapshots, or compare the current project against a snapshot, across the whole project or one selected subtree; scope and snapshot descriptions carry into the merged diff/tree view and exported Markdown, CSV, or self-contained HTML review.
 - Follow the system appearance or choose a fixed appearance plus any built-in light and dark
   scheme independently from Settings.
+- Read the user documentation offline in the app (Help → Manifest Help), or online at [manifest.makefieldworks.com](https://manifest.makefieldworks.com); see [offline Help](docs/OFFLINE_HELP.md).
 - Check for updates on demand from the Help menu; see [manual update and offline installation guidance](docs/UPDATES.md).
 
 ## Stack
