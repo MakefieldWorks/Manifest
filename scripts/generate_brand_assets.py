@@ -66,6 +66,18 @@ def generate_ico(base_png: Path, target: Path) -> None:
     image.save(target, format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
 
+def generate_installer_sidebar(base_png: Path, target: Path) -> None:
+    # The Windows installer's welcome and finish pages show a 164x314 bitmap on
+    # the left. NSIS reads only uncompressed 24-bit BMP, so the mark is
+    # flattened onto the white raised-surface color from DESIGN.md, which also
+    # matches the page beside it.
+    width, height, mark_size = 164, 314, 104
+    sidebar = Image.new("RGB", (width, height), "#ffffff")
+    mark = Image.open(base_png).convert("RGBA").resize((mark_size, mark_size), Image.Resampling.LANCZOS)
+    sidebar.paste(mark, ((width - mark_size) // 2, 48), mark)
+    sidebar.save(target, format="BMP")
+
+
 def generate_web_assets(base_png: Path) -> None:
     RENDERER_PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SOURCE_SVG, RENDERER_PUBLIC_DIR / "manifest-mark.svg")
@@ -82,16 +94,19 @@ def main() -> int:
     base_png = RESOURCES_DIR / "icon.png"
     icns_path = RESOURCES_DIR / "icon.icns"
     ico_path = RESOURCES_DIR / "icon.ico"
+    sidebar_path = RESOURCES_DIR / "installerSidebar.bmp"
 
     render_base_png(base_png)
     generate_icns(base_png, icns_path)
     generate_ico(base_png, ico_path)
+    generate_installer_sidebar(base_png, sidebar_path)
     generate_web_assets(base_png)
 
     print("Generated branding assets from resources/manifest.svg")
     print(f"- {base_png.relative_to(ROOT)}")
     print(f"- {icns_path.relative_to(ROOT)}")
     print(f"- {ico_path.relative_to(ROOT)}")
+    print(f"- {sidebar_path.relative_to(ROOT)}")
     print(f"- {(RENDERER_PUBLIC_DIR / 'manifest-mark.svg').relative_to(ROOT)}")
     print(f"- {(RENDERER_PUBLIC_DIR / 'manifest-mark.png').relative_to(ROOT)}")
     print(f"- {(RENDERER_PUBLIC_DIR / 'favicon.png').relative_to(ROOT)}")

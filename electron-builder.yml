@@ -70,6 +70,31 @@ win:
       arch:
         - x64
 
+# An assisted (wizard) installer rather than electron-builder's default
+# one-click installer, so people can choose who it is installed for, where it
+# goes, and whether it adds a desktop shortcut. Upgrades reuse the previous
+# install mode and folder, which the installer reads from the registry.
+nsis:
+  oneClick: false
+  # Shows the "Anyone who uses this computer / Only for me" page. "Only for me"
+  # (the default, under %LOCALAPPDATA%\Programs) needs no administrator rights;
+  # "Anyone" asks for elevation and installs under Program Files.
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  # Shown after the welcome page; resources/installer.nsh turns it into an
+  # informational page (Next, not "I Agree") because the license is MIT.
+  license: LICENSE
+  createStartMenuShortcut: true
+  # The desktop shortcut is created by default and removed again when the
+  # "Create a desktop shortcut" box on the custom page in
+  # resources/installer.nsh is cleared.
+  createDesktopShortcut: true
+  shortcutName: Manifest
+  # Project folders live wherever people keep them and are never touched by the
+  # uninstaller; this only keeps app preferences under %APPDATA% as well.
+  deleteAppDataOnUninstall: false
+
 linux:
   icon: resources/icon.png
   category: Office

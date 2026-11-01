@@ -653,7 +653,7 @@ and installer generation.
 | Platform | Format | Notes |
 |----------|--------|-------|
 | macOS | DMG | Universal binary (Intel + ARM via `--universal`) |
-| Windows | NSIS | Standard installer, auto-elevate for per-machine install |
+| Windows | NSIS | Assisted installer: per-user (default, no admin) or all users (elevates), choice of folder and desktop shortcut |
 | Linux | AppImage | Broadest compatibility across distros |
 
 ### Code signing

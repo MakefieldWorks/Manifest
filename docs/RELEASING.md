@@ -132,7 +132,9 @@ not signed. Without it, Windows builds stay unsigned and are not enforced.
    hyphen (`-alpha.N`, `-beta.N`) are marked as prereleases.
 5. Download the DMG on a Mac that has never run a development build, open it,
    and launch Manifest from Applications. Gatekeeper should open it without a
-   warning. Check the Windows installer the same way, then edit the notes
+   warning. Check the Windows installer the same way: it should show the
+   welcome, license, install-for, folder, and shortcut pages, and the shortcut
+   choice should be honored. Then edit the notes
    (marking the Intel Mac and Linux assets as not officially supported) and
    publish the draft. The Intel DMG and Linux assets are not tested by hand
    (see [Platform support](#platform-support)); when a Linux test machine is
