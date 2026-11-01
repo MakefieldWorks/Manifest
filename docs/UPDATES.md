@@ -27,15 +27,17 @@ Download the appropriate release asset on a connected computer, transfer it
 to the target computer if necessary, close Manifest, and install it manually:
 
 1. **macOS:** Open the DMG for the computer's architecture (arm64 for Apple
-   silicon, x64 for Intel) and replace the existing Manifest app in Applications.
+   silicon; x64 for Intel, which is not officially supported) and replace the
+   existing Manifest app in Applications.
 2. **Windows:** Run the x64 NSIS installer. Keep the project folders where they
    are; the installer is separate from project data.
-3. **Linux:** Choose the asset for the installed distribution: replace the x64
-   AppImage, make it executable if needed, and launch it; or install the x64
-   `.deb` on Ubuntu/Debian-family systems or the x64 `.rpm` on Fedora-family
-   systems with the system package installer. Native packages register the
-   launcher, icon, and `.manifestproject` association; AppImage integration is
-   deliberately portable and can vary by desktop environment.
+3. **Linux** (not officially supported yet): Choose the asset for the installed
+   distribution: replace the x64 AppImage, make it executable if needed, and
+   launch it; or install the x64 `.deb` on Ubuntu/Debian-family systems or the
+   x64 `.rpm` on Fedora-family systems with the system package installer.
+   Native packages register the launcher, icon, and `.manifestproject`
+   association; AppImage integration is deliberately portable and can vary by
+   desktop environment.
 
 Open an existing project and check its name, nodes, and snapshot timeline after
 updating. Project folders are independent of the installed application. Keep a

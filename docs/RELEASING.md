@@ -12,6 +12,18 @@ ordinary push or PR (see the CI policy in `CLAUDE.md`).
 
 Every release also carries `SHA256SUMS.txt` covering all assets.
 
+## Platform support
+
+Officially supported during the alpha: **macOS 13+ on Apple silicon (arm64)**
+and **Windows x64**. These are the platforms tested by hand before each release.
+
+The **Intel Mac (x64) DMG** and all **Linux** assets are still built, signed
+where applicable and verified by the release workflow, but they are **not
+officially supported**: there is no Intel Mac or Linux desktop machine to test
+them on before a release. Say so in the release notes. Linux becomes supported
+once a test machine can run the Linux desktop checklist in
+[PILOT_DOGFOOD.md](PILOT_DOGFOOD.md).
+
 ## Local builds versus release builds
 
 - `bun run package:verify` builds an **unsigned** unpacked app for the host
@@ -120,10 +132,12 @@ not signed. Without it, Windows builds stay unsigned and are not enforced.
    hyphen (`-alpha.N`, `-beta.N`) are marked as prereleases.
 5. Download the DMG on a Mac that has never run a development build, open it,
    and launch Manifest from Applications. Gatekeeper should open it without a
-   warning. Check the Windows installer and AppImage the same way, then edit
-   the notes and publish the draft. For Linux, install the `.deb` on Ubuntu and
-   the `.rpm` on Fedora, then follow the Linux desktop checklist in
-   [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md) before publishing.
+   warning. Check the Windows installer the same way, then edit the notes
+   (marking the Intel Mac and Linux assets as not officially supported) and
+   publish the draft. The Intel DMG and Linux assets are not tested by hand
+   (see [Platform support](#platform-support)); when a Linux test machine is
+   available, install the `.deb` on Ubuntu and the `.rpm` on Fedora and follow
+   the Linux desktop checklist in [PILOT_DOGFOOD.md](PILOT_DOGFOOD.md).
 
 A published release is public and cannot be fully recalled once people have
 downloaded it. If an asset is wrong, delete the draft and the tag, fix, and tag
