@@ -47,9 +47,10 @@ run the test under `xvfb-run --auto-servernum` when no display is available.
 Linux builds are **not officially supported** yet, because there is no Linux
 desktop machine to run this checklist on before a release (see
 [RELEASING.md](RELEASING.md#platform-support)). Once there is, support will be
-limited to **x86_64 Ubuntu LTS** and **x86_64 Fedora Workstation**. AppImage remains available as a portable fallback, but
-only the native package is expected to register the launcher, icon, and
-`.manifestproject` association persistently.
+limited to **x86_64 Ubuntu LTS** and **x86_64 Fedora Workstation**. AppImage
+remains available as a portable fallback, but only the native package is
+expected to register the launcher, icon, and `.manifestproject` association
+persistently.
 
 Build the Linux release artifacts from a clean checkout, then inspect them
 before testing:
