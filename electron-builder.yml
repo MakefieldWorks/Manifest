@@ -9,6 +9,8 @@ artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 # better-sqlite3 ships prebuilt Node-API binaries that load in any Electron
 # version, so there is nothing to recompile while packaging.
 npmRebuild: false
+# Writes dist/installer-license.txt for the Windows installer's license page.
+beforePack: ./scripts/installer-license.cjs
 # Ad-hoc signs unsigned macOS builds; a no-op unless MANIFEST_ADHOC_SIGN=1.
 afterPack: ./scripts/adhoc-sign-mac.cjs
 # Notarizes and staples with retries; see the script for why it replaces
@@ -69,6 +71,33 @@ win:
     - target: nsis
       arch:
         - x64
+
+# An assisted (wizard) installer rather than electron-builder's default
+# one-click installer, so people can choose who it is installed for, where it
+# goes, and whether it adds a desktop shortcut. Upgrades reuse the previous
+# install mode and folder, which the installer reads from the registry.
+nsis:
+  oneClick: false
+  # Shows the "Anyone who uses this computer / Only for me" page. "Only for me"
+  # (the default, under %LOCALAPPDATA%\Programs) needs no administrator rights;
+  # "Anyone" asks for elevation and installs under Program Files.
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  # Shown after the welcome page; resources/installer.nsh turns it into an
+  # informational page (Next, not "I Agree") because the license is MIT. The
+  # file is LICENSE with its paragraphs unwrapped, written by the beforePack
+  # hook above so the text wraps to the license box instead of mid-sentence.
+  license: dist/installer-license.txt
+  createStartMenuShortcut: true
+  # The desktop shortcut is created by default and removed again when the
+  # "Create a desktop shortcut" box on the custom page in
+  # resources/installer.nsh is cleared.
+  createDesktopShortcut: true
+  shortcutName: Manifest
+  # Project folders live wherever people keep them and are never touched by the
+  # uninstaller; this only keeps app preferences under %APPDATA% as well.
+  deleteAppDataOnUninstall: false
 
 linux:
   icon: resources/icon.png
