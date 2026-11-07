@@ -15,7 +15,7 @@ paths also perform a final save.
   quit event. If the OS terminates the process without allowing that flow,
   Layertrail falls back to the last successful autosave/recovery data.
 - Crash Recovery: crashes cannot show a final-save dialog, so recovery remains
-  based on already-written autosave, manifest, snapshot, and recovery-point
+  based on already-written autosave, document, snapshot, and recovery-point
   data.
 
 Final-save failures are never silently ignored. The open project remains in

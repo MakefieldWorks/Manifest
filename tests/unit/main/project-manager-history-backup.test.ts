@@ -6,7 +6,7 @@ import { join } from 'path'
 import { ProjectManager } from '../../../src/main/project-manager'
 import { GitService } from '../../../src/main/git-service'
 import { HistoryBackupStore } from '../../../src/main/history-backup'
-import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-document-file'
 
 // Keep real filesystem behavior while allowing one targeted failure injection.
 vi.mock('fs', async importOriginal => ({ ...await importOriginal<typeof import('fs')>() }))
@@ -20,14 +20,14 @@ let historyPath: string
 let backupPath: string
 
 beforeEach(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'manifest-history-backup-'))
+  directory = mkdtempSync(join(tmpdir(), 'layertrail-history-backup-'))
   git = new GitService(logger as any)
   manager = new ProjectManager(git, logger as any)
   const result = await manager.createProject('History Backup Lab', directory)
   if (!result.ok) throw new Error(result.error.message)
   projectPath = result.data.path!
-  historyPath = join(projectPath, '.manifest', 'history.json')
-  backupPath = join(projectPath, '.manifest', 'history.backup.json')
+  historyPath = join(projectPath, '.layertrail', 'history.json')
+  backupPath = join(projectPath, '.layertrail', 'history.backup.json')
 })
 
 afterEach(async () => {
@@ -88,7 +88,7 @@ describe('automatic history backup and explicit restore', () => {
     expect(await manager.restoreHistoryBackup({ token: status.token }))
       .toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
     expect(readFileSync(historyPath)).toEqual(bytes)
-    expect(readdirSync(join(projectPath, '.manifest')).filter(name => name.includes('.damaged-'))).toEqual([])
+    expect(readdirSync(join(projectPath, '.layertrail')).filter(name => name.includes('.damaged-'))).toEqual([])
   })
 
   it.each(['missing', 'corrupt', 'foreign', 'future backup', 'missing snapshot', 'future primary', 'healthy primary'])('refuses unsafe restore: %s', async fault => {
@@ -120,7 +120,7 @@ describe('automatic history backup and explicit restore', () => {
     manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Recoverable rack')
     const result = await manager.snapshotRevert({ name: 'baseline' })
     if (!result.ok) throw new Error(result.error.message)
-    rmSync(join(projectPath, result.data.safetyRecoveryPoint!.manifestPath))
+    rmSync(join(projectPath, result.data.safetyRecoveryPoint!.payloadPath))
     writeFileSync(historyPath, '{damaged')
     expect(await manager.historyBackupStatus()).toMatchObject({ ok: true, data: { available: false } })
   })
@@ -148,14 +148,14 @@ describe('automatic history backup and explicit restore', () => {
     const reverted = await manager.snapshotRevert({ name: 'baseline', note: 'Rollback later work' })
     if (!reverted.ok) throw new Error(reverted.error.message)
     // Ensure an unlisted payload exists independently of whether HEAD matched.
-    mkdirSync(join(projectPath, '.manifest', 'recovery'), { recursive: true })
-    const orphan = join(projectPath, '.manifest', 'recovery', 'unlisted.manifest.json')
+    mkdirSync(join(projectPath, '.layertrail', 'recovery'), { recursive: true })
+    const orphan = join(projectPath, '.layertrail', 'recovery', 'unlisted.document.json')
     writeFileSync(orphan, JSON.stringify(manager.getCurrent()))
     writeFileSync(backupPath, backup)
     writeFileSync(historyPath, '{damaged')
     const status = await preview()
     expect(status.missingSnapshots).toEqual(['later'])
-    expect(status.unlistedRecoveryFiles).toContain('unlisted.manifest.json')
+    expect(status.unlistedRecoveryFiles).toContain('unlisted.document.json')
     expect((await manager.restoreHistoryBackup({ token: status.token })).ok).toBe(true)
     const timeline = await manager.snapshotTimeline()
     if (!timeline.ok) throw new Error(timeline.error.message)
@@ -166,10 +166,10 @@ describe('automatic history backup and explicit restore', () => {
 
   it('rechecks referenced files when restoring a preview', async () => {
     await manager.snapshotCreate('baseline')
-    mkdirSync(join(projectPath, '.manifest', 'recovery'), { recursive: true })
+    mkdirSync(join(projectPath, '.layertrail', 'recovery'), { recursive: true })
     writeFileSync(historyPath, '{damaged')
     const status = await preview()
-    writeFileSync(join(projectPath, '.manifest', 'recovery', 'new.manifest.json'), '{}')
+    writeFileSync(join(projectPath, '.layertrail', 'recovery', 'new.document.json'), '{}')
     expect(await manager.restoreHistoryBackup({ token: status.token })).toMatchObject({ ok: false, error: { code: 'VALIDATION_FAILED' } })
   })
 
@@ -252,7 +252,7 @@ describe('automatic history backup and explicit restore', () => {
       .toMatchObject({ ok: false, error: { code: 'HISTORY_BACKUP_FAILED' } })
     expect((await git.listSnapshots(projectPath)).map(snapshot => snapshot.name)).toEqual(['baseline'])
     expect(readFileSync(historyPath)).toEqual(bytes)
-    expect(readdirSync(join(projectPath, '.manifest')).filter(name => name.endsWith('.tmp'))).toEqual([])
+    expect(readdirSync(join(projectPath, '.layertrail')).filter(name => name.endsWith('.tmp'))).toEqual([])
   })
 
   it('retains the previous backup and its payloads if backup refresh fails after primary commit', async () => {
@@ -263,7 +263,7 @@ describe('automatic history backup and explicit restore', () => {
       manager.nodeCreate(root, `Rack ${i}`)
       const reverted = await manager.snapshotRevert({ name: 'baseline' })
       if (!reverted.ok) throw new Error(reverted.error.message)
-      payloads.push(reverted.data.safetyRecoveryPoint!.manifestPath)
+      payloads.push(reverted.data.safetyRecoveryPoint!.payloadPath)
     }
     const originalSave = HistoryBackupStore.prototype.save
     let calls = 0
@@ -276,8 +276,8 @@ describe('automatic history backup and explicit restore', () => {
     expect(existsSync(join(projectPath, payloads[0]))).toBe(true)
     const primary = JSON.parse(readFileSync(historyPath, 'utf8'))
     const backup = JSON.parse(readFileSync(backupPath, 'utf8'))
-    expect(primary.recoveryPoints[0].manifestPath).not.toBe(payloads[0])
-    expect(backup.history.recoveryPoints[0].manifestPath).toBe(payloads[0])
+    expect(primary.recoveryPoints[0].payloadPath).not.toBe(payloads[0])
+    expect(backup.history.recoveryPoints[0].payloadPath).toBe(payloads[0])
     writeFileSync(historyPath, '{damaged after backup failure')
     expect((await preview()).recoveryPointCount).toBe(10)
   })

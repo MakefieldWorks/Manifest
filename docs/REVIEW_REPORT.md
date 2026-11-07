@@ -1,7 +1,7 @@
 # Portable HTML Review
 
-Manifest can export a comparison as a self-contained HTML review. The file opens
-in a browser without Manifest, a network connection, JavaScript, fonts, images,
+Layertrail can export a comparison as a self-contained HTML review. The file opens
+in a browser without Layertrail, a network connection, JavaScript, fonts, images,
 or other external resources. It can also be printed or saved as PDF through the
 browser's normal print command.
 

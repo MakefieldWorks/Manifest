@@ -9,7 +9,7 @@
 import type {
   Project,
   EditHistoryState,
-  ManifestNode,
+  ProjectNode,
   NodeTemplate,
   Snapshot,
   DiffEntry,
@@ -180,7 +180,7 @@ export type FolderDialogPurpose = 'open-project' | 'create-project'
 // Node mutation methods return Result<Project> — the full updated project state
 // after each mutation. The renderer replaces its local store entirely, which
 // eliminates any possibility of partial-sync bugs.
-export interface ManifestAPI {
+export interface LayertrailAPI {
   historyOperation: {
     status(): Promise<Result<{ pending: boolean }>>
     review(): Promise<Result<InterruptedHistoryPreview>>

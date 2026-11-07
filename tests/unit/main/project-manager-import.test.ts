@@ -20,7 +20,7 @@ let manager: ProjectManager
 
 const TS = '2026-01-01T00:00:00.000Z'
 
-function manifest() {
+function document() {
   return {
     version: 3,
     id: 'imp-id',
@@ -45,7 +45,7 @@ function manifest() {
 }
 
 async function open(): Promise<void> {
-  writeFileSync(join(tmpDir, 'Layertrail.layertrail'), JSON.stringify(manifest(), null, 2), 'utf8')
+  writeFileSync(join(tmpDir, 'Layertrail.layertrail'), JSON.stringify(document(), null, 2), 'utf8')
   manager = new ProjectManager(noopGit as any, noopLogger as any)
   const r = await manager.openProject(tmpDir)
   expect(r.ok).toBe(true)
@@ -62,7 +62,7 @@ function flatMapping(over: Partial<ImportMapping> = {}): ImportMapping {
 }
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-import-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-import-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
 })
 

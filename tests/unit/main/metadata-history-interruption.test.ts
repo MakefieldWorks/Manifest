@@ -7,7 +7,7 @@ import { ProjectManager } from '../../../src/main/project-manager'
 import { GitService } from '../../../src/main/git-service'
 import { HistoryOperationStore } from '../../../src/main/history-operation'
 import { HistoryBackupStore } from '../../../src/main/history-backup'
-import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-document-file'
 
 const logger = { error() {}, warn() {}, info() {}, debug() {} }
 let root: string
@@ -17,18 +17,18 @@ let git: GitService
 let store: HistoryOperationStore
 let historyPath: string
 let backupPath: string
-const recoveryName = 'recovery-unlisted.manifest.json'
+const recoveryName = 'recovery-unlisted.document.json'
 
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'manifest-metadata-interruption-'))
+  root = mkdtempSync(join(tmpdir(), 'layertrail-metadata-interruption-'))
   git = new GitService(logger as any)
   manager = new ProjectManager(git, logger as any)
   const created = await manager.createProject('Metadata Interruption', root)
   if (!created.ok) throw new Error(created.error.message)
   path = created.data.path!
   store = new HistoryOperationStore(path, created.data.id)
-  historyPath = join(path, '.manifest', 'history.json')
-  backupPath = join(path, '.manifest', 'history.backup.json')
+  historyPath = join(path, '.layertrail', 'history.json')
+  backupPath = join(path, '.layertrail', 'history.backup.json')
   expect((await manager.snapshotCreate('baseline')).ok).toBe(true)
   mkdirSync(store.recoveryPath, { recursive: true })
   writeFileSync(join(store.recoveryPath, recoveryName), JSON.stringify(manager.getCurrent()))
@@ -143,7 +143,7 @@ describe('metadata-only history interruption protection', () => {
       const changed = JSON.parse(readFileSync(historyPath, 'utf8'))
       changed.recoveryPoints.push({
         id: 'reconciled-outside-change', createdAt: new Date().toISOString(), reason: 'reconciled',
-        manifestPath: `.manifest/recovery/${recoveryName}`,
+        payloadPath: `.layertrail/recovery/${recoveryName}`,
       })
       writeFileSync(historyPath, JSON.stringify(changed))
     })

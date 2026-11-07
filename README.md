@@ -109,9 +109,9 @@ docs             product, architecture, and roadmap documentation
 
 ## Data Model
 
-Each Layertrail project is stored in a folder containing a `Layertrail.layertrail` file. The capitalization is part of the canonical filename on case-sensitive filesystems. Projects saved before the rename from Manifest use `Manifest.manifestproject` (or the older `manifest.json`); opening one renames the document. See [docs/RENAME.md](docs/RENAME.md).
+Each Layertrail project is stored in a folder containing a `Layertrail.layertrail` file. The capitalization is part of the canonical filename on case-sensitive filesystems.
 
-That file is the source of truth. Search indexes are rebuildable. Snapshot history is Git-backed. The app is designed so the durable project state remains inspectable and portable. Internal recovery payloads under `.manifest/recovery/` intentionally remain JSON sidecar files; they are not Layertrail project documents.
+That file is the source of truth. Search indexes are rebuildable. Snapshot history is Git-backed. The app is designed so the durable project state remains inspectable and portable. Internal recovery payloads under `.layertrail/recovery/` intentionally remain JSON sidecar files; they are not Layertrail project documents.
 
 ## Branding
 

@@ -6,7 +6,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
 import { GitService } from '../../../src/main/git-service'
-import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-document-file'
 
 const logger = { info() {}, warn() {}, error() {}, debug() {} }
 let manager: ProjectManager
@@ -16,7 +16,7 @@ let source: string
 let archive: string
 let target: string
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'manifest-archive-test-'))
+  root = mkdtempSync(join(tmpdir(), 'layertrail-archive-test-'))
   git = new GitService(logger as any)
   manager = new ProjectManager(git, logger as any)
   const result = await manager.createProject('Archive Lab', root)
@@ -60,12 +60,12 @@ describe('portable project archives', () => {
     manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Safety rack')
     const reverted = await manager.snapshotRevert({ name: 'baseline' })
     if (!reverted.ok || !reverted.data.safetyRecoveryPoint) throw new Error('Missing safety point')
-    const historyPath = join(source, '.manifest', 'history.json')
+    const historyPath = join(source, '.layertrail', 'history.json')
     const history = JSON.parse(readFileSync(historyPath, 'utf8'))
-    history.recoveryPoints[0].manifestPath = history.recoveryPoints[0].manifestPath.replaceAll('/', '\\')
+    history.recoveryPoints[0].payloadPath = history.recoveryPoints[0].payloadPath.replaceAll('/', '\\')
     writeFileSync(historyPath, JSON.stringify(history))
-    writeFileSync(join(source, '.manifest', 'history.json.damaged-test'), Buffer.from([0xff, 0x00]))
-    writeFileSync(join(source, '.manifest', 'recovery', 'unlisted.txt'), 'preserve me')
+    writeFileSync(join(source, '.layertrail', 'history.json.damaged-test'), Buffer.from([0xff, 0x00]))
+    writeFileSync(join(source, '.layertrail', 'recovery', 'unlisted.txt'), 'preserve me')
     manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Unsaved rack')
     const before = structuredClone(manager.getCurrent())
     const undo = manager.editHistoryState()
@@ -79,10 +79,10 @@ describe('portable project archives', () => {
     expect(manager.getCurrent()).toEqual({ ...before, modified: manager.getCurrent()!.modified })
     expect(manager.editHistoryState()).toEqual(undo)
     expect(await git.archiveRefs(restored)).toBe(refs)
-    expect(readFileSync(join(restored, '.manifest', 'history.json'))).toEqual(readFileSync(historyPath))
-    expect(readFileSync(join(restored, '.manifest', 'history.json.damaged-test'))).toEqual(Buffer.from([0xff, 0x00]))
-    expect(readFileSync(join(restored, '.manifest', 'recovery', 'unlisted.txt'), 'utf8')).toBe('preserve me')
-    expect(existsSync(join(restored, '.manifest', 'index'))).toBe(false)
+    expect(readFileSync(join(restored, '.layertrail', 'history.json'))).toEqual(readFileSync(historyPath))
+    expect(readFileSync(join(restored, '.layertrail', 'history.json.damaged-test'))).toEqual(Buffer.from([0xff, 0x00]))
+    expect(readFileSync(join(restored, '.layertrail', 'recovery', 'unlisted.txt'), 'utf8')).toBe('preserve me')
+    expect(existsSync(join(restored, '.layertrail', 'index'))).toBe(false)
     const other = new ProjectManager(new GitService(logger as any), logger as any)
     try {
       expect((await other.openProject(restored)).ok).toBe(true)
@@ -104,22 +104,6 @@ describe('portable project archives', () => {
     expect(a).not.toBe(b)
     expect(existsSync(join(a, PROJECT_DOCUMENT_FILE))).toBe(true)
     expect(existsSync(join(b, PROJECT_DOCUMENT_FILE))).toBe(true)
-  })
-
-  it('restores archives exported by Manifest before the rename', async () => {
-    await exportArchive()
-    editArchive(data => {
-      const entry = data.entries.find((entry: any) => entry.path === PROJECT_DOCUMENT_FILE)
-      entry.path = 'Manifest.manifestproject'
-    })
-    const restored = await restore()
-    expect(existsSync(join(restored, 'Manifest.manifestproject'))).toBe(true)
-
-    await manager.waitForHistoryBackfill()
-    const opened = await manager.openProject(restored)
-    expect(opened.ok).toBe(true)
-    expect(existsSync(join(restored, PROJECT_DOCUMENT_FILE))).toBe(true)
-    expect(existsSync(join(restored, 'Manifest.manifestproject'))).toBe(false)
   })
 
   it.each(['hash', 'path', 'duplicate', 'future', 'missing', 'truncated', 'bundle'])('rejects %s corruption without destination writes', async fault => {
@@ -152,7 +136,7 @@ describe('portable project archives', () => {
   it('preserves an existing export destination on failure', async () => {
     writeFileSync(archive, 'previous archive')
     await manager.snapshotCreate('baseline')
-    writeFileSync(join(source, '.manifest', 'history.json'), '{bad')
+    writeFileSync(join(source, '.layertrail', 'history.json'), '{bad')
     expect((await manager.exportProjectArchive(archive)).ok).toBe(false)
     expect(readFileSync(archive, 'utf8')).toBe('previous archive')
     expect((await manager.exportProjectArchive(join(source, PROJECT_DOCUMENT_FILE))).ok).toBe(false)
@@ -163,7 +147,7 @@ describe('portable project archives', () => {
     manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Rack')
     const result = await manager.snapshotRevert({ name: 'baseline' })
     if (!result.ok) throw new Error('revert failed')
-    const payload = join(source, result.data.safetyRecoveryPoint!.manifestPath)
+    const payload = join(source, result.data.safetyRecoveryPoint!.payloadPath)
     rmSync(payload)
     expect((await manager.exportProjectArchive(archive)).ok).toBe(false)
     symlinkSync(join(source, PROJECT_DOCUMENT_FILE), payload)

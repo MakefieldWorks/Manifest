@@ -3,7 +3,7 @@ import { join } from 'path'
 import { err, ErrorCode, ok } from '../shared/errors'
 import type { NodeTemplate, Project, Result } from '../shared/types'
 import { ProjectManager } from './project-manager'
-import { findProjectDocument } from './project-launcher'
+import { findProjectDocument } from './project-document-file'
 
 export const EXAMPLE_PROJECT_NAME = 'Layertrail Sample Lab'
 

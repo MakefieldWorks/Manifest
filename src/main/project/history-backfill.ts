@@ -141,10 +141,10 @@ export class HistoryBackfill {
 
       let raw: string
       try {
-        raw = await git.readSnapshotManifest(projectPath, snapshotId)
+        raw = await git.readSnapshotDocument(projectPath, snapshotId)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
-        logger.warn('history backfill: manifest read failed', { snapshotId, error: msg })
+        logger.warn('history backfill: document read failed', { snapshotId, error: msg })
         previousProject = null  // can't trust delta against a snapshot we couldn't read
         this.status.completed = i + 1
         await new Promise(resolve => setImmediate(resolve))
@@ -153,7 +153,7 @@ export class HistoryBackfill {
 
       const parsed = this.deps.parse(raw)
       if (!parsed.ok) {
-        logger.warn('history backfill: manifest parse failed', {
+        logger.warn('history backfill: document parse failed', {
           snapshotId, error: parsed.error.message,
         })
         previousProject = null

@@ -2,7 +2,7 @@ import { _electron as electron, type ElectronApplication, type Page } from '@pla
 import { cpSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
-import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-document-file'
 import type { Project } from '../../src/shared/types'
 
 const ROOT_DIR = process.cwd()

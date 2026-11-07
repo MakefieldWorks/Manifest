@@ -107,8 +107,8 @@ export interface AppearancePreference {
 
 export const DEFAULT_APPEARANCE_PREFERENCE: Readonly<AppearancePreference> = {
   mode: 'system',
-  lightThemeId: 'manifest-light',
-  darkThemeId: 'manifest-dark',
+  lightThemeId: 'layertrail-light',
+  darkThemeId: 'layertrail-dark',
 }
 
 const lightTokens: ThemeTokens = {
@@ -331,25 +331,25 @@ const graphiteDarkTokens: ThemeTokens = {
 
 export const BUILT_IN_THEMES: readonly ThemeDefinition[] = [
   {
-    id: 'manifest-light',
+    id: 'layertrail-light',
     label: 'Layertrail Light',
     scheme: 'light',
     tokens: lightTokens,
   },
   {
-    id: 'manifest-graphite-light',
+    id: 'layertrail-graphite-light',
     label: 'Layertrail Graphite Light',
     scheme: 'light',
     tokens: graphiteLightTokens,
   },
   {
-    id: 'manifest-dark',
+    id: 'layertrail-dark',
     label: 'Layertrail Dark',
     scheme: 'dark',
     tokens: darkTokens,
   },
   {
-    id: 'manifest-graphite-dark',
+    id: 'layertrail-graphite-dark',
     label: 'Layertrail Graphite Dark',
     scheme: 'dark',
     tokens: graphiteDarkTokens,

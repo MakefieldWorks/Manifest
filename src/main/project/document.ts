@@ -4,7 +4,7 @@
 
 import { lstatSync, readFileSync } from 'fs'
 import { createHash } from 'crypto'
-import type { ManifestNode, ManifestWarning, NodeTemplate, Project, ProjectWarning, Result } from '../../shared/types'
+import type { ProjectNode, DocumentWarning, NodeTemplate, Project, ProjectWarning, Result } from '../../shared/types'
 import { ok, err, ErrorCode } from '../../shared/errors'
 import { migrate } from '../../shared/migration'
 import {
@@ -30,7 +30,7 @@ export function serializeProjectForPersistence(project: Project): string {
   return JSON.stringify(persistable, null, 2)
 }
 
-export function canonicalizeManifestJson(raw: string): string {
+export function canonicalizeDocumentJson(raw: string): string {
   return JSON.stringify(JSON.parse(raw), null, 2)
 }
 
@@ -91,7 +91,7 @@ export function validateProjectDocument(data: any, logger: Logger): Result<void>
   }
 
   const ids = new Set<string>()
-  for (const node of data.nodes as ManifestNode[]) {
+  for (const node of data.nodes as ProjectNode[]) {
     if (!node.id || !node.name || node.order === undefined || node.order === null) {
       return err(ErrorCode.VALIDATION_FAILED, 'Node missing required fields (id/name/order)')
     }
@@ -102,7 +102,7 @@ export function validateProjectDocument(data: any, logger: Logger): Result<void>
   }
 
   // Exactly one root node required (v2+).
-  const roots = (data.nodes as ManifestNode[]).filter(n => n.parentId === null)
+  const roots = (data.nodes as ProjectNode[]).filter(n => n.parentId === null)
   if (roots.length !== 1) {
     return err(
       ErrorCode.INVALID_HIERARCHY,
@@ -121,11 +121,11 @@ export function validateProjectDocument(data: any, logger: Logger): Result<void>
 // typed-value mismatches. NEVER mutates or coerces — values are left exactly
 // as written on disk; the app surfaces these to the user.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function collectLoadWarnings(data: any): ManifestWarning[] {
-  const warnings: ManifestWarning[] = []
+export function collectLoadWarnings(data: any): DocumentWarning[] {
+  const warnings: DocumentWarning[] = []
   const templates: Record<string, NodeTemplate> =
     data.templates && typeof data.templates === 'object' ? data.templates : {}
-  const nodes = (data.nodes ?? []) as ManifestNode[]
+  const nodes = (data.nodes ?? []) as ProjectNode[]
 
   // Structurally invalid template definitions.
   for (const [id, template] of Object.entries(templates)) {
@@ -243,7 +243,7 @@ export function withProjectWarnings(project: Project, projectWarnings: ProjectWa
   }
 }
 
-export function withLoadWarnings(project: Project, loadWarnings: ManifestWarning[]): Project {
+export function withLoadWarnings(project: Project, loadWarnings: DocumentWarning[]): Project {
   if (loadWarnings.length === 0) return project
   return {
     ...project,
@@ -251,7 +251,7 @@ export function withLoadWarnings(project: Project, loadWarnings: ManifestWarning
   }
 }
 
-function hasCircularRefs(nodes: ManifestNode[]): boolean {
+function hasCircularRefs(nodes: ProjectNode[]): boolean {
   const parentMap = new Map<string, string | null>()
   for (const node of nodes) {
     parentMap.set(node.id, node.parentId ?? null)

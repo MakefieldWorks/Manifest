@@ -25,7 +25,6 @@ Layertrail is a local-first desktop app for managing structured, hierarchical pr
 | [RELEASING.md](RELEASING.md) | Signed release builds, signing secrets, unsigned local builds, and cutting a release |
 | [OFFLINE_HELP.md](OFFLINE_HELP.md) | Bundled offline Help: website docs as the one source, refreshing the bundle, and how the app serves it |
 | [UPDATES.md](UPDATES.md) | Manual alpha/beta update flow, channels, offline installation, and downgrade limits |
-| [RENAME.md](RENAME.md) | The rename from Manifest to Layertrail: what changed, what stays compatible, upgrading from alpha.1 |
 | [UNDO_REDO.md](UNDO_REDO.md) | Project editing history, text undo, and snapshot/session boundaries |
 | [INVENTORY_FILTERS.md](INVENTORY_FILTERS.md) | Structured inventory filters, matching semantics, and paging behavior |
 | [INVENTORY_TABLE.md](INVENTORY_TABLE.md) | Tabular inventory, sorting, columns, selection, and CSV export |

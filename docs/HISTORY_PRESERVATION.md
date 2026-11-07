@@ -1,7 +1,7 @@
 # History metadata preservation
 
 Snapshot descriptions, revert lineage, timeline events, and retained recovery
-point references live in `.manifest/history.json`. Git tags alone cannot rebuild
+point references live in `.layertrail/history.json`. Git tags alone cannot rebuild
 that information. Layertrail therefore preserves an existing metadata file that
 cannot be read, rather than treating it as an empty history and overwriting it.
 
@@ -28,7 +28,7 @@ is a different condition and is never silently treated as legacy history.
 
 ## Automatic backup and explicit restore
 
-`.manifest/history.backup.json` holds one validated metadata copy, with its
+`.layertrail/history.backup.json` holds one validated metadata copy, with its
 project ID and save time. Existing readable metadata is backed up before a
 history operation starts. If that backup cannot be written, the operation is
 blocked before changing the project. After a successful history-operation metadata write,
@@ -77,7 +77,7 @@ the rename; file flushing alone does not guarantee crash durability.
 ## Review unlisted recovery files
 
 Once history metadata is readable, **Additional recovery files → Review recovery
-files** scans `.manifest/recovery` without changing it. Each unlisted file is
+files** scans `.layertrail/recovery` without changing it. Each unlisted file is
 shown with an eligibility explanation. Layertrail accepts recognized recovery
 filenames containing a valid inventory for this project; malformed, foreign,
 unsupported, oversized, linked, and unrecognized files remain untouched.

@@ -13,7 +13,7 @@ let tmpDir: string
 let git: GitService
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-git-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-git-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
   git = new GitService(noopLogger)
 })
@@ -27,8 +27,8 @@ function runGit(args: string[]) {
 }
 
 // Build a Layertrail.layertrail string larger than Node's default 1 MB execFile buffer,
-// so we exercise the maxBuffer path in readSnapshotManifest / readHeadManifest.
-function largeManifestJson(): string {
+// so we exercise the maxBuffer path in readSnapshotDocument / readHeadDocument.
+function largeDocumentJson(): string {
   const nodes = Array.from({ length: 6000 }, (_, i) => ({
     id: `node-${i}`,
     parentId: i === 0 ? null : 'node-0',
@@ -41,9 +41,9 @@ function largeManifestJson(): string {
   return JSON.stringify({ version: 3, id: 'big', name: 'Big', nodes, templates: {} }, null, 2)
 }
 
-describe('GitService — large manifests exceed the default execFile buffer', () => {
-  it('reads a snapshot/head manifest larger than 1 MB without ENOBUFS', async () => {
-    const json = largeManifestJson()
+describe('GitService — large documents exceed the default execFile buffer', () => {
+  it('reads a snapshot/head document larger than 1 MB without ENOBUFS', async () => {
+    const json = largeDocumentJson()
     expect(json.length).toBeGreaterThan(1024 * 1024) // > 1 MB
 
     writeFileSync(join(tmpDir, 'Layertrail.layertrail'), json, 'utf8')
@@ -52,59 +52,11 @@ describe('GitService — large manifests exceed the default execFile buffer', ()
     runGit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'big'])
     runGit(['tag', 'snapshot/big-snap'])
 
-    const fromTag = await git.readSnapshotManifest(tmpDir, 'big-snap')
+    const fromTag = await git.readSnapshotDocument(tmpDir, 'big-snap')
     expect(fromTag.length).toBe(json.length)
 
-    const fromHead = await git.readHeadManifest(tmpDir)
+    const fromHead = await git.readHeadDocument(tmpDir)
     expect(fromHead.length).toBe(json.length)
   })
 
-  it('reads snapshots created before the dedicated document extension', async () => {
-    const legacy = JSON.stringify({ version: 3, id: 'legacy', name: 'Legacy', nodes: [] }, null, 2)
-    writeFileSync(join(tmpDir, 'manifest.json'), legacy, 'utf8')
-    runGit(['init'])
-    runGit(['add', 'manifest.json'])
-    runGit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'legacy'])
-    runGit(['tag', 'snapshot/legacy-snap'])
-
-    await expect(git.readSnapshotManifest(tmpDir, 'legacy-snap')).resolves.toBe(legacy)
-    await expect(git.readHeadManifest(tmpDir)).resolves.toBe(legacy)
-  })
-
-  it('records the legacy-to-document rename in the next snapshot', async () => {
-    const legacy = JSON.stringify({ version: 3, id: 'legacy', name: 'Legacy', nodes: [] }, null, 2)
-    const migrated = JSON.stringify({ version: 3, id: 'legacy', name: 'Migrated', nodes: [] }, null, 2)
-    writeFileSync(join(tmpDir, 'manifest.json'), legacy, 'utf8')
-    runGit(['init'])
-    runGit(['add', 'manifest.json'])
-    runGit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'legacy'])
-    runGit(['tag', 'snapshot/legacy-snap'])
-
-    writeFileSync(join(tmpDir, 'Layertrail.layertrail'), migrated, 'utf8')
-    unlinkSync(join(tmpDir, 'manifest.json'))
-    await git.createSnapshot(tmpDir, 'migrated-snap')
-
-    await expect(git.readSnapshotManifest(tmpDir, 'legacy-snap')).resolves.toBe(legacy)
-    await expect(git.readSnapshotManifest(tmpDir, 'migrated-snap')).resolves.toBe(migrated)
-  })
-
-  it('reads snapshots saved as Manifest.manifestproject and records the rename to Layertrail', async () => {
-    const previous = JSON.stringify({ version: 3, id: 'p', name: 'Before rename', nodes: [] }, null, 2)
-    const renamed = JSON.stringify({ version: 3, id: 'p', name: 'After rename', nodes: [] }, null, 2)
-    writeFileSync(join(tmpDir, 'Manifest.manifestproject'), previous, 'utf8')
-    runGit(['init'])
-    runGit(['add', 'Manifest.manifestproject'])
-    runGit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'alpha.1'])
-    runGit(['tag', 'snapshot/before'])
-
-    await expect(git.readHeadManifest(tmpDir)).resolves.toBe(previous)
-
-    writeFileSync(join(tmpDir, 'Layertrail.layertrail'), renamed, 'utf8')
-    unlinkSync(join(tmpDir, 'Manifest.manifestproject'))
-    await git.createSnapshot(tmpDir, 'after')
-
-    await expect(git.readSnapshotManifest(tmpDir, 'before')).resolves.toBe(previous)
-    await expect(git.readSnapshotManifest(tmpDir, 'after')).resolves.toBe(renamed)
-    expect(execFileSync('git', ['ls-tree', '--name-only', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).trim()).toBe('Layertrail.layertrail')
-  })
 })

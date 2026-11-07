@@ -7,7 +7,7 @@ import {
   NETBOX_TEMPLATE_IDS,
   type NetboxObject,
 } from '../../../src/shared/netbox'
-import type { ManifestNode } from '../../../src/shared/types'
+import type { ProjectNode } from '../../../src/shared/types'
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 // A small but adversarial NetBox dumpdata sample exercising: FK resolution
@@ -51,7 +51,7 @@ function fixture(): NetboxObject[] {
   ]
 }
 
-const baseRoot: ManifestNode = {
+const baseRoot: ProjectNode = {
   id: 'base-1', parentId: null, name: 'Imported', order: 0,
   properties: {}, created: '2026-01-01T00:00:00Z', modified: '2026-01-01T00:00:00Z',
 }
@@ -230,7 +230,7 @@ describe('planNetbox', () => {
   })
 
   it('treats sibling names case-insensitively (matches ProjectManager)', () => {
-    const existingChild: ManifestNode = {
+    const existingChild: ProjectNode = {
       id: 'x', parentId: 'base-1', name: 'site alpha', order: 0,
       properties: {}, created: '2026-01-01T00:00:00Z', modified: '2026-01-01T00:00:00Z',
     }
@@ -396,7 +396,7 @@ describe('planNetbox', () => {
   })
 
   it('skips a site that collides with an existing child of the base parent', () => {
-    const existingChild: ManifestNode = {
+    const existingChild: ProjectNode = {
       id: 'x', parentId: 'base-1', name: 'Site Alpha', order: 0,
       properties: {}, created: '2026-01-01T00:00:00Z', modified: '2026-01-01T00:00:00Z',
     }

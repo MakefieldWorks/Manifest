@@ -2,7 +2,7 @@
 // Uses real filesystem via tmp directories, never mocks.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -41,8 +41,8 @@ function writeFixture(dir: string, data: object) {
   writeFileSync(join(dir, 'Layertrail.layertrail'), JSON.stringify(data, null, 2), 'utf8')
 }
 
-// Build a minimal v2 manifest with a single root node.
-function makeManifest(overrides: Partial<object> = {}) {
+// Build a minimal v2 document with a single root node.
+function makeDocument(overrides: Partial<object> = {}) {
   return {
     version: 2,
     id: 'test-project-id',
@@ -65,9 +65,9 @@ function makeManifest(overrides: Partial<object> = {}) {
 }
 
 beforeEach(async () => {
-  tmpDir = join(tmpdir(), `manifest-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
-  writeFixture(tmpDir, makeManifest())
+  writeFixture(tmpDir, makeDocument())
 
   search = new SearchIndexService()
   manager = makeManager(search)
@@ -135,47 +135,6 @@ describe('nodeCreate', () => {
     if (!result.ok) return
     // Root + new node
     expect(result.data.nodes.length).toBe(2)
-  })
-})
-
-describe('project document migration', () => {
-  it('replaces a legacy manifest and its launcher after a successful open', async () => {
-    await manager.waitForHistoryBackfill()
-    manager.discardCurrentProject()
-    const canonicalPath = join(tmpDir, 'Layertrail.layertrail')
-    const launcherPath = join(tmpDir, 'Manifest.manifestproject')
-    const legacyPath = join(tmpDir, 'manifest.json')
-    rmSync(canonicalPath)
-    writeFileSync(legacyPath, JSON.stringify(makeManifest(), null, 2), 'utf8')
-    // This is the old launcher shape that previously occupied the document name.
-    writeFileSync(launcherPath, JSON.stringify({ version: 1, projectPath: '.' }), 'utf8')
-
-    const legacyManager = makeManager()
-    const opened = await legacyManager.openProject(tmpDir)
-    // Teardown must close the manager that now owns the migrated project's indexes.
-    manager = legacyManager
-
-    expect(opened.ok).toBe(true)
-    expect(existsSync(canonicalPath)).toBe(true)
-    expect(existsSync(legacyPath)).toBe(false)
-    expect(existsSync(launcherPath)).toBe(false)
-    expect(JSON.parse(readFileSync(canonicalPath, 'utf8'))).toMatchObject({ name: 'Test Project' })
-  })
-
-  it('renames a Manifest.manifestproject document saved before the rename to Layertrail', async () => {
-    await manager.waitForHistoryBackfill()
-    manager.discardCurrentProject()
-    const canonicalPath = join(tmpDir, 'Layertrail.layertrail')
-    const previousPath = join(tmpDir, 'Manifest.manifestproject')
-    renameSync(canonicalPath, previousPath)
-
-    const previousManager = makeManager()
-    const opened = await previousManager.openProject(tmpDir)
-    manager = previousManager
-
-    expect(opened.ok).toBe(true)
-    expect(existsSync(previousPath)).toBe(false)
-    expect(JSON.parse(readFileSync(canonicalPath, 'utf8'))).toMatchObject({ name: 'Test Project' })
   })
 })
 
@@ -581,10 +540,10 @@ describe('searchNodes', () => {
     expect(result.data[0]?.parentName).toBe('Cabinet')
   })
 
-  it('rebuilds the index from manifest contents on open', async () => {
+  it('rebuilds the index from document contents on open', async () => {
     await manager.flushAndClose()
 
-    writeFixture(tmpDir, makeManifest({
+    writeFixture(tmpDir, makeDocument({
       nodes: [
         {
           id: 'root-id',
@@ -687,7 +646,7 @@ describe('inventory table and export', () => {
       created: '2026-01-01T00:00:00.000Z',
       modified: '2026-01-01T00:00:00.000Z',
     }))
-    writeFixture(tmpDir, makeManifest({ nodes: [...makeManifest().nodes, ...manyNodes] }))
+    writeFixture(tmpDir, makeDocument({ nodes: [...makeDocument().nodes, ...manyNodes] }))
     search = new SearchIndexService()
     manager = makeManager(search)
     expect((await manager.openProject(tmpDir)).ok).toBe(true)

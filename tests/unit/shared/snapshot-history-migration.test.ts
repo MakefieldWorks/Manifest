@@ -4,7 +4,7 @@ import { emptySnapshotHistory, migrateSnapshotHistory, SnapshotHistoryVersionErr
 describe('snapshot history validation', () => {
   it('upgrades v1 without changing nested records or inventing recovery context', () => {
     const raw = { ...emptySnapshotHistory(), version: 1,
-      recoveryPoints: [{ id: 'old', reason: 'pre-revert', createdAt: '2026-09-10T00:00:00Z', manifestPath: '.manifest/recovery/old.json' }] }
+      recoveryPoints: [{ id: 'old', reason: 'pre-revert', createdAt: '2026-09-10T00:00:00Z', payloadPath: '.layertrail/recovery/old.json' }] }
     const original = structuredClone(raw)
     const migrated = migrateSnapshotHistory(raw)
     expect(migrated.version).toBe(2)
@@ -27,7 +27,7 @@ describe('snapshot history validation', () => {
 
   it.each(['unknown', ['pre-revert'], null])('rejects invalid recovery reasons: %j', reason => {
     const history = { ...emptySnapshotHistory(), recoveryPoints: [{ id: 'point', reason,
-      createdAt: '2026-09-10T00:00:00Z', manifestPath: '.manifest/recovery/point.json' }] }
+      createdAt: '2026-09-10T00:00:00Z', payloadPath: '.layertrail/recovery/point.json' }] }
     expect(() => migrateSnapshotHistory(history)).toThrow('Invalid recovery point metadata')
   })
 
@@ -42,15 +42,15 @@ describe('snapshot history validation', () => {
     expect(() => migrateSnapshotHistory(value)).toThrow()
   })
 
-  it.each(['.manifest/recovery/recovery-1.manifest.json', '.manifest\\recovery\\recovery-1.manifest.json'])('accepts native recovery paths: %s', manifestPath => {
+  it.each(['.layertrail/recovery/recovery-1.document.json', '.layertrail\\recovery\\recovery-1.document.json'])('accepts native recovery paths: %s', payloadPath => {
     const history = emptySnapshotHistory()
-    history.recoveryPoints.push({ id: 'recovery-1', createdAt: '2026-09-09T00:00:00Z', reason: 'pre-revert', manifestPath })
+    history.recoveryPoints.push({ id: 'recovery-1', createdAt: '2026-09-09T00:00:00Z', reason: 'pre-revert', payloadPath })
     expect(migrateSnapshotHistory(history)).toEqual(history)
   })
 
-  it.each(['../outside.json', '.manifest/recovery/../../outside.json', '/tmp/outside.json'])('rejects recovery paths outside the payload directory: %s', manifestPath => {
+  it.each(['../outside.json', '.layertrail/recovery/../../outside.json', '/tmp/outside.json'])('rejects recovery paths outside the payload directory: %s', payloadPath => {
     const history = emptySnapshotHistory()
-    history.recoveryPoints.push({ id: 'recovery-1', createdAt: '2026-09-09T00:00:00Z', reason: 'pre-revert', manifestPath })
+    history.recoveryPoints.push({ id: 'recovery-1', createdAt: '2026-09-09T00:00:00Z', reason: 'pre-revert', payloadPath })
     expect(() => migrateSnapshotHistory(history)).toThrow('Invalid recovery point metadata')
   })
 })

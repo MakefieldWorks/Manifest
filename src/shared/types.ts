@@ -1,7 +1,7 @@
 // Core domain types shared between main process and renderer.
 // No platform-specific imports allowed here.
 
-export interface ManifestNode {
+export interface ProjectNode {
   id: string
   parentId: string | null
   name: string
@@ -56,14 +56,14 @@ export interface TemplateField {
 export interface NodeTemplate {
   label: string
   description?: string
-  // Keyed by property key (the key used in ManifestNode.properties).
+  // Keyed by property key (the key used in ProjectNode.properties).
   fields: Record<string, TemplateField>
 }
 
-// Structured, path-qualified problem found while loading a manifest. Surfaced
+// Structured, path-qualified problem found while loading a document. Surfaced
 // to the user rather than silently coerced/downgraded. Non-fatal: the project
 // still loads with values left exactly as written on disk.
-export interface ManifestWarning {
+export interface DocumentWarning {
   // Dotted path to the offending value, e.g. "nodes[12].properties.firmware".
   path: string
   code: string
@@ -110,13 +110,13 @@ export interface Project {
   name: string
   created: string   // ISO 8601
   modified: string  // ISO 8601
-  nodes: ManifestNode[]
+  nodes: ProjectNode[]
   // Keyed by template id (slug). Persisted to disk.
   templates?: Record<string, NodeTemplate>
   // Runtime-only: not persisted to disk
   path?: string
   // Runtime-only: structured warnings collected at load time. Stripped on write.
-  loadWarnings?: ManifestWarning[]
+  loadWarnings?: DocumentWarning[]
   // Runtime-only: project-level environment/storage warnings. Stripped on write.
   projectWarnings?: ProjectWarning[]
 }
@@ -338,7 +338,7 @@ export interface RecoveryPoint {
   id: string
   createdAt: string // ISO 8601
   reason: 'pre-revert' | 'reconciled'
-  manifestPath: string
+  payloadPath: string
 }
 
 export interface SnapshotRevertRequest {

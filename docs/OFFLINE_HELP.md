@@ -7,7 +7,7 @@ docs on the public website, <https://layertrail.app>.
 ## One source
 
 The docs are written once, as Markdown in the website repository
-(`manifest-website`, under `src/content/docs/docs/`). The website's
+(`layertrail-website`, under `src/content/docs/docs/`). The website's
 `bun run build:offline-help` builds those pages as static files: the same
 Starlight pages, sidebar, styles, and Pagefind search as the website, without
 the landing, download, and changelog pages, which need live release data.
@@ -23,7 +23,7 @@ release ships the docs that were committed with it.
   "format": 1,
   "entry": "/docs/start/introduction/",
   "site": "https://layertrail.app",
-  "source": { "repository": "manifest-website", "commit": "<sha>", "dirty": false }
+  "source": { "repository": "layertrail-website", "commit": "<sha>", "dirty": false }
 }
 ```
 
@@ -36,11 +36,11 @@ Do this after a docs change merges on the website's `main`, and before a
 release whose features the docs describe.
 
 ```bash
-# in a manifest-website checkout
+# in a layertrail-website checkout
 git checkout main && git pull && bun install
 
 # in this repo
-bun run help:update -- ../manifest-website
+bun run help:update -- ../layertrail-website
 bun run test   # includes checks on the committed bundle
 ```
 

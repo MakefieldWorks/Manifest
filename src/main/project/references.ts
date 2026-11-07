@@ -2,13 +2,13 @@
 // references would dangle if a set of nodes were deleted. Pure functions of
 // the project; callers pass the nodes/templates they are checking against.
 
-import type { ManifestNode, NodeTemplate, Project, ReferenceBlocker, TemplateField } from '../../shared/types'
+import type { ProjectNode, NodeTemplate, Project, ReferenceBlocker, TemplateField } from '../../shared/types'
 import { validateReferenceTarget, templateFields, templateLabel } from '../../shared/validation'
 
 export function validateReferenceFieldValue(
   value: unknown,
   field: TemplateField,
-  nodes: ManifestNode[],
+  nodes: ProjectNode[],
   selfId?: string | null,
 ): { valid: boolean; message?: string } {
   if (field.type !== 'reference') return { valid: true }
@@ -17,7 +17,7 @@ export function validateReferenceFieldValue(
 
 export function validateTemplateReferenceDefaults(
   template: NodeTemplate,
-  nodes: ManifestNode[],
+  nodes: ProjectNode[],
 ): { valid: boolean; message?: string } {
   for (const [key, field] of Object.entries(templateFields(template))) {
     if (field.type !== 'reference' || field.default === undefined || field.default === null) {

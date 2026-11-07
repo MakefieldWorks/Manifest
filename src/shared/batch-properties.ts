@@ -1,4 +1,4 @@
-import type { ManifestNode, Project, PropertyType, TemplateField } from './types'
+import type { ProjectNode, Project, PropertyType, TemplateField } from './types'
 import {
   coercePropertyValue,
   templateFields,
@@ -61,7 +61,7 @@ export function planBatchPropertyUpdate(
   if (!request.clear && request.value === undefined) return invalid('Enter a value to apply.')
 
   const nodesById = new Map(project.nodes.map(node => [node.id, node]))
-  const selected: ManifestNode[] = []
+  const selected: ProjectNode[] = []
   for (const id of request.nodeIds) {
     const node = nodesById.get(id)
     if (!node) return invalid(`Selected node not found: ${id}`)
@@ -108,7 +108,7 @@ export function planBatchPropertyUpdate(
   return { valid: true, changes }
 }
 
-export function batchPropertyOptions(project: Project, nodes: ManifestNode[]): BatchPropertyOption[] {
+export function batchPropertyOptions(project: Project, nodes: ProjectNode[]): BatchPropertyOption[] {
   const keys = new Set<string>()
   for (const node of nodes) {
     Object.keys(node.properties).forEach(key => keys.add(key))

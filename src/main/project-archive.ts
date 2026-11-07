@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import type { Project, ProjectArchivePreview } from '../shared/types'
 import { migrateSnapshotHistory } from '../shared/snapshot-history-migration'
-import { PREVIOUS_PROJECT_DOCUMENT_FILE, PROJECT_DOCUMENT_FILE } from './project-launcher'
+import { PROJECT_DOCUMENT_FILE } from './project-document-file'
 import { GitService } from './git-service'
 import { writeHistoryFile } from './history-backup'
 
@@ -13,18 +13,15 @@ const MAX_BYTES = 128 * 1024 * 1024
 const MAX_ARCHIVE_BYTES = 180 * 1024 * 1024
 const MAX_FILES = 2000
 type Entry = { path: string; sha256: string; data: string }
-type Archive = { format: 'manifest-project-archive'; version: 1; createdAt: string; entries: Entry[] }
+type Archive = { format: 'layertrail-project-archive'; version: 1; createdAt: string; entries: Entry[] }
 const digest = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex')
 
 function allowedPath(path: string): boolean {
   if (path.split('/').some(part => /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(part) || part.length > 240)) return false
-  // Archives exported before the rename to Layertrail store the document as
-  // Manifest.manifestproject; restoring one writes it under that name and the
-  // first open migrates it.
-  return path === PROJECT_DOCUMENT_FILE || path === PREVIOUS_PROJECT_DOCUMENT_FILE || path === 'snapshots.bundle' ||
-    path === '.manifest/history.json' || path === '.manifest/history.backup.json' ||
-    /^\.manifest\/history\.json\.damaged-[a-zA-Z0-9-]+$/.test(path) ||
-    (/^\.manifest\/recovery\/[^/\\:]+$/.test(path) && !path.includes('..') && !/[\x00-\x1f]/.test(path))
+  return path === PROJECT_DOCUMENT_FILE || path === 'snapshots.bundle' ||
+    path === '.layertrail/history.json' || path === '.layertrail/history.backup.json' ||
+    /^\.layertrail\/history\.json\.damaged-[a-zA-Z0-9-]+$/.test(path) ||
+    (/^\.layertrail\/recovery\/[^/\\:]+$/.test(path) && !path.includes('..') && !/[\x00-\x1f]/.test(path))
 }
 
 function readBounded(path: string, max = MAX_BYTES): Buffer {
@@ -47,7 +44,7 @@ export class ProjectArchive {
 
   private sourceFiles(projectPath: string): Map<string, Buffer> {
     const files = new Map<string, Buffer>()
-    const directory = join(projectPath, '.manifest')
+    const directory = join(projectPath, '.layertrail')
     if (!existsSync(directory)) return files
     if (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink()) throw new Error('Linked metadata directories cannot be archived')
     for (const name of readdirSync(directory).sort()) {
@@ -55,13 +52,13 @@ export class ProjectArchive {
         const recovery = join(directory, name)
         if (!lstatSync(recovery).isDirectory() || lstatSync(recovery).isSymbolicLink()) throw new Error('Linked recovery directories cannot be archived')
         for (const file of readdirSync(recovery).sort()) {
-          const key = `.manifest/recovery/${file}`
+          const key = `.layertrail/recovery/${file}`
           if (!allowedPath(key)) throw new Error(`Unsupported recovery filename: ${file}`)
           files.set(key, readBounded(join(recovery, file)))
           this.checkSize(files)
         }
       } else if (name === 'history.json' || name === 'history.backup.json' || name.startsWith('history.json.damaged-')) {
-        const key = `.manifest/${name}`
+        const key = `.layertrail/${name}`
         if (!allowedPath(key)) throw new Error(`Unsupported history filename: ${name}`)
         files.set(key, readBounded(join(directory, name)))
         this.checkSize(files)
@@ -82,7 +79,7 @@ export class ProjectArchive {
     const files = this.sourceFiles(projectPath)
     const sourceToken = this.fingerprint(files)
     const refs = await this.git.archiveRefs(projectPath)
-    const scratch = mkdtempSync(join(tmpdir(), 'manifest-archive-'))
+    const scratch = mkdtempSync(join(tmpdir(), 'layertrail-archive-'))
     try {
       const bundle = join(scratch, 'snapshots.bundle')
       await this.git.createArchiveBundle(projectPath, bundle)
@@ -92,7 +89,7 @@ export class ProjectArchive {
       files.set(PROJECT_DOCUMENT_FILE, Buffer.from(currentDocument))
       files.set('snapshots.bundle', readBounded(bundle))
       this.checkSize(files)
-      const archive: Archive = { format: 'manifest-project-archive', version: 1, createdAt: new Date().toISOString(),
+      const archive: Archive = { format: 'layertrail-project-archive', version: 1, createdAt: new Date().toISOString(),
         entries: [...files].map(([path, bytes]) => ({ path, sha256: digest(bytes), data: bytes.toString('base64') })) }
       const output = JSON.stringify(archive)
       if (Buffer.byteLength(output) > MAX_ARCHIVE_BYTES) throw new Error('Encoded archive exceeds its size limit')
@@ -112,7 +109,7 @@ export class ProjectArchive {
   private decode(path: string): { archive: Archive; files: Map<string, Buffer>; token: string } {
     const bytes = readBounded(path, MAX_ARCHIVE_BYTES)
     const archive = JSON.parse(bytes.toString('utf8')) as Archive
-    if (!archive || archive.format !== 'manifest-project-archive' || archive.version !== 1 ||
+    if (!archive || archive.format !== 'layertrail-project-archive' || archive.version !== 1 ||
         typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) ||
         !Array.isArray(archive.entries) || archive.entries.length > MAX_FILES) throw new Error('Invalid or unsupported project archive')
     const files = new Map<string, Buffer>()
@@ -126,12 +123,12 @@ export class ProjectArchive {
       names.add(entry.path.toLowerCase())
       this.checkSize(files)
     }
-    if (files.has(PROJECT_DOCUMENT_FILE) === files.has(PREVIOUS_PROJECT_DOCUMENT_FILE) || !files.has('snapshots.bundle')) throw new Error('Archive is missing current inventory or snapshot history')
+    if (!files.has(PROJECT_DOCUMENT_FILE) || !files.has('snapshots.bundle')) throw new Error('Archive is missing current inventory or snapshot history')
     return { archive, files, token: digest(bytes) }
   }
 
   private async materialize(files: Map<string, Buffer>, destination: string): Promise<{ project: Project; snapshotCount: number }> {
-    const document = (files.get(PROJECT_DOCUMENT_FILE) ?? files.get(PREVIOUS_PROJECT_DOCUMENT_FILE))!
+    const document = files.get(PROJECT_DOCUMENT_FILE)!
     if (document.length > 50 * 1024 * 1024) throw new Error('Current inventory exceeds the 50 MB project limit')
     const project = this.parseProject(document.toString('utf8'))
     for (const [path, bytes] of files) {
@@ -144,21 +141,21 @@ export class ProjectArchive {
     const snapshots = await this.git.listSnapshots(destination)
     const snapshotIds = new Set(snapshots.map(snapshot => snapshot.id))
     // Validate all snapshot documents, not only Git object integrity.
-    const head = this.parseProject(await this.git.readHeadManifest(destination))
+    const head = this.parseProject(await this.git.readHeadDocument(destination))
     if (head.id !== project.id) throw new Error('Archive HEAD belongs to another project')
     for (const snapshot of snapshots) {
-      const saved = this.parseProject(await this.git.readSnapshotManifest(destination, snapshot.id))
+      const saved = this.parseProject(await this.git.readSnapshotDocument(destination, snapshot.id))
       if (saved.id !== project.id) throw new Error(`Snapshot belongs to another project: ${snapshot.id}`)
     }
-    const historyBytes = files.get('.manifest/history.json')
-    if (!historyBytes && files.has('.manifest/history.backup.json')) throw new Error('Restore missing history metadata from its backup before exporting an archive')
+    const historyBytes = files.get('.layertrail/history.json')
+    if (!historyBytes && files.has('.layertrail/history.backup.json')) throw new Error('Restore missing history metadata from its backup before exporting an archive')
     if (historyBytes) {
       const history = migrateSnapshotHistory(JSON.parse(historyBytes.toString('utf8')))
       const refs = [...Object.keys(history.snapshots), ...Object.values(history.snapshots).map(meta => meta.basedOnSnapshotId),
         ...history.events.flatMap(event => [event.snapshotId, event.targetSnapshotId]), history.currentBaseSnapshotId].filter(Boolean)
       if (refs.some(ref => !snapshotIds.has(ref!))) throw new Error('History metadata references unavailable snapshots')
       for (const point of history.recoveryPoints) {
-        const payload = files.get(point.manifestPath.replaceAll('\\', '/'))
+        const payload = files.get(point.payloadPath.replaceAll('\\', '/'))
         if (!payload || this.parseProject(payload.toString('utf8')).id !== project.id) throw new Error(`Recovery payload is missing or invalid: ${point.id}`)
       }
     }
@@ -174,7 +171,7 @@ export class ProjectArchive {
     try {
       const result = await this.materialize(files, scratch)
       return { token, projectName: result.project.name, createdAt: archive.createdAt, snapshotCount: result.snapshotCount,
-        recoveryFileCount: [...files.keys()].filter(path => path.startsWith('.manifest/recovery/')).length, fileCount: files.size }
+        recoveryFileCount: [...files.keys()].filter(path => path.startsWith('.layertrail/recovery/')).length, fileCount: files.size }
     } finally { await removeGitFolder(scratch) }
   }
 

@@ -288,10 +288,10 @@ test('surfaces load-time warnings for a hand-edited invalid value', async ({
   electronApp,
   workspaceDir,
 }) => {
-  // Hand-author a v3 manifest with a bound node whose enum value is invalid.
+  // Hand-author a v3 document with a bound node whose enum value is invalid.
   const projectDir = join(workspaceDir, 'hand-edited')
   mkdirSync(projectDir, { recursive: true })
-  const manifest = {
+  const projectDoc = {
     version: 3,
     id: 'he-id',
     name: 'Hand Edited',
@@ -315,7 +315,7 @@ test('surfaces load-time warnings for a hand-edited invalid value', async ({
       },
     ],
   }
-  writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(manifest, null, 2), 'utf8')
+  writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(projectDoc, null, 2), 'utf8')
 
   await setDialogPath(electronApp, projectDir)
   await appPage.getByTestId('open-project-btn').click()
@@ -336,7 +336,7 @@ test('preserves a field default through a template-manager save (no data loss)',
 }) => {
   const projectDir = join(workspaceDir, 'defaults')
   mkdirSync(projectDir, { recursive: true })
-  const manifest = {
+  const projectDoc = {
     version: 3,
     id: 'def-id',
     name: 'Defaults Lab',
@@ -352,7 +352,7 @@ test('preserves a field default through a template-manager save (no data loss)',
       },
     ],
   }
-  writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(manifest, null, 2), 'utf8')
+  writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(projectDoc, null, 2), 'utf8')
 
   await setDialogPath(electronApp, projectDir)
   await appPage.getByTestId('open-project-btn').click()
@@ -382,7 +382,7 @@ test('selecting a node bound to a structurally-invalid template does not crash t
 }) => {
   const projectDir = join(workspaceDir, 'invalid-tpl')
   mkdirSync(projectDir, { recursive: true })
-  const manifest = {
+  const projectDoc = {
     version: 3,
     id: 'inv-id',
     name: 'Invalid Tpl Lab',
@@ -401,7 +401,7 @@ test('selecting a node bound to a structurally-invalid template does not crash t
       },
     ],
   }
-  writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(manifest, null, 2), 'utf8')
+  writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(projectDoc, null, 2), 'utf8')
 
   await setDialogPath(electronApp, projectDir)
   await appPage.getByTestId('open-project-btn').click()

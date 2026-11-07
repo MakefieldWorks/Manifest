@@ -5,7 +5,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { ProjectManager } from '../../../src/main/project-manager'
 import { GitService } from '../../../src/main/git-service'
-import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-document-file'
 
 const logger = { error() {}, warn() {}, info() {}, debug() {} }
 let root: string
@@ -15,7 +15,7 @@ let manager: ProjectManager
 let git: GitService
 let baseline: Buffer
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'manifest-external-'))
+  root = mkdtempSync(join(tmpdir(), 'layertrail-external-'))
   git = new GitService(logger as any)
   manager = new ProjectManager(git, logger as any)
   const result = await manager.createProject('External Lab', root)
@@ -45,7 +45,7 @@ function preview() {
   return result.data
 }
 function copies() {
-  return readdirSync(join(path, '.manifest', 'recovery')).map(name => readFileSync(join(path, '.manifest', 'recovery', name)))
+  return readdirSync(join(path, '.layertrail', 'recovery')).map(name => readFileSync(join(path, '.layertrail', 'recovery', name)))
 }
 
 describe('external project document preservation', () => {
@@ -55,7 +55,7 @@ describe('external project document preservation', () => {
     const edits = manager.editHistoryState()
     const external = outside()
     manager.checkExternalDocument()
-    const history = readFileSync(join(path, '.manifest', 'history.json'))
+    const history = readFileSync(join(path, '.layertrail', 'history.json'))
     const internals = manager as any
     const restore = vi.spyOn(internals, 'restoreSearchIndex')
     vi.spyOn(internals, 'writeSnapshotHistory').mockImplementation(() => { throw new Error('Injected history write failure') })
@@ -65,7 +65,7 @@ describe('external project document preservation', () => {
     expect(restore).toHaveBeenCalledWith(current)
     expect(internals.search.query(path, 'Unsaved')).toHaveLength(1)
     expect(readFileSync(file)).toEqual(external)
-    expect(readFileSync(join(path, '.manifest', 'history.json'))).toEqual(history)
+    expect(readFileSync(join(path, '.layertrail', 'history.json'))).toEqual(history)
     expect(manager.documentSaveStatus()).toMatchObject({ ok: true, data: { message: expect.any(String) } })
   })
 
@@ -114,23 +114,23 @@ describe('external project document preservation', () => {
 
   it('can keep local inventory without readable history metadata', async () => {
     outside()
-    writeFileSync(join(path, '.manifest', 'history.json'), '{broken')
+    writeFileSync(join(path, '.layertrail', 'history.json'), '{broken')
     expect((await manager.resolveExternalDocument({ token: preview().token, choice: 'keep-local' })).ok).toBe(true)
-    expect(readFileSync(join(path, '.manifest', 'history.json'), 'utf8')).toBe('{broken')
+    expect(readFileSync(join(path, '.layertrail', 'history.json'), 'utf8')).toBe('{broken')
   })
 
   it('preserves the original inventory when an outside edit arrives during revert', async () => {
     manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Unsaved original')
-    const original = git.readSnapshotManifest.bind(git)
-    vi.spyOn(git, 'readSnapshotManifest').mockImplementation(async (...args) => {
+    const original = git.readSnapshotDocument.bind(git)
+    vi.spyOn(git, 'readSnapshotDocument').mockImplementation(async (...args) => {
       outside()
       return original(...args)
     })
     expect((await manager.snapshotRevert({ name: 'baseline' })).ok).toBe(false)
     expect(manager.getCurrent()!.nodes.some(node => node.name === 'Unsaved original')).toBe(true)
-    const localCopies = readdirSync(join(path, '.manifest', 'recovery')).filter(name => name.endsWith('-local.manifest.json'))
+    const localCopies = readdirSync(join(path, '.layertrail', 'recovery')).filter(name => name.endsWith('-local.document.json'))
     expect(localCopies.length).toBeGreaterThan(0)
-    for (const name of localCopies) expect(readFileSync(join(path, '.manifest', 'recovery', name), 'utf8')).toContain('Unsaved original')
+    for (const name of localCopies) expect(readFileSync(join(path, '.layertrail', 'recovery', name), 'utf8')).toContain('Unsaved original')
   })
 
   it.each(['save', 'snapshot', 'revert', 'close', 'archive', 'focus'])('preserves outside bytes and local edits when conflict is detected by %s', async operation => {
@@ -138,7 +138,7 @@ describe('external project document preservation', () => {
     const current = structuredClone(manager.getCurrent())
     const edits = manager.editHistoryState()
     const external = outside()
-    const history = readFileSync(join(path, '.manifest', 'history.json'))
+    const history = readFileSync(join(path, '.layertrail', 'history.json'))
     if (operation === 'save') expect((await manager.saveProject()).ok).toBe(false)
     if (operation === 'snapshot') expect((await manager.snapshotCreate('blocked')).ok).toBe(false)
     if (operation === 'revert') expect((await manager.snapshotRevert({ name: 'baseline' })).ok).toBe(false)
@@ -146,7 +146,7 @@ describe('external project document preservation', () => {
     if (operation === 'archive') expect((await manager.exportProjectArchive(join(root, 'blocked.layertrailarchive'))).ok).toBe(false)
     if (operation === 'focus') manager.checkExternalDocument()
     expect(readFileSync(file)).toEqual(external)
-    expect(readFileSync(join(path, '.manifest', 'history.json'))).toEqual(history)
+    expect(readFileSync(join(path, '.layertrail', 'history.json'))).toEqual(history)
     expect(manager.getCurrent()).toEqual(current)
     expect(manager.editHistoryState()).toEqual(edits)
     expect(copies().some(bytes => JSON.parse(bytes.toString()).nodes.some((node: { name: string }) => node.name === 'Local rack'))).toBe(true)
@@ -183,7 +183,7 @@ describe('external project document preservation', () => {
       expect(readFileSync(file)).toEqual(external)
       expect(manager.getCurrent()!.nodes[0].name).toBe('External root')
       expect(manager.editHistoryState()).toEqual({ undoLabel: null, redoLabel: null })
-      const history = JSON.parse(readFileSync(join(path, '.manifest', 'history.json'), 'utf8'))
+      const history = JSON.parse(readFileSync(join(path, '.layertrail', 'history.json'), 'utf8'))
       expect(history.currentBaseSnapshotId).toBeNull()
       expect(history.pendingRevertEventId).toBeNull()
     }

@@ -12,7 +12,7 @@
 // referenced by `localId`) that apply resolves to real uuids in order.
 
 import type {
-  ManifestNode,
+  ProjectNode,
   NodeTemplate,
   TemplateField,
   ImportIssue,
@@ -201,7 +201,7 @@ export function planNetbox(
   objects: NetboxObject[],
   baseParentId: string,
   existingTemplates: Record<string, NodeTemplate>,
-  existingNodes: ManifestNode[],
+  existingNodes: ProjectNode[],
 ): NetboxPlanOutput {
   const skipped: ImportIssue[] = []
   const warnings: ImportIssue[] = []

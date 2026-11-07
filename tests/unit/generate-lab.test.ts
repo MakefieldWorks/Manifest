@@ -1,7 +1,7 @@
 // Regression tests for the lab generator (scripts/generate-lab.mjs). These guard
 // two bugs the dogfood pass fixed:
 //   1. The sample CSV was serialized from the day-0 project (stale) instead of
-//      the final post-churn manifest, so re-importing it no longer round-tripped.
+//      the final post-churn document, so re-importing it no longer round-tripped.
 //   2. Structural churn was probabilistic and never fired with seed 42, so the
 //      generated timeline exercised only 1 of 7 node diff ChangeTypes.
 // Pure functions only (generateTimeline / sampleCsv / planImport / diffProjects) —
@@ -47,7 +47,7 @@ describe('generate-lab — timeline regression guards', () => {
     expect(timeline.final.nodes.length).toBeGreaterThan(0)
   })
 
-  it('sample CSV round-trips against the final manifest (0 create / 0 update / 0 skip)', () => {
+  it('sample CSV round-trips against the final document (0 create / 0 update / 0 skip)', () => {
     const rows = parseCsv(timeline.csv)
     const headers = rows[0]
     const data = rows.slice(1)

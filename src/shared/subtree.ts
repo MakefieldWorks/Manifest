@@ -1,7 +1,7 @@
-import type { ManifestNode } from './types'
+import type { ProjectNode } from './types'
 
 /** Iterative traversal is linear in project size and safe for deep hierarchies. */
-export function collectSubtreeIds(nodes: ManifestNode[], rootId: string): Set<string> {
+export function collectSubtreeIds(nodes: ProjectNode[], rootId: string): Set<string> {
   const children = new Map<string, string[]>()
   for (const node of nodes) {
     if (node.parentId === null) continue
@@ -21,7 +21,7 @@ export function collectSubtreeIds(nodes: ManifestNode[], rootId: string): Set<st
 }
 
 /** Build a reusable, cycle-safe resolver for a node's full display path. */
-export function buildNodePathResolver(nodes: ManifestNode[]): (nodeId: string) => string | null {
+export function buildNodePathResolver(nodes: ProjectNode[]): (nodeId: string) => string | null {
   const byId = new Map(nodes.map(node => [node.id, node]))
   return (nodeId: string) => {
     const node = byId.get(nodeId)

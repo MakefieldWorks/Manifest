@@ -43,13 +43,6 @@ Open an existing project and check its name, nodes, and snapshot timeline after
 updating. Project folders are independent of the installed application. Keep a
 copy of important project folders before installing a prerelease.
 
-## Upgrading from Manifest 0.1.0-alpha.1
-
-The app was renamed from Manifest to Layertrail after alpha.1, with a new bundle
-ID, so Layertrail installs next to the old app instead of replacing it. Remove
-Manifest after installing Layertrail. Projects, Recent projects, and settings
-carry over; see [RENAME.md](RENAME.md).
-
 ## Downgrades
 
 App installation can be rolled back manually by installing an older asset, but

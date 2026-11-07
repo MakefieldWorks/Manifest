@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Rebuilds resources/help/ (the offline Help bundle) from a website repo
-// checkout (layertrail-website, formerly manifest-website). See docs/OFFLINE_HELP.md.
+// checkout (layertrail-website, formerly document-website). See docs/OFFLINE_HELP.md.
 //
 //   bun run help:update -- ../layertrail-website [--allow-dirty]
 //
@@ -19,7 +19,7 @@ const HELP_DIR = join(ROOT_DIR, 'resources', 'help')
 const args = process.argv.slice(2)
 const allowDirty = args.includes('--allow-dirty')
 // Default to a sibling checkout, under the website repo's current or former name.
-const defaultWebsiteDir = ['layertrail-website', 'manifest-website']
+const defaultWebsiteDir = ['layertrail-website', 'layertrail-website']
   .map(name => join(ROOT_DIR, '..', name))
   .find(dir => existsSync(dir)) ?? join(ROOT_DIR, '..', 'layertrail-website')
 const websiteDir = resolve(args.find(arg => !arg.startsWith('--')) ?? defaultWebsiteDir)

@@ -1,10 +1,10 @@
 /// <reference types="svelte" />
 
-import type { ManifestAPI } from '../../shared/ipc'
+import type { LayertrailAPI } from '../../shared/ipc'
 
 declare global {
   interface Window {
-    api: ManifestAPI
+    api: LayertrailAPI
   }
 }
 

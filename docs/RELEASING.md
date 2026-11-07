@@ -145,6 +145,6 @@ again rather than replacing files on a published release.
 
 ## Identity
 
-The app ID is `com.makefieldworks.manifest`. It becomes the macOS bundle
+The app ID is `com.makefieldworks.layertrail`. It becomes the macOS bundle
 identifier and seeds the Windows installer GUID, so changing it after a release
 makes macOS and Windows treat the next build as a different application.

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { buildTree } from '../../../src/renderer/src/lib/tree'
 import { collectTypeaheadMatches, splitHighlight, cycleIndex } from '../../../src/renderer/src/lib/tree-typeahead'
-import type { ManifestNode } from '../../../src/shared/types'
+import type { ProjectNode } from '../../../src/shared/types'
 
-function node(id: string, parentId: string | null, order = 0, name = id): ManifestNode {
+function node(id: string, parentId: string | null, order = 0, name = id): ProjectNode {
   return { id, parentId, name, order, properties: {}, created: '', modified: '' }
 }
 

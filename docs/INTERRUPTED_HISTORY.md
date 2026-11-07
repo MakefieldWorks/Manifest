@@ -4,7 +4,7 @@ Snapshot creation, snapshot revert, recovery-point application, recovery-file
 registration/removal, and history-backup restoration now preserve the current
 inventory (including unsaved edits) and earlier history metadata before changing
 the project. Metadata-only operations preserve the history file's exact bytes,
-including damage or absence. A versioned `.manifest/history-operation.json`
+including damage or absence. A versioned `.layertrail/history-operation.json`
 record is published after those copies have been flushed to disk. The record
 identifies the operation and fingerprints both copies. Snapshot, revert, and
 recovery records also include the operation kind, intended timeline-event ID

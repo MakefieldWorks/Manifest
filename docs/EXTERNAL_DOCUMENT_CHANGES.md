@@ -8,7 +8,7 @@ the final save before close/quit. Focus checks detect changes when returning
 from another application; there is no background filesystem watcher.
 
 Detection preserves current inventory in a unique, unlisted
-`.manifest/recovery/recovery-<uuid>-local.manifest.json` file. The status reports
+`.layertrail/recovery/recovery-<uuid>-local.document.json` file. The status reports
 the copy's location. Repeated failures reuse the copy while it remains intact.
 If preservation fails, the status explicitly says to keep the project open;
 an explicit Close/Quit Anyway still discards unsaved memory in that case.

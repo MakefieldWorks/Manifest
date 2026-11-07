@@ -27,7 +27,7 @@ const CURRENT_VERSION = 3
 
 // Written into a generated project dir so a later `--force` regeneration of the
 // SAME dir is allowed, while refusing to wipe directories we didn't create.
-const GEN_MARKER = '.manifest-generated-lab'
+const GEN_MARKER = '.layertrail-generated-lab'
 
 const DEFAULTS = {
   name: 'Software Integration Lab',
@@ -176,20 +176,20 @@ function main(argv) {
   // state. generateTimeline is the single source of truth shared with the
   // regression test, so what we ship is exactly what the test verifies.
   const { initial, snapshots, final } = generateTimeline(options)
-  writeManifest(projectDir, initial)
+  writeDocument(projectDir, initial)
   initGit(projectDir, '2025-02-03T00:00:00Z')
 
   for (const snap of snapshots) {
-    writeManifest(projectDir, snap.project)
+    writeDocument(projectDir, snap.project)
     // Commit/tag with the SIMULATED date so listSnapshots (sorted by
     // creatordate) shows a stable, chronological timeline.
     snapshot(projectDir, snap.name, snap.date)
   }
 
   // Export the sample CSV from the FINAL (post-churn) project, so it faithfully
-  // matches the manifest a user actually opens. Writing it from the day-0 state
+  // matches the document a user actually opens. Writing it from the day-0 state
   // left it stale: maintenance churn re-serializes some boards, so the day-0 CSV
-  // no longer round-trips against the day-N manifest.
+  // no longer round-trips against the day-N document.
   writeSampleCsv(projectDir, final)
 
   const s = summarize(final)
@@ -365,7 +365,7 @@ function applyDailyChurn(project, options, ctx, day) {
   const structural = scheduledStructuralChurn(project, ctx, day, today)
   if (structural) return structural
 
-  // A quiet day changes nothing — leave the manifest byte-identical so the
+  // A quiet day changes nothing — leave the document byte-identical so the
   // snapshot is a genuine no-op (don't even bump project.modified).
   const roll = ctx.rng()
   if (roll < 0.15) return 'quiet'
@@ -698,7 +698,7 @@ function writeSampleCsv(projectDir, project) {
 
 // ─── IO / git ────────────────────────────────────────────────────────────────────
 
-function writeManifest(projectDir, project) {
+function writeDocument(projectDir, project) {
   writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(project, null, 2), 'utf8')
 }
 

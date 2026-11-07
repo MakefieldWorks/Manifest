@@ -1,10 +1,10 @@
 <svelte:options runes />
 
 <script lang="ts">
-  import type { ManifestNode } from '../../../shared/types'
+  import type { ProjectNode } from '../../../shared/types'
 
   interface Props {
-    nodes: ManifestNode[]
+    nodes: ProjectNode[]
     primaryName: string
     readOnly?: boolean
     onEdit: () => void

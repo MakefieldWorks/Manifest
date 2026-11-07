@@ -1,13 +1,13 @@
-// Tree utility functions for working with the flat ManifestNode array.
+// Tree utility functions for working with the flat ProjectNode array.
 // All functions are pure — they take nodes and return derived data.
 // The main process holds the authoritative state; these are read helpers for the renderer.
 
-import type { ManifestNode } from '../../../shared/types'
+import type { ProjectNode } from '../../../shared/types'
 
 // A node decorated with its children, depth, and ancestry path — ready for rendering.
-// Generic over N so that ManifestNode subtypes (e.g. MergedTreeNode) can reuse
+// Generic over N so that ProjectNode subtypes (e.g. MergedTreeNode) can reuse
 // the same tree builder without a second DFS implementation.
-export interface TreeNode<N extends ManifestNode = ManifestNode> {
+export interface TreeNode<N extends ProjectNode = ProjectNode> {
   node: N
   children: TreeNode<N>[]
   depth: number
@@ -16,7 +16,7 @@ export interface TreeNode<N extends ManifestNode = ManifestNode> {
 
 // Build a full tree from the flat node array.
 // Returns the single root TreeNode (parentId === null).
-export function buildTree<N extends ManifestNode = ManifestNode>(nodes: N[]): TreeNode<N> | null {
+export function buildTree<N extends ProjectNode = ProjectNode>(nodes: N[]): TreeNode<N> | null {
   if (nodes.length === 0) return null
 
   const root = nodes.find(n => n.parentId === null)
@@ -45,7 +45,7 @@ export function buildTree<N extends ManifestNode = ManifestNode>(nodes: N[]): Tr
 }
 
 // Return the IDs of all ancestors of nodeId, root-first.
-export function getAncestorIds(nodeId: string, nodes: ManifestNode[]): string[] {
+export function getAncestorIds(nodeId: string, nodes: ProjectNode[]): string[] {
   const parentMap = new Map(nodes.map(n => [n.id, n.parentId]))
   const ancestors: string[] = []
   let current = parentMap.get(nodeId) ?? null
@@ -57,7 +57,7 @@ export function getAncestorIds(nodeId: string, nodes: ManifestNode[]): string[] 
 }
 
 // Return the IDs of all descendants of nodeId (not including nodeId itself).
-export function getDescendantIds(nodeId: string, nodes: ManifestNode[]): string[] {
+export function getDescendantIds(nodeId: string, nodes: ProjectNode[]): string[] {
   const result: string[] = []
   const queue = [nodeId]
   while (queue.length > 0) {
@@ -72,7 +72,7 @@ export function getDescendantIds(nodeId: string, nodes: ManifestNode[]): string[
 }
 
 // Return siblings of nodeId (same parent, sorted by order).
-export function getSiblings(nodeId: string, nodes: ManifestNode[]): ManifestNode[] {
+export function getSiblings(nodeId: string, nodes: ProjectNode[]): ProjectNode[] {
   const node = nodes.find(n => n.id === nodeId)
   if (!node) return []
   return nodes
@@ -81,7 +81,7 @@ export function getSiblings(nodeId: string, nodes: ManifestNode[]): ManifestNode
 }
 
 // Return the order index of nodeId among its siblings.
-export function getSiblingIndex(nodeId: string, nodes: ManifestNode[]): number {
+export function getSiblingIndex(nodeId: string, nodes: ProjectNode[]): number {
   const node = nodes.find(n => n.id === nodeId)
   if (!node) return -1
   const allSiblings = nodes

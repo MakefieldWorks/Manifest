@@ -2,13 +2,13 @@
 
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { ManifestNode } from '../../../shared/types'
+  import type { ProjectNode } from '../../../shared/types'
   import { suggestDuplicateNodeName, validateDuplicateNodeName } from '../../../shared/validation'
   import { collectSubtreeIds } from '../../../shared/subtree'
 
   interface Props {
-    node: ManifestNode
-    nodes: ManifestNode[]
+    node: ProjectNode
+    nodes: ProjectNode[]
     onConfirm: (name: string) => Promise<string | null>
     onCancel: () => void
   }

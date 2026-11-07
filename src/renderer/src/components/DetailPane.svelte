@@ -2,17 +2,17 @@
 
 <script lang="ts">
   import { tick } from 'svelte'
-  import type { ManifestNode, Project, PropertyType } from '../../../shared/types'
+  import type { ProjectNode, Project, PropertyType } from '../../../shared/types'
   import type { MergedTreeNode } from '../../../shared/merged-tree'
   import { validateNodeName } from '../../../shared/validation'
   import NodeHistoryView from './NodeHistoryView.svelte'
   import PropertyEditor from './PropertyEditor.svelte'
 
   interface Props {
-    // Accepts a plain ManifestNode (browse mode) or a MergedTreeNode (compare
+    // Accepts a plain ProjectNode (browse mode) or a MergedTreeNode (compare
     // mode, which carries an extra `status` field on ghosts). The union makes
     // the runtime check `'status' in node` narrow cleanly without unknown casts.
-    node: ManifestNode | MergedTreeNode | null
+    node: ProjectNode | MergedTreeNode | null
     project: Project
     /** Bumped by App.svelte when the user presses F2 or "Rename" in the tree context menu. */
     renameRequestId?: number

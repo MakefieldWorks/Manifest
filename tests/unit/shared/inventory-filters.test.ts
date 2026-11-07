@@ -7,7 +7,7 @@ import {
   missingRequiredKeys,
   validateInventoryFilters,
 } from '../../../src/shared/inventory-filters'
-import type { ManifestNode, Project } from '../../../src/shared/types'
+import type { ProjectNode, Project } from '../../../src/shared/types'
 
 const timestamp = '2026-01-01T00:00:00.000Z'
 
@@ -15,9 +15,9 @@ function node(
   id: string,
   parentId: string | null,
   name: string,
-  properties: ManifestNode['properties'] = {},
+  properties: ProjectNode['properties'] = {},
   templateId?: string,
-): ManifestNode {
+): ProjectNode {
   return { id, parentId, name, order: 0, properties, templateId, created: timestamp, modified: timestamp }
 }
 

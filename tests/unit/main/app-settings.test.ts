@@ -13,7 +13,7 @@ import type { Project } from '../../../src/shared/types'
 let tmpDir: string
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-app-settings-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-app-settings-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
 })
 
@@ -117,24 +117,24 @@ describe('AppSettingsStore', () => {
       launchBehavior: 'project-hub',
       appearance: {
         mode: 'system',
-        lightThemeId: 'manifest-light',
-        darkThemeId: 'manifest-dark',
+        lightThemeId: 'layertrail-light',
+        darkThemeId: 'layertrail-dark',
       },
     })
     store.updatePreferences({
       launchBehavior: 'reopen-last-project',
-      appearance: { mode: 'dark', lightThemeId: 'manifest-graphite-light' },
+      appearance: { mode: 'dark', lightThemeId: 'layertrail-graphite-light' },
     })
     store.updatePreferences({
-      appearance: { darkThemeId: 'manifest-graphite-dark' },
+      appearance: { darkThemeId: 'layertrail-graphite-dark' },
     })
 
     expect(new AppSettingsStore(storePath()).getPreferences()).toEqual({
       launchBehavior: 'reopen-last-project',
       appearance: {
         mode: 'dark',
-        lightThemeId: 'manifest-graphite-light',
-        darkThemeId: 'manifest-graphite-dark',
+        lightThemeId: 'layertrail-graphite-light',
+        darkThemeId: 'layertrail-graphite-dark',
       },
     })
   })
@@ -156,8 +156,8 @@ describe('AppSettingsStore', () => {
       launchBehavior: 'reopen-last-project',
       appearance: {
         mode: 'dark',
-        lightThemeId: 'manifest-light',
-        darkThemeId: 'manifest-dark',
+        lightThemeId: 'layertrail-light',
+        darkThemeId: 'layertrail-dark',
       },
     })
   })

@@ -15,14 +15,14 @@ let manager: ProjectManager
 let store: HistoryOperationStore
 
 beforeEach(async () => {
-  root = join(tmpdir(), `manifest-evidence-cleanup-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  root = join(tmpdir(), `layertrail-evidence-cleanup-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(root, { recursive: true })
   manager = new ProjectManager(new GitService(logger as any), logger as any)
   const created = await manager.createProject('Evidence Cleanup', root)
   if (!created.ok) throw new Error(created.error.message)
   path = created.data.path!
-  historyPath = join(path, '.manifest', 'history.json')
-  recoveryPath = join(path, '.manifest', 'recovery')
+  historyPath = join(path, '.layertrail', 'history.json')
+  recoveryPath = join(path, '.layertrail', 'recovery')
   expect((await manager.snapshotCreate('baseline')).ok).toBe(true)
   store = new HistoryOperationStore(path, created.data.id)
 })

@@ -1,7 +1,6 @@
 # Reverse-DNS identity for the macOS bundle ID and the Windows installer GUID.
 # Do not change it after a release ships: macOS and Windows treat a new ID as a
-# different app. It changed once, from com.makefieldworks.manifest, when the app
-# was renamed from Manifest after 0.1.0-alpha.1; see docs/RENAME.md.
+# different app.
 appId: com.makefieldworks.layertrail
 productName: Layertrail
 # One naming scheme for every release asset, with no spaces, so release pages
@@ -40,13 +39,6 @@ fileAssociations:
     mimeType: application/x-layertrail
     name: Layertrail Project
     description: Layertrail project document
-    role: Editor
-  # Projects saved before the rename from Manifest. Opening one renames its
-  # document to Layertrail.layertrail.
-  - ext: manifestproject
-    mimeType: application/x-manifestproject
-    name: Manifest Project
-    description: Project document from an earlier Manifest version
     role: Editor
 
 mac:

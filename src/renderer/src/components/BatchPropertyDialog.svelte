@@ -2,7 +2,7 @@
 
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { ManifestNode, Project } from '../../../shared/types'
+  import type { ProjectNode, Project } from '../../../shared/types'
   import {
     batchPropertyOptions,
     planBatchPropertyUpdate,
@@ -13,7 +13,7 @@
 
   interface Props {
     project: Project
-    nodes: ManifestNode[]
+    nodes: ProjectNode[]
     onConfirm: (request: BatchPropertyUpdateRequest) => Promise<string | null>
     onCancel: () => void
   }

@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { planImport, suggestKey, uniqueNameColumns } from '../../../src/shared/import'
-import type { ManifestNode, NodeTemplate, ImportMapping } from '../../../src/shared/types'
+import type { ProjectNode, NodeTemplate, ImportMapping } from '../../../src/shared/types'
 
-function node(id: string, parentId: string | null, name: string): ManifestNode {
+function node(id: string, parentId: string | null, name: string): ProjectNode {
   return { id, parentId, name, order: 0, properties: {}, created: '', modified: '' }
 }
 
 // Lab → Room A → Rack A-01 (with an existing child "Existing Board"); Room B.
-const NODES: ManifestNode[] = [
+const NODES: ProjectNode[] = [
   node('root', null, 'Lab'),
   node('rA', 'root', 'Room A'),
   node('kA1', 'rA', 'Rack A-01'),
@@ -420,9 +420,9 @@ describe('planImport — mapping errors', () => {
 // ─── Update-on-key re-import ───────────────────────────────────────────────────
 
 describe('planImport — update-on-key', () => {
-  const UROOT: ManifestNode = { id: 'root', parentId: null, name: 'Lab', order: 0, properties: {}, created: '', modified: '' }
-  const RACK: ManifestNode = { id: 'rack', parentId: 'root', name: 'Rack', order: 0, properties: {}, created: '', modified: '' }
-  function child(id: string, name: string, properties: Record<string, string | number | boolean | null> = {}, templateId?: string): ManifestNode {
+  const UROOT: ProjectNode = { id: 'root', parentId: null, name: 'Lab', order: 0, properties: {}, created: '', modified: '' }
+  const RACK: ProjectNode = { id: 'rack', parentId: 'root', name: 'Rack', order: 0, properties: {}, created: '', modified: '' }
+  function child(id: string, name: string, properties: Record<string, string | number | boolean | null> = {}, templateId?: string): ProjectNode {
     return { id, parentId: 'rack', name, order: 0, properties, created: '', modified: '', ...(templateId ? { templateId } : {}) }
   }
   const umap = (over: Partial<ImportMapping> = {}): ImportMapping =>

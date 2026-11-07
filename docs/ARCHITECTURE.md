@@ -165,7 +165,7 @@ exists unless it's in this table. Add new channels here before implementing them
 A straightforward app layout should be enough for v1:
 
 ```text
-manifest/
+layertrail/
   src/
     main/
     preload/
@@ -202,7 +202,7 @@ Based on Archon’s strongest ideas, Layertrail should likely preserve:
 myproject/
   Layertrail.layertrail            # single canonical file, all nodes inline
   .git/                            # auto-initialized, hidden behind snapshot UX
-  .manifest/
+  .layertrail/
     index/search.db                # derived, rebuildable SQLite + FTS5
     logs/                          # structured rotating logs
 ```
@@ -214,15 +214,9 @@ if benchmarks demand it.
 **Performance targets:**
 - Project open (parse + validate + index rebuild): <1 second for 5000 nodes
 - Show a loading indicator during project open
-- Diff computation: <2 seconds for comparing two 5000-node manifests
+- Diff computation: <2 seconds for comparing two 5000-node documents
 - Search query: <100ms response time
 - Autosave write: <200ms for 5000 nodes
-
-Projects saved before the rename from Manifest store the document as
-`Manifest.manifestproject` (or the older `manifest.json`). Opening one writes
-`Layertrail.layertrail` and removes the old file; snapshot reads fall back
-through the older names. The `.manifest/` folder keeps its name. See
-[RENAME.md](RENAME.md).
 
 **Layertrail.layertrail envelope:**
 
@@ -304,7 +298,7 @@ a product UX that never exposes Git directly.
   The `.git` directory is never shown in the UI.
 - **Snapshot creation:** User provides a name and may add an immutable description
   of up to 2,000 characters. Layertrail stores the description in
-  `.manifest/history.json`, then runs:
+  `.layertrail/history.json`, then runs:
   `git add Layertrail.layertrail && git commit -m "<name>" && git tag "snapshot/<name>"`.
 - **Snapshot listing:** `git tag --list "snapshot/*" --sort=-creatordate` to enumerate.
 - **Snapshot compare:** `git show snapshot/<name1>:Layertrail.layertrail` vs
@@ -437,7 +431,7 @@ function migrate(data: any): any {
 
 Rules:
 - Migrations are always forward-only and lossless
-- Each migration is a pure function (input manifest -> output manifest)
+- Each migration is a pure function (input document -> output document)
 - After migration, auto-save the upgraded file to disk
 - If migration fails, show error with the version mismatch and do not modify the file
 - Never silently drop fields. Unknown fields are preserved through migrations.
@@ -551,7 +545,7 @@ libraries needed.
 ### Logging
 
 - Structured JSON logs, namespaced by subsystem (e.g., `git`, `persistence`, `diff`, `search`)
-- Rotating file logs in `.manifest/logs/`, max 5 files x 5MB each
+- Rotating file logs in `.layertrail/logs/`, max 5 files x 5MB each
 - Log levels: error, warn, info, debug
 - Every rescued error logs: what was attempted, with what arguments, what failed, what recovery was taken
 - Logs are never shown in the UI by default but are accessible via a "Show Logs" developer menu item
@@ -591,7 +585,7 @@ The diff engine is the core differentiator. It gets:
 
 - One test per change type (6 types)
 - Multi-change scenarios (moved + renamed)
-- Edge cases (empty manifests, 5000 nodes, root changes)
+- Edge cases (empty documents, 5000 nodes, root changes)
 - Property type variations (string, number, boolean, null)
 
 ### Git service: integration tests

@@ -4,7 +4,7 @@
 // state" and is returned to the caller without recording an edit.
 
 import { v7 as uuidv7 } from 'uuid'
-import type { ManifestNode, NodeTemplate, Project, Result } from '../../shared/types'
+import type { ProjectNode, NodeTemplate, Project, Result } from '../../shared/types'
 import { ok, err, ErrorCode } from '../../shared/errors'
 import { collectSubtreeIds } from '../../shared/subtree'
 import { planBatchPropertyUpdate, type BatchPropertyUpdateRequest } from '../../shared/batch-properties'
@@ -64,7 +64,7 @@ export function planNodeCreate(
   const seededProperties = template ? seedDefaults(template) : {}
 
   const now = new Date().toISOString()
-  const newNode: ManifestNode = {
+  const newNode: ProjectNode = {
     id: uuidv7(),
     parentId,
     name,
@@ -156,7 +156,7 @@ export function planNodeBatchPropertyUpdate(
 
   const now = new Date().toISOString()
   const changesById = new Map(plan.changes.map(change => [change.nodeId, change]))
-  const updatedNodes: ManifestNode[] = []
+  const updatedNodes: ProjectNode[] = []
   const key = request.key.trim()
   const nodes = project.nodes.map(node => {
     const change = changesById.get(node.id)
@@ -254,7 +254,7 @@ export function planNodeUpdate(project: Project, id: string, changes: NodeUpdate
   }
 
   const now = new Date().toISOString()
-  const updatedNode: ManifestNode = {
+  const updatedNode: ProjectNode = {
     ...node,
     ...(changes.name !== undefined ? { name: changes.name } : {}),
     ...(recoerce ? { properties: nextProperties } : {}),
@@ -410,7 +410,7 @@ export function planNodeMove(
 
     // Append to new parent as last child.
     const newSiblingCount = reorderedOld.filter(n => n.parentId === newParentId).length
-    const movedNode: ManifestNode = {
+    const movedNode: ProjectNode = {
       ...node,
       parentId: newParentId,
       order: newSiblingCount,
@@ -458,7 +458,7 @@ export function planNodeMove(
 // ─── Tree helpers ────────────────────────────────────────────────────────────
 
 // Collect id of node + all its descendants.
-function collectDescendants(nodes: ManifestNode[], rootId: string): Set<string> {
+function collectDescendants(nodes: ProjectNode[], rootId: string): Set<string> {
   const result = new Set<string>()
   const queue = [rootId]
   while (queue.length > 0) {
@@ -472,7 +472,7 @@ function collectDescendants(nodes: ManifestNode[], rootId: string): Set<string> 
 }
 
 // Re-assign 0..n-1 order values to siblings of parentId within nodes.
-function renumberSiblings(nodes: ManifestNode[], parentId: string | null): ManifestNode[] {
+function renumberSiblings(nodes: ProjectNode[], parentId: string | null): ProjectNode[] {
   const siblings = nodes
     .filter(n => n.parentId === parentId)
     .sort((a, b) => a.order - b.order)
@@ -484,7 +484,7 @@ function renumberSiblings(nodes: ManifestNode[], parentId: string | null): Manif
 
 // Case-insensitive sibling name check. excludeId skips self during rename.
 function hasSiblingNameConflict(
-  nodes: ManifestNode[],
+  nodes: ProjectNode[],
   name: string,
   parentId: string | null,
   excludeId: string | null

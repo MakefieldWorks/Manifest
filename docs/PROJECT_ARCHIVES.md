@@ -28,7 +28,7 @@ The archive includes:
 - Git HEAD and all `snapshot/*` tags, with original commit IDs and timestamps.
 - Exact bytes of `history.json`, the automatic metadata backup, and preserved
   `history.json.damaged-*` files when present.
-- All regular files in `.manifest/recovery`, including unlisted payloads.
+- All regular files in `.layertrail/recovery`, including unlisted payloads.
 
 The archive excludes derived indexes/WAL files, logs, session Undo/Redo, files
 elsewhere in the project folder, and Git settings/hooks/remotes/reflogs/stashes

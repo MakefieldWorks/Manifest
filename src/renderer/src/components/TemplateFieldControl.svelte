@@ -11,14 +11,14 @@
   // and the draft re-seeded from `value` — whenever the node, field, OR the
   // committed value changes (e.g. after the backend normalizes "05" → 5).
   // This avoids $effect-based prop→draft syncing and stale-draft pitfalls.
-  import type { ManifestNode, TemplateField } from '../../../shared/types'
+  import type { ProjectNode, TemplateField } from '../../../shared/types'
   import { coercePropertyValue } from '../../../shared/validation'
 
   interface Props {
     fieldKey: string
     field: TemplateField
     value: string | number | boolean | null | undefined
-    referenceNodes?: ManifestNode[]
+    referenceNodes?: ProjectNode[]
     disabled?: boolean
     error?: string | null
     onCommit: (raw: string | number | boolean) => void

@@ -656,7 +656,7 @@
   class="h-full overflow-y-auto overscroll-contain bg-white focus:outline-none"
   tabindex="0"
   onkeydown={handleKeyDown}
-  data-testid="manifest-view"
+  data-testid="project-tree-view"
 >
   {#if isCompareEmpty}
     <div

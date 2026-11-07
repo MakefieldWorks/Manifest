@@ -1,4 +1,4 @@
-import type { ManifestNode, Project } from './types'
+import type { ProjectNode, Project } from './types'
 import { collectSubtreeIds } from './subtree'
 
 export type PropertyFilterOperator = 'equals' | 'contains'
@@ -72,7 +72,7 @@ export function validateInventoryFilters(input: unknown): InventoryFilterValidat
   return { valid: true, filters }
 }
 
-export function filterInventoryNodes(project: Project, filters: InventoryFilters): ManifestNode[] {
+export function filterInventoryNodes(project: Project, filters: InventoryFilters): ProjectNode[] {
   if (!hasInventoryFilters(filters)) return project.nodes
 
   const subtreeIds = filters.subtreeId
@@ -103,7 +103,7 @@ export function filterInventoryNodes(project: Project, filters: InventoryFilters
 
 export function inventoryFilterSnippet(
   project: Project,
-  node: ManifestNode,
+  node: ProjectNode,
   filters: InventoryFilters,
 ): string {
   const propertyKey = hasPropertyPredicate(filters) ? filters.propertyKey!.trim() : ''
@@ -124,7 +124,7 @@ export function inventoryFilterSnippet(
   return node.name
 }
 
-export function missingRequiredKeys(project: Project, node: ManifestNode): string[] {
+export function missingRequiredKeys(project: Project, node: ProjectNode): string[] {
   if (!node.templateId) return []
   const fields = project.templates?.[node.templateId]?.fields ?? {}
   return Object.entries(fields)
@@ -132,7 +132,7 @@ export function missingRequiredKeys(project: Project, node: ManifestNode): strin
     .map(([key]) => key)
 }
 
-function isMissing(value: ManifestNode['properties'][string] | undefined): boolean {
+function isMissing(value: ProjectNode['properties'][string] | undefined): boolean {
   return value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
 }
 

@@ -1,4 +1,4 @@
-// Snapshot history metadata (.manifest/history.json): read, write, and the
+// Snapshot history metadata (.layertrail/history.json): read, write, and the
 // pure timeline helpers built on it. Reads never repair or overwrite damaged
 // metadata; they throw HistoryMetadataReadError so callers block history
 // operations and the user can restore from the automatic backup.
@@ -15,14 +15,14 @@ import {
 import { HistoryBackupStore, writeHistoryFile } from '../history-backup'
 import type { GitService } from '../git-service'
 import type { Logger } from '../logger'
-import { canonicalizeManifestJson, serializeProjectForPersistence } from './document'
+import { canonicalizeDocumentJson, serializeProjectForPersistence } from './document'
 
 const MAX_RECOVERY_POINTS = 10                 // cap stored auto-saved recovery points
 
 export class HistoryMetadataReadError extends Error {}
 
 export function snapshotHistoryPath(projectPath: string): string {
-  return join(projectPath, '.manifest', 'history.json')
+  return join(projectPath, '.layertrail', 'history.json')
 }
 
 // Parse history metadata from `bytes` when given (callers that already hold
@@ -57,9 +57,9 @@ export function writeSnapshotHistoryFile(
   deleteRemovedPayloads: boolean,
   logger: Logger,
 ): void {
-  const manifestDir = join(projectPath, '.manifest')
+  const metadataDirectory = join(projectPath, '.layertrail')
   const historyPath = snapshotHistoryPath(projectPath)
-  mkdirSync(manifestDir, { recursive: true })
+  mkdirSync(metadataDirectory, { recursive: true })
   writeHistoryFile(historyPath, JSON.stringify(history, null, 2))
   try {
     new HistoryBackupStore(projectPath, projectId).save(history)
@@ -72,10 +72,10 @@ export function writeSnapshotHistoryFile(
   // Forgetting a registration removes it from the retained set, but must
   // keep its file. Automatic retention pruning explicitly permits deletion.
   if (!deleteRemovedPayloads) return
-  const retained = new Set(history.recoveryPoints.map(point => point.manifestPath))
+  const retained = new Set(history.recoveryPoints.map(point => point.payloadPath))
   for (const point of previous.recoveryPoints) {
-    if (retained.has(point.manifestPath)) continue
-    try { unlinkSync(join(projectPath, ...point.manifestPath.split(/[\\/]/))) } catch (error) {
+    if (retained.has(point.payloadPath)) continue
+    try { unlinkSync(join(projectPath, ...point.payloadPath.split(/[\\/]/))) } catch (error) {
       logger.warn('recovery point file delete failed', { id: point.id, error: String(error) })
     }
   }
@@ -168,7 +168,7 @@ export async function createSafetyRecoveryPointIfNeeded(project: Project, git: G
   const current = serializeProjectForPersistence(project)
   let head = ''
   try {
-    head = canonicalizeManifestJson(await git.readHeadManifest(project.path))
+    head = canonicalizeDocumentJson(await git.readHeadDocument(project.path))
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     logger.warn('could not compare current project to HEAD before revert', { path: project.path, error: msg })
@@ -177,17 +177,17 @@ export async function createSafetyRecoveryPointIfNeeded(project: Project, git: G
   if (head && head === current) return null
 
   const id = `recovery-${uuidv7()}`
-  const recoveryDir = join(project.path, '.manifest', 'recovery')
+  const recoveryDir = join(project.path, '.layertrail', 'recovery')
   // Recovery payloads are internal sidecars, not user-openable documents.
   // Keep their JSON suffix so they cannot be mistaken for Layertrail projects.
-  const manifestPath = join('.manifest', 'recovery', `${id}.manifest.json`)
+  const payloadPath = join('.layertrail', 'recovery', `${id}.document.json`)
   mkdirSync(recoveryDir, { recursive: true })
-  writeFileSync(join(project.path, manifestPath), current, 'utf8')
+  writeFileSync(join(project.path, payloadPath), current, 'utf8')
 
   return {
     id,
     createdAt: new Date().toISOString(),
     reason: 'pre-revert',
-    manifestPath,
+    payloadPath,
   }
 }

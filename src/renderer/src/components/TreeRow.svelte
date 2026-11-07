@@ -14,7 +14,7 @@
     onToggle: (id: string) => void
     /**
      * Called when the user right-clicks this row.
-     * The context menu is rendered by ManifestView (outside the virtualizer
+     * The context menu is rendered by ProjectTreeView (outside the virtualizer
      * transform) so it doesn't get clipped by the CSS transform containing
      * block.
      */
@@ -70,7 +70,7 @@
   // implied by status badges and the user's path through it, not pixels.
   const MAX_INDENT_DEPTH = 12
   // Both compare row branches use h-16; keep them in sync with
-  // COMPARE_ROW_HEIGHT in ManifestView.svelte's virtualizer.
+  // COMPARE_ROW_HEIGHT in ProjectTreeView.svelte's virtualizer.
   const paddingLeft = $derived(`${Math.min(row.depth, MAX_INDENT_DEPTH) * (compare ? 10 : 16) + 8}px`)
 
   function getDecorationClass(): string {

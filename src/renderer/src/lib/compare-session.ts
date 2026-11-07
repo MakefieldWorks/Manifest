@@ -3,7 +3,7 @@
 // `ghost:<id>` rows; these helpers decide what is expanded and which row a
 // selection lands on.
 
-import type { ManifestNode } from '../../../shared/types'
+import type { ProjectNode } from '../../../shared/types'
 import type { MergedTreeNode } from '../../../shared/merged-tree'
 import { getAncestorIds } from './tree'
 
@@ -27,7 +27,7 @@ export function seedCompareExpanded(browseExpanded: Iterable<string>, nodes: Mer
  * on the "to" side, its ghost id when only the removed copy exists, and the
  * original id otherwise.
  */
-export function resolveCompareSelectionId(nodeId: string, nodes: ManifestNode[]): string {
+export function resolveCompareSelectionId(nodeId: string, nodes: ProjectNode[]): string {
   if (nodes.some(node => node.id === nodeId)) return nodeId
   const ghostId = `ghost:${nodeId}`
   if (nodes.some(node => node.id === ghostId)) return ghostId
@@ -38,11 +38,11 @@ export function resolveCompareSelectionId(nodeId: string, nodes: ManifestNode[])
  * Like resolveCompareSelectionId, but for a comparison scope root, which is
  * always present on one side or the other.
  */
-export function scopeSelectionId(scopeNodeId: string, nodes: ManifestNode[]): string {
+export function scopeSelectionId(scopeNodeId: string, nodes: ProjectNode[]): string {
   return nodes.some(node => node.id === scopeNodeId) ? scopeNodeId : `ghost:${scopeNodeId}`
 }
 
 /** Add a node and all of its ancestors to an expansion set. */
-export function expandToReveal(expanded: Iterable<string>, nodeId: string, nodes: ManifestNode[]): Set<string> {
+export function expandToReveal(expanded: Iterable<string>, nodeId: string, nodes: ProjectNode[]): Set<string> {
   return new Set([...expanded, ...getAncestorIds(nodeId, nodes), nodeId])
 }

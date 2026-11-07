@@ -8,7 +8,7 @@
   let interruptedHistory = $state(false)
   let externalDocumentConflict = $state(false)
   let archiveOpen = $state(false)
-  import type { EditHistoryState, Project, ManifestNode, ManifestWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
+  import type { EditHistoryState, Project, ProjectNode, DocumentWarning, ProjectWarning, NodeTemplate, PropertyType, RecoveryPoint, SearchResult, Snapshot, SnapshotTimelineEvent, ImportResult } from '../../shared/types'
   import { isUsableTemplate } from '../../shared/validation'
   import { CURRENT_PROJECT_REF } from '../../shared/snapshot-ref'
   import type { MenuCommandId, MenuCommandState } from '../../shared/menu-commands'
@@ -45,7 +45,7 @@
     serializeWorkspacePaneSettings,
     type PaneHandle,
   } from './lib/pane-layout'
-  import ManifestView from './components/ManifestView.svelte'
+  import ProjectTreeView from './components/ProjectTreeView.svelte'
   import DetailPane from './components/DetailPane.svelte'
   import MoveToDialog from './components/MoveToDialog.svelte'
   import DuplicateDialog from './components/DuplicateDialog.svelte'
@@ -1143,9 +1143,9 @@
   let templateManagerOpen = $state(false)
 
   // Load-time warnings (typed-value/integrity issues found when opening a
-  // hand-edited manifest). Delivered once on open; cleared by any mutation.
+  // hand-edited document). Delivered once on open; cleared by any mutation.
   let loadWarningsDismissed = $state(false)
-  const loadWarnings = $derived.by<ManifestWarning[]>(() => {
+  const loadWarnings = $derived.by<DocumentWarning[]>(() => {
     const p: Project | null = project
     return p?.loadWarnings ?? []
   })
@@ -1184,19 +1184,19 @@
   // ─── CSV import ───────────────────────────────────────────────────────────────
 
   let importDialogOpen = $state(false)
-  let importBaseParent = $state<ManifestNode | null>(null)
+  let importBaseParent = $state<ProjectNode | null>(null)
   let importSummary = $state<ImportResult | null>(null)
   let importSummaryDismissed = $state(false)
   const showImportSummary = $derived(importSummary !== null && !importSummaryDismissed)
 
-  function resolveBaseParent(node?: ManifestNode): ManifestNode | null {
+  function resolveBaseParent(node?: ProjectNode): ProjectNode | null {
     if (!project) return null
     if (node) return node
     const sel = selectedId ? project.nodes.find(n => n.id === selectedId) : undefined
     return sel ?? project.nodes.find(n => n.parentId === null) ?? null
   }
 
-  function openImportDialog(node?: ManifestNode) {
+  function openImportDialog(node?: ProjectNode) {
     if (editingLocked) { showToast(lockReason()); return }
     const base = resolveBaseParent(node)
     if (!base) return
@@ -1821,7 +1821,7 @@
             <div class="flex-1 p-3 text-sm text-stone-400" data-testid="search-no-results">No matching nodes</div>
           {:else}
             <div class="flex-1 overflow-hidden">
-              <ManifestView
+              <ProjectTreeView
                 rows={flatRows}
                 mode={compareMode ? 'compare' : 'browse'}
                 compareContext={compareMode && mergedTree

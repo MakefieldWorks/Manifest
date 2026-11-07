@@ -18,7 +18,7 @@
 //                      ▼
 //        commitProjectMutation (guards, search sync, edit history)
 //                      │
-//                      ├──▶ scheduleAutosave() ──▶ debounce ──▶ writeManifest()
+//                      ├──▶ scheduleAutosave() ──▶ debounce ──▶ writeDocument()
 //                      │
 //                      └──▶ return Result<Project>
 //
@@ -64,7 +64,7 @@ import type {
   Project,
   RecoveryPointApplyRequest,
   RecoveryPointApplyResult,
-  ManifestNode,
+  ProjectNode,
   NodeHistory,
   NodeHistoryIndexStatus,
   SearchResult,
@@ -102,7 +102,7 @@ import { SnapshotDocumentChangedError, type GitService } from './git-service'
 import type { Logger } from './logger'
 import { normalizeSearchPage, SearchIndexService } from './search-index'
 import { HistoryIndexService } from './history-index'
-import { findProjectDocument, PROJECT_DOCUMENT_FILE } from './project-launcher'
+import { findProjectDocument, PROJECT_DOCUMENT_FILE } from './project-document-file'
 import {
   MAX_FILE_SIZE_BYTES,
   collectLoadWarnings,
@@ -204,7 +204,7 @@ export class ProjectManager {
       currentProjectPath: () => this.currentProject?.path,
       isBlocked: () => this.hasInterruptedHistory(),
       readHistory: () => this.readSnapshotHistory(),
-      parse: raw => this.parseManifestJson(raw),
+      parse: raw => this.parseDocumentJson(raw),
     })
   }
 
@@ -246,7 +246,7 @@ export class ProjectManager {
         path: projectPath,
       }
 
-      const saved = await this.writeManifest(project, { expectedDocumentHash: null })
+      const saved = await this.writeDocument(project, { expectedDocumentHash: null })
       if (!saved.ok) return saved as Result<Project>
       await this.git.initRepo(projectPath)
       await this.git.initialCommit(projectPath)
@@ -269,16 +269,15 @@ export class ProjectManager {
   }
 
   // Open an existing project from a directory path.
-  // Reads the dedicated project document (or a legacy manifest.json), validates,
-  // migrates, and rebuilds search index.
+  // Reads the project document, validates, migrates its schema, and rebuilds
+  // the search index.
   async openProject(projectPath: string): Promise<Result<Project>> {
     if (this.historyOperationInProgress) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the history operation to finish before switching projects.')
     if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
-    const document = findProjectDocument(projectPath)
-    if (!document) {
+    const documentPath = findProjectDocument(projectPath)
+    if (!documentPath) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No Layertrail project document was found')
     }
-    const documentPath = document.path
     try {
       const stat = statSync(documentPath)
       if (stat.size > MAX_FILE_SIZE_BYTES) {
@@ -316,8 +315,7 @@ export class ProjectManager {
       const warnings = collectLoadWarnings(data)
       const projectWarnings = collectProjectWarnings(projectPath)
       const project: Project = { ...data, path: projectPath }
-      const canonicalPath = join(projectPath, PROJECT_DOCUMENT_FILE)
-      const openingHash = document.isLegacy ? readDocumentHash(canonicalPath) : hashDocument(rawBytes)
+      const openingHash = hashDocument(rawBytes)
       if (warnings.length > 0) {
         this.logger.warn('project loaded with warnings', { path: projectPath, count: warnings.length })
       }
@@ -328,19 +326,14 @@ export class ProjectManager {
         })
       }
 
-      // Migrate projects that use an older document name (Manifest.manifestproject
-      // or manifest.json) to the current one on first successful open. Writing
-      // the new file atomically comes before removing the old one, so a failed
-      // write never risks project data.
-      if ((data.version !== originalVersion || document.isLegacy) && !new HistoryOperationStore(projectPath, project.id).pending()) {
-        const persisted = await this.writeManifest(project, { touchModified: false, expectedDocumentHash: openingHash })
+      // Persist a schema migration on first successful open.
+      if (data.version !== originalVersion && !new HistoryOperationStore(projectPath, project.id).pending()) {
+        const persisted = await this.writeDocument(project, { touchModified: false, expectedDocumentHash: openingHash })
         if (!persisted.ok) return persisted as Result<Project>
-        for (const superseded of document.supersededPaths) unlinkSync(superseded)
         this.logger.info('project document migrated', {
           path: projectPath,
           schemaFrom: originalVersion,
           schemaTo: data.version,
-          legacyDocument: document.isLegacy,
         })
       }
 
@@ -366,7 +359,7 @@ export class ProjectManager {
       this.currentProject = runtimeProject
       this.documentSaveError = null
       this.logger.info('project opened', { name: project.name, path: projectPath, nodes: project.nodes.length })
-      if ((data.version === originalVersion && !document.isLegacy) || new HistoryOperationStore(projectPath, project.id).pending()) this.documentVersions.set(canonicalPath, openingHash)
+      if (data.version === originalVersion || new HistoryOperationStore(projectPath, project.id).pending()) this.documentVersions.set(documentPath, openingHash)
       this.retainCurrentDocumentVersion()
       await this.finishProvenHistoryOperation()
       this.backfill.schedule()
@@ -385,7 +378,7 @@ export class ProjectManager {
     if (!this.currentProject) {
       return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
     }
-    return this.writeManifest(this.currentProject)
+    return this.writeDocument(this.currentProject)
   }
 
   // Flush autosave immediately and clear in-memory state only after the final
@@ -496,7 +489,7 @@ export class ProjectManager {
       this.historyBeforeOperation = history
       if (this.currentProject?.path && existsSync(snapshotHistoryPath(this.currentProject.path))) {
         try {
-          mkdirSync(join(this.currentProject.path, '.manifest'), { recursive: true })
+          mkdirSync(join(this.currentProject.path, '.layertrail'), { recursive: true })
           new HistoryBackupStore(this.currentProject.path, this.currentProject.id).save(history)
         } catch (error) {
           return err(ErrorCode.HISTORY_BACKUP_FAILED, `Could not protect history before the operation: ${error instanceof Error ? error.message : String(error)}`)
@@ -674,7 +667,7 @@ export class ProjectManager {
     const eligibleNodes = filtersActive ? filterInventoryNodes(project, filters) : project.nodes
 
     const mapNode = (
-      node: ManifestNode,
+      node: ProjectNode,
       matchField: SearchResult['matchField'],
       snippet: string,
     ): SearchResult => {
@@ -776,7 +769,7 @@ export class ProjectManager {
     const project = this.currentProject!
     const filtersActive = hasInventoryFilters(request.filters)
 
-    let nodes: ManifestNode[]
+    let nodes: ProjectNode[]
     if (!request.query) {
       nodes = filtersActive
         ? filterInventoryNodes(project, request.filters)
@@ -786,7 +779,7 @@ export class ProjectManager {
       const eligibleNodes = filtersActive
         ? filterInventoryNodes(project, request.filters)
         : project.nodes
-      const queryAll = (): ManifestNode[] => {
+      const queryAll = (): ProjectNode[] => {
         if (!this.search.hasExactNodeSet(project.path!, nodeMap.keys())) {
           throw new Error('Search index node set does not match the current project')
         }
@@ -820,7 +813,7 @@ export class ProjectManager {
 
   private archiveService(): ProjectArchive {
     return new ProjectArchive(this.git, raw => {
-      const result = this.parseManifestJson(raw)
+      const result = this.parseDocumentJson(raw)
       if (!result.ok) throw new Error(result.error.message)
       return result.data
     })
@@ -877,7 +870,7 @@ export class ProjectManager {
   // ─── Recovery files and history backup ───────────────────────────────────────
 
   private scanRecoveryFiles(): RecoveryFilePreview {
-    return scanRecoveryFiles(this.currentProject!, () => this.readSnapshotHistory(), raw => this.parseManifestJson(raw))
+    return scanRecoveryFiles(this.currentProject!, () => this.readSnapshotHistory(), raw => this.parseDocumentJson(raw))
   }
 
   async recoveryFilesPreview(): Promise<Result<RecoveryFilePreview>> {
@@ -904,13 +897,13 @@ export class ProjectManager {
         // references cannot silently attach invented provenance to this point.
         const point: RecoveryPoint = {
           id: `reconciled-${uuidv7()}`, createdAt: new Date().toISOString(),
-          reason: 'reconciled', manifestPath: `.manifest/recovery/${file.name}`,
+          reason: 'reconciled', payloadPath: `.layertrail/recovery/${file.name}`,
         }
         if (this.scanRecoveryFiles().token !== request.token) {
           return err(ErrorCode.VALIDATION_FAILED, 'Recovery files changed. Review them again.')
         }
-        const payload = this.operationStore()!.read(join(this.currentProject!.path!, '.manifest', 'recovery', file.name))
-        const parsedPayload = this.parseManifestJson(payload.toString('utf8'))
+        const payload = this.operationStore()!.read(join(this.currentProject!.path!, '.layertrail', 'recovery', file.name))
+        const parsedPayload = this.parseDocumentJson(payload.toString('utf8'))
         if (!parsedPayload.ok || parsedPayload.data.id !== this.currentProject!.id) {
           return err(ErrorCode.VALIDATION_FAILED, 'Recovery file changed. Review it again.')
         }
@@ -966,7 +959,7 @@ export class ProjectManager {
       project,
       this.git,
       () => this.currentProject?.path === project?.path && this.currentProject?.id === project?.id,
-      raw => this.parseManifestJson(raw),
+      raw => this.parseDocumentJson(raw),
     )
   }
 
@@ -1222,8 +1215,8 @@ export class ProjectManager {
       events: allEvents,
       rowsBySnapshot,
       recoveryPoints: persistedHistory.recoveryPoints,
-      readSnapshotManifest: snapshotId => this.git.readSnapshotManifest(projectPath, snapshotId),
-      parse: raw => this.parseManifestJson(raw),
+      readSnapshotDocument: snapshotId => this.git.readSnapshotDocument(projectPath, snapshotId),
+      parse: raw => this.parseDocumentJson(raw),
       logger: this.logger,
     })
 
@@ -1286,8 +1279,8 @@ export class ProjectManager {
       if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
       return ok(this.currentProject)
     }
-    const raw = await this.git.readSnapshotManifest(this.currentProject!.path!, ref)
-    return this.parseManifestJson(raw)
+    const raw = await this.git.readSnapshotDocument(this.currentProject!.path!, ref)
+    return this.parseDocumentJson(raw)
   }
 
   private loadAndDiff(a: string, b: string, scopeNodeId: unknown = null): Promise<Result<LoadedComparison>> {
@@ -1353,8 +1346,8 @@ export class ProjectManager {
         )
       }
 
-      const raw = await this.git.readSnapshotManifest(this.currentProject.path, name)
-      const restored = this.parseManifestJson(raw)
+      const raw = await this.git.readSnapshotDocument(this.currentProject.path, name)
+      const restored = this.parseDocumentJson(raw)
       if (!restored.ok) return restored as Result<SnapshotRevertResult>
 
       const previousProject = this.currentProject
@@ -1377,7 +1370,7 @@ export class ProjectManager {
         return searchResult as Result<SnapshotRevertResult>
       }
 
-      const writeResult = await this.writeManifest(restoredProject, { touchModified: false })
+      const writeResult = await this.writeDocument(restoredProject, { touchModified: false })
       if (!writeResult.ok) {
         this.currentProject = previousProject
         this.restoreSearchIndex(previousProject)
@@ -1431,19 +1424,19 @@ export class ProjectManager {
         return err(ErrorCode.VALIDATION_FAILED, `Recovery point not found: ${request.id}`)
       }
 
-      const manifestPath = join(this.currentProject.path, ...recoveryPoint.manifestPath.split(/[\\/]/))
-      if (!existsSync(manifestPath)) {
-        return err(ErrorCode.SNAPSHOT_READ_FAILED, `Recovery manifest not found: ${recoveryPoint.manifestPath}`)
+      const payloadPath = join(this.currentProject.path, ...recoveryPoint.payloadPath.split(/[\\/]/))
+      if (!existsSync(payloadPath)) {
+        return err(ErrorCode.SNAPSHOT_READ_FAILED, `Recovery document not found: ${recoveryPoint.payloadPath}`)
       }
 
       if (recoveryPoint.reason === 'reconciled' &&
-          (lstatSync(join(this.currentProject.path, '.manifest')).isSymbolicLink() ||
-           lstatSync(join(this.currentProject.path, '.manifest', 'recovery')).isSymbolicLink() ||
-           !lstatSync(manifestPath).isFile() || lstatSync(manifestPath).isSymbolicLink())) {
+          (lstatSync(join(this.currentProject.path, '.layertrail')).isSymbolicLink() ||
+           lstatSync(join(this.currentProject.path, '.layertrail', 'recovery')).isSymbolicLink() ||
+           !lstatSync(payloadPath).isFile() || lstatSync(payloadPath).isSymbolicLink())) {
         return err(ErrorCode.VALIDATION_FAILED, 'Added recovery files must remain regular local files.')
       }
 
-      const recovered = this.parseManifestJson(readFileSync(manifestPath, 'utf8'))
+      const recovered = this.parseDocumentJson(readFileSync(payloadPath, 'utf8'))
       if (!recovered.ok) return recovered as Result<RecoveryPointApplyResult>
       if (recovered.data.id !== this.currentProject.id) return err(ErrorCode.VALIDATION_FAILED, 'Recovery file belongs to another project.')
 
@@ -1467,7 +1460,7 @@ export class ProjectManager {
         return searchResult as Result<RecoveryPointApplyResult>
       }
 
-      const writeResult = await this.writeManifest(recoveredProject, { touchModified: false })
+      const writeResult = await this.writeDocument(recoveredProject, { touchModified: false })
       if (!writeResult.ok) {
         this.currentProject = previousProject
         this.restoreSearchIndex(previousProject)
@@ -1532,7 +1525,7 @@ export class ProjectManager {
       store: this.operationStore()!,
       historyBytesOrNull: () => this.historyBytesOrNull(),
       readHistory: bytes => this.readSnapshotHistory(bytes),
-      parse: raw => this.parseManifestJson(raw),
+      parse: raw => this.parseDocumentJson(raw),
     }
   }
 
@@ -1665,13 +1658,13 @@ export class ProjectManager {
       if (candidate.token !== request.token) return err(ErrorCode.VALIDATION_FAILED, 'The project or evidence changed. Review the unfinished operation again.')
       this.assertDocumentUnchanged(this.currentProject!.path!)
       const id = uuidv7()
-      writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued.manifest.json`), candidate.current)
+      writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued.document.json`), candidate.current)
       if (candidate.metadataOnly || candidate.history === null) {
         if (candidate.currentHistoryBytes !== null) {
           writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued-history.json`), candidate.currentHistoryBytes)
         }
         if (!candidate.metadataOnly) {
-          const saved = await this.writeManifest(this.currentProject!)
+          const saved = await this.writeDocument(this.currentProject!)
           if (!saved.ok) return saved as Result<Project>
         }
         candidate.store.finish(true)
@@ -1683,7 +1676,7 @@ export class ProjectManager {
       writeHistoryFile(join(candidate.store.recoveryPath, `recovery-${id}-continued-history.json`), JSON.stringify(candidate.history, null, 2))
       // No Git replay and no invented timeline event. Preserve the current
       // inventory and relinquish lineage assumptions that may be incomplete.
-      const saved = await this.writeManifest(this.currentProject!)
+      const saved = await this.writeDocument(this.currentProject!)
       if (!saved.ok) return saved as Result<Project>
       this.historyBeforeOperation = candidate.history!
       this.writeSnapshotHistory({ ...candidate.history!, currentBaseSnapshotId: null, pendingRevertEventId: null }, { deleteRemovedPayloads: false })
@@ -1720,7 +1713,7 @@ export class ProjectManager {
         if (this.conflictLocalCopy?.path !== projectPath || this.conflictLocalCopy.hash !== hash ||
             readDocumentHash(this.conflictLocalCopy.file) !== hash) {
           const directory = this.conflictRecoveryDirectory(projectPath)
-          const file = join(directory, `recovery-${uuidv7()}-local.manifest.json`)
+          const file = join(directory, `recovery-${uuidv7()}-local.document.json`)
           writeHistoryFile(file, local)
           this.conflictLocalCopy = { path: projectPath, hash, file }
         }
@@ -1733,7 +1726,7 @@ export class ProjectManager {
 
   private conflictRecoveryDirectory(projectPath: string): string {
     if (!existsSync(projectPath) || !lstatSync(projectPath).isDirectory() || lstatSync(projectPath).isSymbolicLink()) throw new Error('The project folder is missing, moved, or linked. Restore its original location before continuing.')
-    const metadata = join(projectPath, '.manifest')
+    const metadata = join(projectPath, '.layertrail')
     const recovery = join(metadata, 'recovery')
     for (const path of [metadata, recovery]) {
       if (existsSync(path) && (!lstatSync(path).isDirectory() || lstatSync(path).isSymbolicLink())) throw new Error('Recovery copies require regular local directories.')
@@ -1759,7 +1752,7 @@ export class ProjectManager {
     const externalHash = bytes === null ? null : hashDocument(bytes)
     if (externalHash === this.documentVersions.get(path)) throw new Error('The project file no longer differs from the last saved version. Try saving again.')
     const local = serializeProjectForPersistence(project)
-    const parsed = bytes === null ? null : this.parseManifestJson(bytes.toString('utf8'))
+    const parsed = bytes === null ? null : this.parseDocumentJson(bytes.toString('utf8'))
     const external = parsed?.ok && parsed.data.id === project.id ? parsed.data : null
     const token = hashDocument(JSON.stringify([project.path, project.id, this.documentVersions.get(path), externalHash, hashDocument(local)]))
     const description = bytes === null ? 'The project file is missing.' : !parsed?.ok ? 'The external file is not a supported valid project.' : !external ? 'The external file belongs to another project.' : 'The external inventory is valid for this project.'
@@ -1790,13 +1783,13 @@ export class ProjectManager {
       this.historyBeforeOperation = history
       if (history && existsSync(snapshotHistoryPath(path))) new HistoryBackupStore(path, candidate.project.id).save(history)
       const id = uuidv7()
-      writeHistoryFile(join(recovery, `recovery-${id}-local.manifest.json`), candidate.local)
-      if (candidate.bytes !== null) writeHistoryFile(join(recovery, `recovery-${id}-external.manifest.json`), candidate.bytes)
+      writeHistoryFile(join(recovery, `recovery-${id}-local.document.json`), candidate.local)
+      if (candidate.bytes !== null) writeHistoryFile(join(recovery, `recovery-${id}-external.document.json`), candidate.bytes)
       // Copy both versions first, then recheck external bytes immediately
       // before any replacement or in-memory transition.
       this.assertDocumentUnchanged(path, candidate.externalHash)
       if (request.choice === 'keep-local') {
-        const saved = await this.writeManifest(candidate.project, { expectedDocumentHash: candidate.externalHash })
+        const saved = await this.writeDocument(candidate.project, { expectedDocumentHash: candidate.externalHash })
         if (!saved.ok) return saved as Result<Project>
       } else {
         const next = withProjectWarnings({ ...candidate.external!, path }, collectProjectWarnings(path))
@@ -1822,7 +1815,7 @@ export class ProjectManager {
   private async flushPendingAutosave(): Promise<Result<void>> {
     this.cancelAutosave()
     if (!this.currentProject) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
-    return this.writeManifest(this.currentProject)
+    return this.writeDocument(this.currentProject)
   }
 
   private scheduleAutosave(): void {
@@ -1844,11 +1837,11 @@ export class ProjectManager {
   }
 
   // ─── Commit, persistence, and index seams ───────────────────────────────────
-  // writeManifest, writeSnapshotHistory, rebuildSearchIndex, and
+  // writeDocument, writeSnapshotHistory, rebuildSearchIndex, and
   // restoreSearchIndex stay methods on purpose: they are the failure-injection
   // seams the interruption tests spy on.
 
-  private parseManifestJson(raw: string): Result<Project> {
+  private parseDocumentJson(raw: string): Result<Project> {
     return parseProjectDocument(raw, this.logger)
   }
 
@@ -1944,7 +1937,7 @@ export class ProjectManager {
   }
 
   // Atomic write: tmp then rename.
-  private async writeManifest(
+  private async writeDocument(
     project: Project,
     options: { touchModified?: boolean; expectedDocumentHash?: string | null } = {}
   ): Promise<Result<void>> {
@@ -2014,8 +2007,8 @@ export class ProjectManager {
 
       let previousProject: Project | null = null
       if (previousSnapshotName) {
-        const raw = await this.git.readSnapshotManifest(project.path, previousSnapshotName)
-        const parsed = this.parseManifestJson(raw)
+        const raw = await this.git.readSnapshotDocument(project.path, previousSnapshotName)
+        const parsed = this.parseDocumentJson(raw)
         if (parsed.ok) previousProject = parsed.data
       }
 

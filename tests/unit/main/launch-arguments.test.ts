@@ -26,7 +26,7 @@ describe('collectProjectOpenTargets', () => {
   it('keeps a project target for a packaged application while ignoring flags', () => {
     expect(collectProjectOpenTargets([
       '/Applications/Layertrail.app/Contents/MacOS/Layertrail',
-      '--user-data-dir=/tmp/manifest',
+      '--user-data-dir=/tmp/layertrail',
       '/Users/robert/Documents/Network Lab',
     ], {
       defaultApp: false,

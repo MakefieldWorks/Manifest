@@ -66,7 +66,7 @@ describe('contract normalize()', () => {
   })
 
   it('scrubs literal paths passed in scrub list', () => {
-    const dir = '/tmp/manifest-xyz-123'
+    const dir = '/tmp/layertrail-xyz-123'
     const out = normalize({ path: `${dir}/Layertrail.layertrail` }, [dir]) as Record<string, unknown>
     expect(out).toEqual({ path: '<path>/Layertrail.layertrail' })
   })

@@ -41,8 +41,8 @@ export class HistoryBackupStore {
   readonly backupPath: string
 
   constructor(projectPath: string, private readonly projectId: string) {
-    this.historyPath = join(projectPath, '.manifest', 'history.json')
-    this.backupPath = join(projectPath, '.manifest', 'history.backup.json')
+    this.historyPath = join(projectPath, '.layertrail', 'history.json')
+    this.backupPath = join(projectPath, '.layertrail', 'history.backup.json')
   }
 
   save(history: SnapshotHistoryState): void {

@@ -41,13 +41,10 @@ import { isE2eBackground } from './e2e-background'
 import { DOCUMENTATION_URL, REPORT_ISSUE_URL, RELEASES_URL, WEBSITE_URL } from '../shared/external-links'
 import { closeHelpWindow, installHelpProtocol, openHelpWindow, registerHelpScheme } from './help-window'
 import { helpRootFor, readOfflineHelpInfo } from './offline-help'
-import { migratePreviousUserData } from './user-data-migration'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
 const userData = app.getPath('userData')
-// Carry Recent projects and settings over from the pre-rename Manifest folder.
-const migratedUserData = migratePreviousUserData(userData, app.getPath('appData'))
 const logDir   = join(userData, 'logs')
 
 const appLogger     = createLogger('app',     join(logDir, 'app.log'))
@@ -297,8 +294,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.ARCHIVE_INSPECT, async () => {
     try {
       const selected = await dialog.showOpenDialog({ title: 'Review project archive', properties: ['openFile'],
-        // .manifestarchive files were exported before the rename and still restore.
-        filters: [{ name: 'Layertrail project archive', extensions: ['layertrailarchive', 'manifestarchive'] }] })
+        filters: [{ name: 'Layertrail project archive', extensions: ['layertrailarchive'] }] })
       if (selected.canceled || !selected.filePaths[0]) return ok(null)
       return projectManager.inspectProjectArchive(selected.filePaths[0])
     } catch (error) { return err(ErrorCode.ARCHIVE_FAILED, String(error)) }
@@ -653,7 +649,6 @@ app.whenReady().then(async () => {
     app.dock?.hide()
   }
   appLogger.info('app starting', { version: app.getVersion(), platform: process.platform })
-  if (migratedUserData.length > 0) appLogger.info('settings copied from the Manifest user data folder', { files: migratedUserData })
   synchronizeNativeAppearance()
 
   const gitStatus = await gitService.checkVersion()

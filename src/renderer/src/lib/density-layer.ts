@@ -271,7 +271,7 @@ function pushSection(sections: LensSection[], section: LensSection): void {
 }
 
 // ─── Selection / navigation helpers ────────────────────────────────────────────
-// Pure logic lifted out of ManifestView so the lens selection-highlight and the
+// Pure logic lifted out of ProjectTreeView so the lens selection-highlight and the
 // ArrowLeft-escapes-a-fold behaviors can be unit-tested without mounting the
 // component (which is virtualized + animated).
 

@@ -39,7 +39,7 @@ to test the development Electron build instead. The full `test:e2e` suite also
 uses that development build.
 
 The default Linux CI job runs `package:verify` and the packaged dogfood test
-on every PR. On Linux the packaged executable is `dist/linux-unpacked/manifest`;
+on every PR. On Linux the packaged executable is `dist/linux-unpacked/layertrail`;
 run the test under `xvfb-run --auto-servernum` when no display is available.
 
 ## Linux Desktop Handoff

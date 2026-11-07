@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { diffProjects, diffTemplates } from '../../../src/shared/diff-engine'
-import type { Project, ManifestNode, NodeTemplate } from '../../../src/shared/types'
+import type { Project, ProjectNode, NodeTemplate } from '../../../src/shared/types'
 
-function node(id: string, overrides: Partial<ManifestNode> = {}): ManifestNode {
+function node(id: string, overrides: Partial<ProjectNode> = {}): ProjectNode {
   return {
     id,
     parentId: id === 'root' ? null : 'root',
@@ -15,7 +15,7 @@ function node(id: string, overrides: Partial<ManifestNode> = {}): ManifestNode {
   }
 }
 
-function project(nodes: ManifestNode[], templates?: Record<string, NodeTemplate>): Project {
+function project(nodes: ProjectNode[], templates?: Record<string, NodeTemplate>): Project {
   return {
     version: 3,
     id: 'p',

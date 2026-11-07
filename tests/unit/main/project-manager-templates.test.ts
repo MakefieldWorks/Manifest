@@ -20,7 +20,7 @@ const noopGit = {
 let tmpDir: string
 let manager: ProjectManager
 
-function makeManifest(overrides: Partial<Record<string, unknown>> = {}) {
+function makeDocument(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     version: 2,
     id: 'test-project-id',
@@ -68,7 +68,7 @@ const controllerLink: NodeTemplate = {
 }
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-tpl-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-tpl-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
 })
 
@@ -80,7 +80,7 @@ afterEach(async () => {
 
 describe('migration on open', () => {
   it('opens a v2 project and adds an empty templates map (now v3)', async () => {
-    const project = await openWith(makeManifest())
+    const project = await openWith(makeDocument())
     expect(project.version).toBe(3)
     expect(project.templates).toEqual({})
   })
@@ -88,27 +88,27 @@ describe('migration on open', () => {
 
 describe('templateCreate', () => {
   it('creates a valid template', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     const r = manager.templateCreate('software-item', softwareItem)
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.data.templates?.['software-item']?.label).toBe('Software Item')
   })
   it('rejects a non-slug id', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     expect(manager.templateCreate('Software Item', softwareItem).ok).toBe(false)
   })
   it('rejects a duplicate id', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     expect(manager.templateCreate('software-item', softwareItem).ok).toBe(false)
   })
   it('rejects a malformed template (enum without options)', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     const bad: NodeTemplate = { label: 'X', fields: { s: { type: 'enum' } } }
     expect(manager.templateCreate('x', bad).ok).toBe(false)
   })
   it('rejects a reference default that points at a missing node', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     const badDefault: NodeTemplate = {
       label: 'Link',
       fields: { controller: { type: 'reference', default: 'missing-node' } },
@@ -119,7 +119,7 @@ describe('templateCreate', () => {
 
 describe('nodeCreate with template', () => {
   it('binds the template and seeds field defaults', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const r = manager.nodeCreate('root-id', 'Flight Test App', 'software-item')
     expect(r.ok).toBe(true)
@@ -129,14 +129,14 @@ describe('nodeCreate with template', () => {
     expect(node.properties).toEqual({ units: 1 })
   })
   it('rejects an unknown templateId', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     expect(manager.nodeCreate('root-id', 'X', 'nope').ok).toBe(false)
   })
 })
 
 describe('nodeUpdate — coercion and validation', () => {
   it('coerces template-field values to typed primitives', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App', 'software-item')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -153,7 +153,7 @@ describe('nodeUpdate — coercion and validation', () => {
   })
 
   it('rejects a value that cannot be coerced to the field type', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App', 'software-item')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -163,7 +163,7 @@ describe('nodeUpdate — coercion and validation', () => {
   })
 
   it('leaves ad-hoc (non-template) keys untyped', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App', 'software-item')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -174,7 +174,7 @@ describe('nodeUpdate — coercion and validation', () => {
   })
 
   it('accepts reference values that point at existing nodes', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const target = manager.nodeCreate('root-id', 'Power Supply')
     expect(target.ok).toBe(true)
@@ -188,7 +188,7 @@ describe('nodeUpdate — coercion and validation', () => {
   })
 
   it('rejects reference values that point at missing nodes', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const created = manager.nodeCreate('root-id', 'Chamber', 'controlled-asset')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'Chamber').id
@@ -197,7 +197,7 @@ describe('nodeUpdate — coercion and validation', () => {
   })
 
   it('rejects reference values that point at the same node', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const created = manager.nodeCreate('root-id', 'Chamber', 'controlled-asset')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'Chamber').id
@@ -208,7 +208,7 @@ describe('nodeUpdate — coercion and validation', () => {
 
 describe('templateUpdate — bound-node guard', () => {
   it('allows an empty freeform property to become an unset typed field', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('asset', { label: 'Asset', fields: {} })
     const created = manager.nodeCreate('root-id', 'Calibration Unit', 'asset')
     const id = (created as any).data.nodes.find((node: any) => node.name === 'Calibration Unit').id
@@ -224,7 +224,7 @@ describe('templateUpdate — bound-node guard', () => {
   })
 
   it('rejects a field-type change that would invalidate an existing bound value', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App', 'software-item')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -239,7 +239,7 @@ describe('templateUpdate — bound-node guard', () => {
   })
 
   it('allows a compatible change and removing a field', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App', 'software-item')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -254,7 +254,7 @@ describe('templateUpdate — bound-node guard', () => {
   })
 
   it('rejects changing a field to reference when bound values do not target nodes', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App', 'software-item')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -269,7 +269,7 @@ describe('templateUpdate — bound-node guard', () => {
 
 describe('nodeDelete — reference guard', () => {
   it('blocks deleting a node referenced by a surviving typed property', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const target = manager.nodeCreate('root-id', 'Power Supply')
     const targetId = (target as any).data.nodes.find((n: any) => n.name === 'Power Supply').id
@@ -285,7 +285,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('allows deleting an entire subtree that contains both reference and target', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const rack = manager.nodeCreate('root-id', 'Rack')
     const rackId = (rack as any).data.nodes.find((n: any) => n.name === 'Rack').id
@@ -300,7 +300,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('returns every blocker in the error context, not just the first', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const target = manager.nodeCreate('root-id', 'Power Supply')
     const targetId = (target as any).data.nodes.find((n: any) => n.name === 'Power Supply').id
@@ -324,7 +324,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('force-deletes by unlinking a mutual reference across subtrees', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     // A references B and B references A — neither can be deleted by the guard.
     const a = manager.nodeCreate('root-id', 'Asset A', 'controlled-asset')
@@ -347,7 +347,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('force-delete unlinks references from a node outside the deleted subtree', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const rack = manager.nodeCreate('root-id', 'Rack')
     const rackId = (rack as any).data.nodes.find((n: any) => n.name === 'Rack').id
@@ -367,7 +367,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('force-delete nulls every blocking reference key on a single survivor', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     // Template with two reference fields so one survivor can hold two blockers.
     manager.templateCreate('dual-link', {
       label: 'Dual Link',
@@ -412,7 +412,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('force-delete groups two keys from one survivor in a single pass', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('dual-link', {
       label: 'Dual Link',
       fields: {
@@ -451,7 +451,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('bumps modified on an unlinked survivor', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const target = manager.nodeCreate('root-id', 'Power Supply')
     const targetId = (target as any).data.nodes.find((n: any) => n.name === 'Power Supply').id
@@ -481,7 +481,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('ignores a value left under a key rebound away from reference (no free-text corruption)', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const target = manager.nodeCreate('root-id', 'Power Supply')
     const targetId = (target as any).data.nodes.find((n: any) => n.name === 'Power Supply').id
@@ -502,7 +502,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('blocks deletion of a node used as a template reference default, and clears it on force', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     const target = manager.nodeCreate('root-id', 'Default Controller')
     const targetId = (target as any).data.nodes.find((n: any) => n.name === 'Default Controller').id
     // A template whose reference field defaults to the target node.
@@ -538,7 +538,7 @@ describe('nodeDelete — reference guard', () => {
   })
 
   it('force flag is a safe no-op when nothing references the target', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('controlled-asset', controllerLink)
     const target = manager.nodeCreate('root-id', 'Power Supply')
     const targetId = (target as any).data.nodes.find((n: any) => n.name === 'Power Supply').id
@@ -560,7 +560,7 @@ describe('nodeDelete — reference guard', () => {
 
 describe('templateDelete — non-destructive unbind', () => {
   it('removes the template, unbinds nodes, and keeps their values', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App', 'software-item')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -578,7 +578,7 @@ describe('templateDelete — non-destructive unbind', () => {
 
 describe('load warnings — no silent coercion or downgrade', () => {
   it('surfaces a path-qualified warning for an invalid typed value', async () => {
-    const manifest = makeManifest({
+    const document = makeDocument({
       version: 3,
       templates: { 'software-item': softwareItem },
       nodes: [
@@ -594,7 +594,7 @@ describe('load warnings — no silent coercion or downgrade', () => {
         },
       ],
     })
-    const project = await openWith(manifest)
+    const project = await openWith(document)
     expect(project.loadWarnings).toBeDefined()
     const w = project.loadWarnings!.find(x => x.path === 'nodes[1].properties.status')
     expect(w).toBeDefined()
@@ -604,7 +604,7 @@ describe('load warnings — no silent coercion or downgrade', () => {
   })
 
   it('surfaces a warning for a dangling templateId', async () => {
-    const manifest = makeManifest({
+    const document = makeDocument({
       version: 3,
       templates: {},
       nodes: [
@@ -619,14 +619,14 @@ describe('load warnings — no silent coercion or downgrade', () => {
         },
       ],
     })
-    const project = await openWith(manifest)
+    const project = await openWith(document)
     const w = project.loadWarnings!.find(x => x.path === 'nodes[1].templateId')
     expect(w).toBeDefined()
     expect(w!.code).toBe('TEMPLATE_NOT_FOUND')
   })
 
   it('surfaces a warning for a dangling reference property', async () => {
-    const manifest = makeManifest({
+    const document = makeDocument({
       version: 3,
       templates: { 'controlled-asset': controllerLink },
       nodes: [
@@ -642,14 +642,14 @@ describe('load warnings — no silent coercion or downgrade', () => {
         },
       ],
     })
-    const project = await openWith(manifest)
+    const project = await openWith(document)
     const w = project.loadWarnings!.find(x => x.path === 'nodes[1].properties.controller')
     expect(w).toBeDefined()
     expect(w!.code).toBe('INVALID_REFERENCE')
   })
 
   it('surfaces a warning for a self-reference property', async () => {
-    const manifest = makeManifest({
+    const document = makeDocument({
       version: 3,
       templates: { 'controlled-asset': controllerLink },
       nodes: [
@@ -665,14 +665,14 @@ describe('load warnings — no silent coercion or downgrade', () => {
         },
       ],
     })
-    const project = await openWith(manifest)
+    const project = await openWith(document)
     const w = project.loadWarnings!.find(x => x.path === 'nodes[1].properties.controller')
     expect(w).toBeDefined()
     expect(w!.code).toBe('INVALID_REFERENCE')
   })
 
   it('has no warnings for a clean project', async () => {
-    const project = await openWith(makeManifest({ version: 3, templates: {} }))
+    const project = await openWith(makeDocument({ version: 3, templates: {} }))
     expect(project.loadWarnings).toBeUndefined()
   })
 
@@ -681,7 +681,7 @@ describe('load warnings — no silent coercion or downgrade', () => {
       label: 'Asset',
       fields: { serial: { type: 'string', required: true } },
     }
-    const manifest = makeManifest({
+    const document = makeDocument({
       version: 3,
       templates: { asset: requiredTpl },
       nodes: [
@@ -696,14 +696,14 @@ describe('load warnings — no silent coercion or downgrade', () => {
         },
       ],
     })
-    const project = await openWith(manifest)
+    const project = await openWith(document)
     const w = project.loadWarnings?.find(x => x.path === 'nodes[1].properties.serial')
     expect(w).toBeDefined()
     expect(w!.code).toBe('MISSING_REQUIRED')
   })
 
   it('opens (non-fatally, with a warning) when a node references a structurally-invalid template', async () => {
-    const manifest = makeManifest({
+    const document = makeDocument({
       version: 3,
       // `bad` has no `fields` — structurally invalid. A node references it,
       // which previously threw on Object.entries(template.fields).
@@ -720,14 +720,14 @@ describe('load warnings — no silent coercion or downgrade', () => {
         },
       ],
     })
-    const project = await openWith(manifest)  // must not throw
+    const project = await openWith(document)  // must not throw
     expect(project.loadWarnings?.some(w => w.path === 'templates.bad')).toBe(true)
   })
 })
 
 describe('nodeUpdate — template binding validates existing properties', () => {
   it('rejects binding a template when an existing ad-hoc value is invalid for it', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App')           // freeform
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id
@@ -740,7 +740,7 @@ describe('nodeUpdate — template binding validates existing properties', () => 
   })
 
   it('binds and coerces existing values that fit the template', async () => {
-    await openWith(makeManifest())
+    await openWith(makeDocument())
     manager.templateCreate('software-item', softwareItem)
     const created = manager.nodeCreate('root-id', 'App')
     const id = (created as any).data.nodes.find((n: any) => n.name === 'App').id

@@ -158,7 +158,7 @@ Real:
 - Working application with the shipped capabilities above.
 - Semantic diff engine with the heaviest unit-test coverage in the codebase.
 - Generated fixtures for realistic scale: `scripts/generate-project.mjs`, `scripts/generate-lab.mjs`,
-  and `manifest-large-fixture/`.
+  and `layertrail-large-fixture/`.
 - Packaged-desktop dogfood verification (`scripts/run-dogfood.mjs`, `docs/PILOT_DOGFOOD.md`).
 
 Absent — future work must not fabricate these:

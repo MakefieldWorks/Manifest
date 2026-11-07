@@ -11,8 +11,8 @@ import { migrateSnapshotHistory, type SnapshotHistoryState } from '../../shared/
 import type { HistoryOperationStore, RetainedHistoryOperationCandidate } from '../history-operation'
 import type { GitService } from '../git-service'
 import type { Logger } from '../logger'
-import { PROJECT_DOCUMENT_FILE } from '../project-launcher'
-import { canonicalizeManifestJson, hashDocument, readDocumentBytes, serializeProjectForPersistence } from './document'
+import { PROJECT_DOCUMENT_FILE } from '../project-document-file'
+import { canonicalizeDocumentJson, hashDocument, readDocumentBytes, serializeProjectForPersistence } from './document'
 import { HistoryMetadataReadError, snapshotHistoryPath } from './history-metadata'
 
 // What the journal helpers need from the open project. `readHistory` parses
@@ -53,7 +53,7 @@ export async function finishIfProvenComplete(
         const history = migrateSnapshotHistory(JSON.parse(historyBytes.toString('utf8')))
         const point = history.recoveryPoints.find(point => point.id === record.targetId)
         if (!point) return
-        const payload = store.read(join(projectPath, ...point.manifestPath.split(/[\\/]/)))
+        const payload = store.read(join(projectPath, ...point.payloadPath.split(/[\\/]/)))
         if (hashDocument(payload) !== record.targetPayloadHash) return
       }
       if (record.kind === 'recovery-forget') {
@@ -61,7 +61,7 @@ export async function finishIfProvenComplete(
         if (history.recoveryPoints.some(point => point.id === record.targetId)) return
       }
       if (record.kind === 'history-backup-restore') {
-        const source = store.read(join(projectPath, '.manifest', 'history.backup.json'))
+        const source = store.read(join(projectPath, '.layertrail', 'history.backup.json'))
         if (!evidence.source?.equals(source)) return
         const preservedPath = `${snapshotHistoryPath(projectPath)}.damaged-${record.id}`
         if (!record.historyMissing) {
@@ -87,20 +87,20 @@ export async function finishIfProvenComplete(
     if (record.kind === 'snapshot-create' && event.type === 'snapshot' && event.snapshotId === record.targetId &&
         history.currentBaseSnapshotId === record.targetId && history.pendingRevertEventId === null &&
         history.snapshots[record.targetId]?.id === record.targetId) {
-      const snapshotDocument = await git.readSnapshotManifest(projectPath, record.targetId)
+      const snapshotDocument = await git.readSnapshotDocument(projectPath, record.targetId)
       complete = hashDocument(snapshotDocument) === record.expectedDocumentHash
     } else if (record.kind === 'snapshot-revert' && event.type === 'revert' && event.targetSnapshotId === record.targetId &&
         history.currentBaseSnapshotId === record.targetId && history.pendingRevertEventId === record.eventId) {
-      const snapshotDocument = await git.readSnapshotManifest(projectPath, record.targetId)
+      const snapshotDocument = await git.readSnapshotDocument(projectPath, record.targetId)
       // Revert rewrites a historical blob using the current serializer, so
       // compare its canonical form. Snapshot creation records the raw bytes.
-      complete = hashDocument(canonicalizeManifestJson(snapshotDocument)) === record.expectedDocumentHash
+      complete = hashDocument(canonicalizeDocumentJson(snapshotDocument)) === record.expectedDocumentHash
     } else if (record.kind === 'recovery-apply' && event.type === 'recover' && event.recoveryPointId === record.targetId &&
         history.currentBaseSnapshotId === null && history.pendingRevertEventId === record.eventId) {
       const recoveryPoint = history.recoveryPoints.find(point => point.id === record.targetId)
       if (recoveryPoint) {
-        const recoveryDocument = store.read(join(projectPath, ...recoveryPoint.manifestPath.split(/[\\/]/)))
-        complete = hashDocument(canonicalizeManifestJson(recoveryDocument.toString('utf8'))) === record.expectedDocumentHash
+        const recoveryDocument = store.read(join(projectPath, ...recoveryPoint.payloadPath.split(/[\\/]/)))
+        complete = hashDocument(canonicalizeDocumentJson(recoveryDocument.toString('utf8'))) === record.expectedDocumentHash
       }
     }
 
@@ -179,7 +179,7 @@ export function scanInterruptedHistoryEvidence(ctx: JournalContext): {
         migrateSnapshotHistory(JSON.parse(candidate.history.toString('utf8')))
       }
       const registeredAsRecoveryPoint = history?.recoveryPoints.some(point =>
-        point.manifestPath.split(/[\\/]/).pop() === candidate.record.inventoryFile)
+        point.payloadPath.split(/[\\/]/).pop() === candidate.record.inventoryFile)
       const record = candidate.record
       const token = store.fingerprint(candidate.bytes, candidate.inventory, candidate.history, candidate.source ?? '', historyBytes ?? 'missing-history',
         JSON.stringify([record.id, candidate.recordFile, registeredAsRecoveryPoint]))

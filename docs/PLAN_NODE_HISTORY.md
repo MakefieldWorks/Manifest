@@ -11,7 +11,7 @@ The data already exists across N immutable snapshots in git. The plan adds a SQL
 ## Architecture overview
 
 ```
-.manifest/
+.layertrail/
   index/
     search.db       (existing — FTS5 for node name/property search)
     history.db      (NEW — per-node, per-snapshot state)
@@ -84,7 +84,7 @@ The schema only writes rows on `snapshotCreate`. But reverts and recoveries can 
 
 `node:history(id)` IPC handler:
 1. Query `node_history` rows for `node_id`, ordered by `snapshot_order`.
-2. Read `history.json` events. For each `revert` or `recover` event, read the manifest pair (state before/after the event) and compute per-node diff.
+2. Read `history.json` events. For each `revert` or `recover` event, read the document pair (state before/after the event) and compute per-node diff.
 3. Synthesize an entry for the revert/recover if it changed *this* node's state.
 4. Merge DB rows + synthetic rows in chronological order.
 
@@ -141,9 +141,9 @@ New `History` tab in `DetailPane.svelte`, next to the property editor.
 | Codepath | Failure | Handled? |
 |---|---|---|
 | `recordSnapshot` mid-snapshotCreate | DB write fails (disk full, locked) | Yes — log + continue; backfill catches up on next open. Snapshot is still real, just missing per-node detail until reopen ⚠️ |
-| `backfill` parsing an old manifest | One snapshot's JSON is corrupt | Yes — skip that snapshot, mark `complete=0`, log warning, continue |
+| `backfill` parsing an old document | One snapshot's JSON is corrupt | Yes — skip that snapshot, mark `complete=0`, log warning, continue |
 | `nodeHistory(id)` query | DB unavailable | Yes — return `Result<...>` error; UI shows error state with retry |
-| Synthetic revert row generation | Reading old manifest from git fails | Yes — skip that revert event, log. User won't see that revert in History ⚠️ |
+| Synthetic revert row generation | Reading old document from git fails | Yes — skip that revert event, log. User won't see that revert in History ⚠️ |
 | `setImmediate` backfill loop | Process exits during backfill | Implicit — `complete=0` flags resume on next open |
 
 ⚠️ Two cases produce silent gaps until next reopen. Tracked in [TODOS.md](../TODOS.md) as a v2 visibility-improvement.
@@ -201,7 +201,7 @@ Four commits, sequential. Each ships its own tests. Each is independently revert
 |---|---|
 | `recordSnapshot` per snapshotCreate | O(nodes) reads (latest row per node) + O(changes) inserts. ~10ms typical. |
 | `nodeHistory(id)` query | O(rows for this node) via index. Sub-ms. |
-| Synthetic revert/recover synthesis | O(revert events) × cost of reading 2 manifests. Cacheable but not in v1. |
+| Synthetic revert/recover synthesis | O(revert events) × cost of reading 2 documents. Cacheable but not in v1. |
 | Backfill (first open after feature ships) | O(snapshots × nodes) reads + O(total changes) inserts. ~1-2s for 100 snapshots × 1000 nodes. Background, yields to event loop. |
 | Storage | O(changes), not O(snapshots × nodes). Realistic projects: tens of MB. |
 
@@ -226,7 +226,7 @@ Four commits, sequential. Each ships its own tests. Each is independently revert
 
 ## What this plan reuses
 
-- [src/main/git-service.ts](../src/main/git-service.ts) `readSnapshotManifest` — for backfill and revert/recover synthesis
+- [src/main/git-service.ts](../src/main/git-service.ts) `readSnapshotDocument` — for backfill and revert/recover synthesis
 - [src/main/project-manager.ts](../src/main/project-manager.ts) `loadAndDiff` — pattern for reading snapshot pairs
 - [src/shared/diff-engine.ts](../src/shared/diff-engine.ts) `diffProjects` — to detect whether a revert/recover event changed a specific node
 - [src/shared/snapshot-history-migration.ts](../src/shared/snapshot-history-migration.ts) — pattern for `history.db` schema migrations (mirror, don't share)

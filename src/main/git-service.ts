@@ -7,16 +7,15 @@ import { createHash } from 'crypto'
 import { promisify } from 'util'
 import type { GitStatus, Snapshot } from '../shared/types'
 import type { Logger } from './logger'
-import { OLDER_PROJECT_DOCUMENT_FILES, PROJECT_DOCUMENT_FILE } from './project-launcher'
+import { PROJECT_DOCUMENT_FILE } from './project-document-file'
 
 const execFileAsync = promisify(execFile)
 
 // Node's default execFile stdout cap is 1 MB. A project document can be much
 // larger (the project itself allows up to 50 MB), and `git show` / `for-each-ref`
-// output scales with project and snapshot count — so reading a snapshot manifest
+// output scales with project and snapshot count — so reading a snapshot document
 // for a large project would otherwise fail with ENOBUFS. Allow comfortably more.
 const MAX_GIT_BUFFER = 64 * 1024 * 1024
-const MAX_GIT_PATH_LOOKUP_BUFFER = 64 * 1024
 
 const MIN_GIT_VERSION: [number, number, number] = [2, 25, 0]
 const MIN_GIT_VERSION_STRING = MIN_GIT_VERSION.join('.')
@@ -171,10 +170,6 @@ export class GitService {
           throw new SnapshotDocumentChangedError('The staged project differs from the inventory Layertrail saved. Review the external change before snapshotting.')
         }
       }
-      // The first snapshot after opening a project with an older document name
-      // records the rename in Git. Old tags remain readable through the
-      // fallback below.
-      await execFileAsync('git', ['rm', '--ignore-unmatch', '--', ...OLDER_PROJECT_DOCUMENT_FILES], { cwd: projectDir })
       await execFileAsync(
         'git',
         ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '--allow-empty', '-m', name],
@@ -224,24 +219,20 @@ export class GitService {
     })
   }
 
-  async readSnapshotManifest(projectDir: string, name: string): Promise<string> {
+  async readSnapshotDocument(projectDir: string, name: string): Promise<string> {
     return this.queue.enqueue(async () => {
       return this.readProjectDocumentAt(projectDir, SNAPSHOT_TAG_PREFIX + name)
     })
   }
 
-  async readHeadManifest(projectDir: string): Promise<string> {
+  async readHeadDocument(projectDir: string): Promise<string> {
     return this.queue.enqueue(async () => {
       return this.readProjectDocumentAt(projectDir, 'HEAD')
     })
   }
 
   private async readProjectDocumentAt(projectDir: string, ref: string): Promise<string> {
-    let documentPath: string = OLDER_PROJECT_DOCUMENT_FILES[OLDER_PROJECT_DOCUMENT_FILES.length - 1]
-    for (const candidate of [PROJECT_DOCUMENT_FILE, ...OLDER_PROJECT_DOCUMENT_FILES]) {
-      if (await gitPathExists(projectDir, ref, candidate)) { documentPath = candidate; break }
-    }
-    const { stdout } = await execFileAsync('git', ['show', `${ref}:${documentPath}`], {
+    const { stdout } = await execFileAsync('git', ['show', `${ref}:${PROJECT_DOCUMENT_FILE}`], {
       cwd: projectDir,
       maxBuffer: MAX_GIT_BUFFER,
     })
@@ -277,17 +268,6 @@ export class GitService {
       note: null,
     }
   }
-}
-
-async function gitPathExists(projectDir: string, ref: string, path: string): Promise<boolean> {
-  // ls-tree exits successfully with no output for a missing path. Unlike
-  // `git show` or `git cat-file -e`, this avoids locale- and version-specific
-  // error wording while still surfacing invalid refs and repository failures.
-  const { stdout } = await execFileAsync('git', ['ls-tree', '-z', ref, '--', path], {
-    cwd: projectDir,
-    maxBuffer: MAX_GIT_PATH_LOOKUP_BUFFER,
-  })
-  return stdout.length > 0
 }
 
 async function archiveGit(cwd: string, args: string[]): Promise<string> {

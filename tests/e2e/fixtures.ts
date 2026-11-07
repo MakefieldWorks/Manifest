@@ -7,15 +7,15 @@ import type { MenuCommandId } from '../../src/shared/menu-commands'
 const ROOT_DIR = process.cwd()
 const MAIN_ENTRY = join(ROOT_DIR, 'out', 'main', 'index.js')
 
-type ManifestFixtures = {
+type LayertrailFixtures = {
   electronApp: ElectronApplication
   appPage: Page
   workspaceDir: string
 }
 
-export const test = base.extend<ManifestFixtures>({
+export const test = base.extend<LayertrailFixtures>({
   workspaceDir: async ({}, use) => {
-    const dir = mkdtempSync(join(tmpdir(), 'manifest-e2e-'))
+    const dir = mkdtempSync(join(tmpdir(), 'layertrail-e2e-'))
     try {
       await use(dir)
     } finally {
