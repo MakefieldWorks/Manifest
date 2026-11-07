@@ -9,7 +9,7 @@
 // checks (e.g. `!duplicateNodeId` vs `duplicateNodeId !== null`).
 
 import { createDisabledMenuCommandState, type MenuCommandState } from '../../../shared/menu-commands'
-import type { EditHistoryState, ManifestNode } from '../../../shared/types'
+import type { EditHistoryState, ProjectNode } from '../../../shared/types'
 
 export type AppState = 'welcome' | 'creating' | 'loading' | 'open'
 
@@ -38,7 +38,7 @@ export interface CommandContext {
   // Selection and compare.
   selectedId: string | null
   selectedCount: number
-  selectedNode: Pick<ManifestNode, 'parentId'> | null
+  selectedNode: Pick<ProjectNode, 'parentId'> | null
   compareMode: boolean
   compareLoaded: boolean
 }

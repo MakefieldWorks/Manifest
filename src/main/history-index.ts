@@ -2,7 +2,7 @@
 // using delta encoding: a row is inserted only when the node's state differs
 // from its previous row. Reverts and recoveries are NOT recorded here — they
 // don't create snapshots. The query layer in project-manager synthesizes
-// revert/recover entries by reading history.json + the manifest pair around
+// revert/recover entries by reading history.json + the document pair around
 // each event.
 //
 // See docs/PLAN_NODE_HISTORY.md for the full design.
@@ -22,7 +22,7 @@
 import Database from 'better-sqlite3'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
-import type { ManifestNode, Project } from '../shared/types'
+import type { ProjectNode, Project } from '../shared/types'
 
 const SCHEMA_VERSION = 2
 
@@ -71,8 +71,8 @@ export class HistoryIndexService {
 
   open(projectPath: string): void {
     this.close()
-    const dbPath = join(projectPath, '.manifest', 'index', 'history.db')
-    mkdirSync(join(projectPath, '.manifest', 'index'), { recursive: true })
+    const dbPath = join(projectPath, '.layertrail', 'index', 'history.db')
+    mkdirSync(join(projectPath, '.layertrail', 'index'), { recursive: true })
 
     const db = new Database(dbPath)
     db.pragma('journal_mode = WAL')
@@ -96,11 +96,11 @@ export class HistoryIndexService {
     const db = this.requireDb()
     const { snapshotId, snapshotOrder, project, previousProject } = opts
 
-    const prevById = new Map<string, ManifestNode>()
+    const prevById = new Map<string, ProjectNode>()
     if (previousProject) {
       for (const node of previousProject.nodes) prevById.set(node.id, node)
     }
-    const currById = new Map<string, ManifestNode>()
+    const currById = new Map<string, ProjectNode>()
     for (const node of project.nodes) currById.set(node.id, node)
 
     const inserts: NodeHistoryRow[] = []
@@ -291,7 +291,7 @@ function toNodeHistoryRow(raw: RawHistoryRow): NodeHistoryRow {
   }
 }
 
-function nodeStatesEqual(a: ManifestNode, b: ManifestNode): boolean {
+function nodeStatesEqual(a: ProjectNode, b: ProjectNode): boolean {
   if (a.name !== b.name) return false
   if (a.parentId !== b.parentId) return false
   if (a.order !== b.order) return false

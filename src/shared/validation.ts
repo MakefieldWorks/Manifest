@@ -2,7 +2,7 @@
 // and main process (security enforcement).
 // Never duplicate these regexes. Import from here.
 
-import type { ManifestNode, PropertyType, TemplateField, NodeTemplate } from './types'
+import type { ProjectNode, PropertyType, TemplateField, NodeTemplate } from './types'
 
 export interface ValidationResult {
   valid: boolean
@@ -17,7 +17,7 @@ const SNAPSHOT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 const PROPERTY_KEY_RE = /^[a-zA-Z0-9_]+$/
 
 // Lowercase alphanumeric + hyphens. Must start alphanumeric. Max 64 chars.
-// Used for template ids (slugs): human-readable and stable in Manifest.manifestproject.
+// Used for template ids (slugs): human-readable and stable in Layertrail.layertrail.
 const TEMPLATE_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 // Date values: strict calendar date YYYY-MM-DD.
@@ -136,7 +136,7 @@ export function validatePropertyValue(value: unknown): ValidationResult {
 
 // Null-safe accessor for a template's `fields` map. Returns {} when the
 // template or its fields are structurally invalid. Use this in every post-load
-// consumer (renderer + main) so a hand-edited manifest with a malformed
+// consumer (renderer + main) so a hand-edited document with a malformed
 // template — which loads non-fatally with a warning — can never throw
 // `Object.entries(undefined)` downstream.
 export function templateFields(
@@ -234,7 +234,7 @@ export function validateTemplate(template: NodeTemplate): ValidationResult {
   if (!template || typeof template !== 'object' || Array.isArray(template)) {
     return { valid: false, message: 'Template must be an object' }
   }
-  // Guard against hand-edited manifests: label may be a non-string (e.g. 123).
+  // Guard against hand-edited documents: label may be a non-string (e.g. 123).
   if (typeof template.label !== 'string' || template.label.trim().length === 0) {
     return { valid: false, message: 'Template label must be a non-empty string' }
   }
@@ -323,7 +323,7 @@ export function validateTypedPropertyValue(
 
 export function validateReferenceTarget(
   value: unknown,
-  nodes: ManifestNode[],
+  nodes: ProjectNode[],
   selfId?: string | null,
 ): ValidationResult {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -347,7 +347,7 @@ export interface CoercionResult {
 
 // Coerce raw UI/IPC input into the typed primitive for a field, then validate.
 // INPUT-PATH ONLY — never call this on file load (we do not silently rewrite
-// hand-edited manifest values). Returns an error instead of throwing.
+// hand-edited document values). Returns an error instead of throwing.
 export function coercePropertyValue(raw: unknown, field: TemplateField): CoercionResult {
   switch (field.type) {
     case 'string':

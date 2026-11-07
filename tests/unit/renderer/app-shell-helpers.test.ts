@@ -6,9 +6,9 @@ import { deleteSubtreeConfirmMessage, referenceBlockersConfirmMessage, reference
 import { dragPaneWidth, serializeWorkspacePaneSettings } from '../../../src/renderer/src/lib/pane-layout'
 import { CURRENT_PROJECT_REF, snapshotRefLabel } from '../../../src/shared/snapshot-ref'
 import type { MergedTreeNode } from '../../../src/shared/merged-tree'
-import type { ManifestNode, ReferenceBlocker } from '../../../src/shared/types'
+import type { ProjectNode, ReferenceBlocker } from '../../../src/shared/types'
 
-function node(id: string, parentId: string | null): ManifestNode {
+function node(id: string, parentId: string | null): ProjectNode {
   return { id, parentId, name: id, order: 0, properties: {}, created: '', modified: '' }
 }
 

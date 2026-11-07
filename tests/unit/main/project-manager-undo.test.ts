@@ -25,7 +25,7 @@ function create(name: string, parent = root) {
 function content(project = current()) { return structuredClone({ nodes: project.nodes, templates: project.templates }) }
 
 beforeEach(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'manifest-undo-'))
+  directory = mkdtempSync(join(tmpdir(), 'layertrail-undo-'))
   git = new GitService(logger)
   search = new SearchIndexService()
   manager = new ProjectManager(git, logger, search)
@@ -108,7 +108,7 @@ describe('project editing history', () => {
     expect(content()).toEqual(imported)
     value(manager.undo())
     value(await manager.flushAndClose())
-    const persisted = JSON.parse(readFileSync(join(directory, 'Lab', 'Manifest.manifestproject'), 'utf8'))
+    const persisted = JSON.parse(readFileSync(join(directory, 'Lab', 'Layertrail.layertrail'), 'utf8'))
     expect(persisted.nodes).toEqual(before.nodes)
     value(await manager.openProject(join(directory, 'Lab')))
     expect(manager.editHistoryState()).toEqual({ undoLabel: null, redoLabel: null })
@@ -172,9 +172,9 @@ describe('project editing history', () => {
   it('leaves named snapshots immutable and clears history only when revert/recovery succeeds', async () => {
     create('Baseline device')
     value(await manager.snapshotCreate('baseline'))
-    const baseline = await git.readSnapshotManifest(current().path!, 'baseline')
+    const baseline = await git.readSnapshotDocument(current().path!, 'baseline')
     value(manager.undo())
-    expect(await git.readSnapshotManifest(current().path!, 'baseline')).toBe(baseline)
+    expect(await git.readSnapshotDocument(current().path!, 'baseline')).toBe(baseline)
     value(manager.redo())
     create('Later device')
     const state = manager.editHistoryState()
@@ -186,7 +186,7 @@ describe('project editing history', () => {
     value(await manager.recoveryPointApply({ id: reverted.safetyRecoveryPoint!.id }))
     expect(manager.editHistoryState()).toEqual({ undoLabel: null, redoLabel: null })
     expect(current().nodes.some(node => node.name === 'Later device')).toBe(true)
-    expect(await git.readSnapshotManifest(current().path!, 'baseline')).toBe(baseline)
+    expect(await git.readSnapshotDocument(current().path!, 'baseline')).toBe(baseline)
   })
 
   it('blocks undo and edits while an asynchronous snapshot operation is in progress', async () => {

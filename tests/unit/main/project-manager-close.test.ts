@@ -23,7 +23,7 @@ let tmpDir: string
 let manager: ProjectManager
 
 beforeEach(async () => {
-  tmpDir = join(tmpdir(), `manifest-close-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-close-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
   manager = new ProjectManager(noopGit as any, noopLogger as any)
 

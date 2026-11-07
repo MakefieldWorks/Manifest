@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { clickNativeMenuCommand, expect, test } from './fixtures'
-import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-document-file'
 import { RELEASES_URL } from '../../src/shared/external-links'
 
 type PersistedProject = {
@@ -134,7 +134,7 @@ async function closeSettingsWindow(settingsPage: Page): Promise<void> {
 async function writeFixtureProject(targetDir: string, fixtureName: string): Promise<void> {
   mkdirSync(targetDir, { recursive: true })
   const fixturePath = join(process.cwd(), 'tests', 'fixtures', fixtureName)
-  writeFileSync(join(targetDir, 'Manifest.manifestproject'), readFileSync(fixturePath, 'utf8'), 'utf8')
+  writeFileSync(join(targetDir, 'Layertrail.layertrail'), readFileSync(fixturePath, 'utf8'), 'utf8')
 }
 
 async function launchAppWithArgs(args: string[], userDataDir: string): Promise<ElectronApplication> {
@@ -155,10 +155,10 @@ test('creates a new project from the welcome flow', async ({ appPage, electronAp
   expect(existsSync(documentPath)).toBe(true)
   expect(existsSync(join(projectDir, '.git'))).toBe(true)
 
-  const document = JSON.parse(readFileSync(documentPath, 'utf8')) as PersistedProject
-  expect(document.name).toBe('Bench Alpha')
-  expect(document.nodes).toHaveLength(1)
-  expect(document.nodes[0]?.parentId).toBeNull()
+  const saved = JSON.parse(readFileSync(documentPath, 'utf8')) as PersistedProject
+  expect(saved.name).toBe('Bench Alpha')
+  expect(saved.nodes).toHaveLength(1)
+  expect(saved.nodes[0]?.parentId).toBeNull()
 })
 
 test('opens the releases page from Help → Check for Updates', async ({ electronApp }) => {
@@ -227,9 +227,9 @@ test('creates and opens an example project from the empty project hub', async ({
   await expect(treeRow(appPage, 'Telemetry Gateway')).toBeVisible()
 
   const project = await currentProject(appPage)
-  expect(project.name).toBe('Manifest Sample Lab')
+  expect(project.name).toBe('Layertrail Sample Lab')
   expect(project.path).toBe(
-    join(workspaceDir, 'example-projects', 'Manifest Sample Lab'),
+    join(workspaceDir, 'example-projects', 'Layertrail Sample Lab'),
   )
 
   const snapshots = await appPage.evaluate(() => window.api.snapshot.list())
@@ -283,26 +283,26 @@ test('opens a dedicated settings window, syncs selected schemes, and saves prefe
 
   await expect(settingsPage.getByRole('heading', { name: 'General' })).toBeVisible()
   expect(await settingsPage.getByTestId('light-theme-preference').locator('option').evaluateAll(options => options.map(option => option.value))).toEqual([
-    'manifest-light',
-    'manifest-graphite-light',
+    'layertrail-light',
+    'layertrail-graphite-light',
   ])
   expect(await settingsPage.getByTestId('dark-theme-preference').locator('option').evaluateAll(options => options.map(option => option.value))).toEqual([
-    'manifest-dark',
-    'manifest-graphite-dark',
+    'layertrail-dark',
+    'layertrail-graphite-dark',
   ])
 
   await settingsPage.getByTestId('theme-preference').selectOption('light')
-  await settingsPage.getByTestId('light-theme-preference').selectOption('manifest-graphite-light')
+  await settingsPage.getByTestId('light-theme-preference').selectOption('layertrail-graphite-light')
   await expect(settingsPage.getByRole('status')).toContainText('Appearance updated')
-  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-light')
-  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-light')
+  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('layertrail-graphite-light')
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('layertrail-graphite-light')
   await expect.poll(() => appPage.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--theme-surface-canvas').trim()))
     .toBe('244 246 248')
 
-  await settingsPage.getByTestId('dark-theme-preference').selectOption('manifest-graphite-dark')
+  await settingsPage.getByTestId('dark-theme-preference').selectOption('layertrail-graphite-dark')
   await settingsPage.getByTestId('theme-preference').selectOption('dark')
-  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
-  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
+  await expect.poll(() => settingsPage.evaluate(() => document.documentElement.dataset.theme)).toBe('layertrail-graphite-dark')
+  await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.theme)).toBe('layertrail-graphite-dark')
   await expect.poll(() => appPage.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--theme-surface-canvas').trim()))
     .toBe('16 21 27')
 
@@ -316,8 +316,8 @@ test('opens a dedicated settings window, syncs selected schemes, and saves prefe
       launchBehavior: 'reopen-last-project',
       appearance: {
         mode: 'dark',
-        lightThemeId: 'manifest-graphite-light',
-        darkThemeId: 'manifest-graphite-dark',
+        lightThemeId: 'layertrail-graphite-light',
+        darkThemeId: 'layertrail-graphite-dark',
       },
     },
   })
@@ -341,7 +341,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
     const settingsPage = await openSettingsWindow(firstApp)
     await settingsPage.getByTestId('launch-behavior').selectOption('reopen-last-project')
     await expect(settingsPage.getByRole('status')).toContainText('Saved')
-    await settingsPage.getByTestId('dark-theme-preference').selectOption('manifest-graphite-dark')
+    await settingsPage.getByTestId('dark-theme-preference').selectOption('layertrail-graphite-dark')
     await settingsPage.getByTestId('theme-preference').selectOption('dark')
     await expect(settingsPage.getByRole('status')).toContainText('Appearance updated')
     await closeSettingsWindow(settingsPage)
@@ -356,7 +356,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
     // commits; a raw evaluate() then fails when that navigation replaces the
     // page. Locator assertions retry across it, so wait for the app first.
     await expect(reopenedPage.getByTestId('project-view')).toBeVisible()
-    await expect.poll(() => reopenedPage.evaluate(() => document.documentElement.dataset.theme)).toBe('manifest-graphite-dark')
+    await expect.poll(() => reopenedPage.evaluate(() => document.documentElement.dataset.theme)).toBe('layertrail-graphite-dark')
     await expect(treeRow(reopenedPage, 'Reopen Lab')).toBeVisible()
     const reopenedProject = await currentProject(reopenedPage)
     expect((reopenedProject as typeof reopenedProject & { path?: string }).path).toBe(projectDir)
@@ -366,7 +366,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
 })
 
 test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {
-  test.skip(process.env['MANIFEST_E2E_BACKGROUND'] === '1', 'Native focus requires a visible E2E run')
+  test.skip(process.env['LAYERTRAIL_E2E_BACKGROUND'] === '1', 'Native focus requires a visible E2E run')
   await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
 
   await electronApp.evaluate(({ BrowserWindow }) => {
@@ -382,18 +382,18 @@ test('mutes the interface when its native window loses focus', async ({ appPage,
 
 test('adds opened projects to native Open Recent and OS recent documents', async ({ appPage, electronApp, workspaceDir }) => {
   await electronApp.evaluate(({ app }) => {
-    const state = globalThis as typeof globalThis & { __manifestRecentDocuments?: string[] }
-    state.__manifestRecentDocuments = []
+    const state = globalThis as typeof globalThis & { __layertrailRecentDocuments?: string[] }
+    state.__layertrailRecentDocuments = []
     app.addRecentDocument = (path: string) => {
-      state.__manifestRecentDocuments?.push(path)
+      state.__layertrailRecentDocuments?.push(path)
     }
   })
 
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Recent Bench')
   const recentItems = await nativeOpenRecentMenuItems(electronApp)
   const addedDocuments = await electronApp.evaluate(() => {
-    const state = globalThis as typeof globalThis & { __manifestRecentDocuments?: string[] }
-    return state.__manifestRecentDocuments ?? []
+    const state = globalThis as typeof globalThis & { __layertrailRecentDocuments?: string[] }
+    return state.__layertrailRecentDocuments ?? []
   })
 
   expect(recentItems[0]).toMatchObject({
@@ -465,7 +465,7 @@ test('reorders siblings and reparents nodes', async ({ appPage, electronApp, wor
   const projectDir = join(workspaceDir, 'Reorder Lab')
   mkdirSync(projectDir, { recursive: true })
   writeFileSync(
-    join(projectDir, 'Manifest.manifestproject'),
+    join(projectDir, 'Layertrail.layertrail'),
     JSON.stringify({
       version: 2,
       id: '01900000-0000-7000-8000-000000000100',
@@ -602,7 +602,7 @@ test('shows an empty state when search finds no matches', async ({ appPage, elec
 
 test('autosaves edits to disk and reopens them cleanly', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Autosave Lab')
-  const manifestPath = join(projectDir, 'Manifest.manifestproject')
+  const payloadPath = join(projectDir, 'Layertrail.layertrail')
 
   await openContextMenuAction(appPage, 'Autosave Lab', 'Add Child')
   await appPage.getByTestId('add-child-input').fill('Rack A')
@@ -615,8 +615,8 @@ test('autosaves edits to disk and reopens them cleanly', async ({ appPage, elect
   await expect(appPage.getByTestId('prop-value').filter({ hasText: 'SN-42' })).toBeVisible()
 
   await expect.poll(() => {
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as PersistedProject
-    return manifest.nodes.find((node) => node.name === 'Rack A')?.properties.serial ?? null
+    const saved = JSON.parse(readFileSync(payloadPath, 'utf8')) as PersistedProject
+    return saved.nodes.find((node) => node.name === 'Rack A')?.properties.serial ?? null
   }).toBe('SN-42')
 
   await clickNativeMenuCommand(electronApp, 'project:close')

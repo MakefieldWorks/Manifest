@@ -68,7 +68,7 @@ describe('validateTemplate', () => {
   it('rejects an empty label', () => {
     expect(validateTemplate({ ...good, label: '' }).valid).toBe(false)
   })
-  it('rejects a non-string label without throwing (hand-edited manifests)', () => {
+  it('rejects a non-string label without throwing (hand-edited documents)', () => {
     expect(validateTemplate({ ...good, label: 123 as any }).valid).toBe(false)
   })
   it('rejects array fields (typeof [] === "object")', () => {

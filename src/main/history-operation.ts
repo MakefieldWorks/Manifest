@@ -68,8 +68,8 @@ export class HistoryOperationStore {
   readonly pendingPath: string
   readonly recoveryPath: string
   constructor(private readonly projectPath: string, private readonly projectId: string) {
-    this.pendingPath = join(projectPath, '.manifest', 'history-operation.json')
-    this.recoveryPath = join(projectPath, '.manifest', 'recovery')
+    this.pendingPath = join(projectPath, '.layertrail', 'history-operation.json')
+    this.recoveryPath = join(projectPath, '.layertrail', 'recovery')
   }
 
   pending(): boolean {
@@ -81,7 +81,7 @@ export class HistoryOperationStore {
   }
 
   private directories(create = false): void {
-    for (const path of [this.projectPath, join(this.projectPath, '.manifest'), this.recoveryPath]) {
+    for (const path of [this.projectPath, join(this.projectPath, '.layertrail'), this.recoveryPath]) {
       if (!existsSync(path)) {
         if (!create || path === this.projectPath) throw new Error('An operation evidence folder is missing.')
         mkdirSync(path)
@@ -108,7 +108,7 @@ export class HistoryOperationStore {
         (retainedId !== undefined && record.id !== retainedId) ||
         typeof record.label !== 'string' || record.label.length > 300 ||
         typeof record.startedAt !== 'string' || !Number.isFinite(Date.parse(record.startedAt)) ||
-        record.inventoryFile !== `recovery-${record.id}-before.manifest.json` ||
+        record.inventoryFile !== `recovery-${record.id}-before.document.json` ||
         record.historyFile !== `recovery-${record.id}-history.json` ||
         (record.version === 2 && (!['snapshot-create', 'snapshot-revert', 'recovery-apply'].includes(record.kind) ||
           typeof record.eventId !== 'string' || !/^[0-9a-f-]{36}$/.test(record.eventId) ||
@@ -191,7 +191,7 @@ export class HistoryOperationStore {
     if (Buffer.byteLength(inventory) > LIMIT || Buffer.byteLength(history) > LIMIT || label.length > 300) throw new Error('Operation evidence exceeds supported limits.')
     const id = randomUUID()
     const base: PendingHistoryOperationBase = { id, projectId: this.projectId, label,
-      startedAt: new Date().toISOString(), inventoryFile: `recovery-${id}-before.manifest.json`, historyFile: `recovery-${id}-history.json`,
+      startedAt: new Date().toISOString(), inventoryFile: `recovery-${id}-before.document.json`, historyFile: `recovery-${id}-history.json`,
       inventoryHash: this.fingerprint(inventory), historyHash: this.fingerprint(history) }
     const record: PendingHistoryOperation = intent ? { ...base, version: 2, ...intent } : { ...base, version: 1 }
     writeHistoryFile(join(this.recoveryPath, record.inventoryFile), inventory)
@@ -218,7 +218,7 @@ export class HistoryOperationStore {
     const id = randomUUID()
     const record: PendingHistoryOperationV3 = {
       id, projectId: this.projectId, label, startedAt: new Date().toISOString(), version: 3,
-      inventoryFile: `recovery-${id}-before.manifest.json`, historyFile: `recovery-${id}-history.json`,
+      inventoryFile: `recovery-${id}-before.document.json`, historyFile: `recovery-${id}-history.json`,
       inventoryHash: this.fingerprint(inventory), historyHash: this.fingerprint(history ?? Buffer.alloc(0)),
       historyMissing: history === null, ...intent,
       ...(source === null ? {} : { sourceFile: `recovery-${id}-source-history-backup.json`, sourceHash: this.fingerprint(source) }),

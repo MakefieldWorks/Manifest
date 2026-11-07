@@ -5,14 +5,14 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import Database from 'better-sqlite3'
 import { HistoryIndexService } from '../../../src/main/history-index'
-import type { ManifestNode, Project } from '../../../src/shared/types'
+import type { ProjectNode, Project } from '../../../src/shared/types'
 
 let tmpDir: string
 let projectPath: string
 let svc: HistoryIndexService
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-history-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-history-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
   projectPath = tmpDir
   svc = new HistoryIndexService()
@@ -24,7 +24,7 @@ afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
-function node(id: string, name: string, parentId: string | null, order = 0, properties: Record<string, string | number | boolean | null> = {}): ManifestNode {
+function node(id: string, name: string, parentId: string | null, order = 0, properties: Record<string, string | number | boolean | null> = {}): ProjectNode {
   return {
     id, parentId, name, order, properties,
     created: '2026-01-01T00:00:00.000Z',
@@ -32,7 +32,7 @@ function node(id: string, name: string, parentId: string | null, order = 0, prop
   }
 }
 
-function project(nodes: ManifestNode[]): Project {
+function project(nodes: ProjectNode[]): Project {
   return {
     version: 2,
     id: 'p',
@@ -48,7 +48,7 @@ describe('HistoryIndexService', () => {
   describe('schema and lifecycle', () => {
     it('creates tables and sets user_version on first open', () => {
       // svc.open already ran in beforeEach. Inspect via a direct connection.
-      const db = new Database(join(projectPath, '.manifest', 'index', 'history.db'))
+      const db = new Database(join(projectPath, '.layertrail', 'index', 'history.db'))
       try {
         const version = db.pragma('user_version', { simple: true }) as number
         expect(version).toBe(2)
@@ -253,7 +253,7 @@ describe('HistoryIndexService', () => {
       })
 
       // Manually inject an incomplete row to simulate a torn write.
-      const db = new Database(join(projectPath, '.manifest', 'index', 'history.db'))
+      const db = new Database(join(projectPath, '.layertrail', 'index', 'history.db'))
       try {
         db.prepare(
           `INSERT INTO snapshot_index_state (snapshot_id, expected_count, actual_count, complete)
@@ -285,7 +285,7 @@ describe('HistoryIndexService', () => {
       svc.close()
 
       // The .db file should survive.
-      expect(existsSync(join(projectPath, '.manifest', 'index', 'history.db'))).toBe(true)
+      expect(existsSync(join(projectPath, '.layertrail', 'index', 'history.db'))).toBe(true)
 
       svc.open(projectPath)
       expect(svc.nodeHistory('root').length).toBe(1)
@@ -295,7 +295,7 @@ describe('HistoryIndexService', () => {
   describe('templateId tracking', () => {
     it('records and returns a node\'s bound templateId', () => {
       const root = node('root', 'Root', null)
-      const a: ManifestNode = { ...node('a', 'Server A', 'root'), templateId: 'rack' }
+      const a: ProjectNode = { ...node('a', 'Server A', 'root'), templateId: 'rack' }
       svc.recordSnapshot({
         snapshotId: 's0', snapshotOrder: 0,
         project: project([root, a]), previousProject: null,
@@ -316,7 +316,7 @@ describe('HistoryIndexService', () => {
     it('treats a template (re)assignment as a delta-encoded change', () => {
       const root = node('root', 'Root', null)
       const before = node('a', 'A', 'root')
-      const after: ManifestNode = { ...before, templateId: 'rack' }
+      const after: ProjectNode = { ...before, templateId: 'rack' }
 
       svc.recordSnapshot({
         snapshotId: 's0', snapshotOrder: 0,

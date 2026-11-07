@@ -6,11 +6,11 @@ const CURRENT = getCurrentVersion()
 // ─── Happy path ───────────────────────────────────────────────────────────────
 
 describe('migrate — happy path', () => {
-  it('returns the manifest unchanged when already at current version', () => {
+  it('returns the document unchanged when already at current version', () => {
     const root = { id: 'root', parentId: null, name: 'Test', order: 0, properties: {},
                    created: '2026-01-01T00:00:00Z', modified: '2026-01-01T00:00:00Z' }
-    const manifest = { version: CURRENT, id: 'x', name: 'Test', nodes: [root] }
-    const result = migrate(manifest)
+    const document = { version: CURRENT, id: 'x', name: 'Test', nodes: [root] }
+    const result = migrate(document)
     expect(result.version).toBe(CURRENT)
     expect(result.id).toBe('x')
   })
@@ -18,14 +18,14 @@ describe('migrate — happy path', () => {
   it('preserves unknown fields through migration', () => {
     const root = { id: 'root', parentId: null, name: 'Test', order: 0, properties: {},
                    created: '2026-01-01T00:00:00Z', modified: '2026-01-01T00:00:00Z' }
-    const manifest = {
+    const document = {
       version: CURRENT,
       id: 'x',
       name: 'Test',
       nodes: [root],
       unknownFutureProp: 'preserve-me',
     }
-    const result = migrate(manifest)
+    const result = migrate(document)
     expect(result.unknownFutureProp).toBe('preserve-me')
   })
 })
@@ -57,7 +57,7 @@ describe('migrate — v1 to v2', () => {
     expect(children.map((n: any) => n.name).sort()).toEqual(['Rack A', 'Rack B'])
   })
 
-  it('leaves single-root v1 manifests unchanged structurally', () => {
+  it('leaves single-root v1 documents unchanged structurally', () => {
     const v1: any = {
       version: 1,
       id: 'proj',
@@ -86,7 +86,7 @@ describe('migrate — v1 to v2', () => {
     }
     const result = migrate(v1)
     expect(result.version).toBe(CURRENT)
-    // Empty manifest: migration adds a root node named after the project.
+    // Empty document: migration adds a root node named after the project.
     const roots = result.nodes.filter((n: any) => n.parentId === null)
     expect(roots.length).toBe(1)
     expect(roots[0].name).toBe('Empty')
@@ -96,7 +96,7 @@ describe('migrate — v1 to v2', () => {
 // ─── v2 → v3 migration (templates) ──────────────────────────────────────────────
 
 describe('migrate — v2 to v3', () => {
-  const v2Manifest = () => ({
+  const v2Layertrail = () => ({
     version: 2,
     id: 'proj',
     name: 'Lab',
@@ -112,13 +112,13 @@ describe('migrate — v2 to v3', () => {
   })
 
   it('adds an empty templates map and bumps version to 3', () => {
-    const result = migrate(v2Manifest())
+    const result = migrate(v2Layertrail())
     expect(result.version).toBe(3)
     expect(result.templates).toEqual({})
   })
 
   it('is lossless: node property values are untouched', () => {
-    const result = migrate(v2Manifest())
+    const result = migrate(v2Layertrail())
     const rackA = result.nodes.find((n: any) => n.id === 'a')
     expect(rackA.properties).toEqual({ location: 'Room 1', capacity: 42 })
     expect(rackA.templateId).toBeUndefined()
@@ -126,7 +126,7 @@ describe('migrate — v2 to v3', () => {
 
   it('preserves an existing templates map (idempotent re-run)', () => {
     const withTemplates: any = {
-      ...v2Manifest(),
+      ...v2Layertrail(),
       version: 3,
       templates: { rack: { label: 'Rack', fields: { location: { type: 'string' } } } },
     }

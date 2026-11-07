@@ -24,7 +24,7 @@ function create(name: string): string {
 }
 
 beforeEach(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'manifest-batch-properties-'))
+  directory = mkdtempSync(join(tmpdir(), 'layertrail-batch-properties-'))
   search = new SearchIndexService()
   manager = new ProjectManager(new GitService(logger), logger, search)
   root = value(await manager.createProject('Lab', directory)).nodes[0].id

@@ -18,7 +18,7 @@ let tmpRoot: string
 let manager: ProjectManager
 
 beforeEach(() => {
-  tmpRoot = join(tmpdir(), `manifest-cloud-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpRoot = join(tmpdir(), `layertrail-cloud-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpRoot, { recursive: true })
   manager = new ProjectManager(noopGit as any, noopLogger as any)
 })
@@ -29,7 +29,7 @@ afterEach(async () => {
   await rm(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
 })
 
-function manifest(name = 'Cloud Lab') {
+function document(name = 'Cloud Lab') {
   return {
     version: 3,
     id: 'cloud-project-id',
@@ -68,14 +68,14 @@ describe('cloud sync project warnings', () => {
     expect(result.data.projectWarnings).toEqual(expectedWarnings)
     expect(manager.getCurrent()?.projectWarnings).toEqual(expectedWarnings)
 
-    const persisted = JSON.parse(readFileSync(join(parent, 'Cloud Lab', 'Manifest.manifestproject'), 'utf8'))
+    const persisted = JSON.parse(readFileSync(join(parent, 'Cloud Lab', 'Layertrail.layertrail'), 'utf8'))
     expect(persisted.projectWarnings).toBeUndefined()
   })
 
   it('returns a runtime warning when opening a project inside a synced folder', async () => {
     const projectDir = join(tmpRoot, 'OneDrive - Lab', 'Cloud Lab')
     mkdirSync(projectDir, { recursive: true })
-    writeFileSync(join(projectDir, 'Manifest.manifestproject'), JSON.stringify(manifest(), null, 2), 'utf8')
+    writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(document(), null, 2), 'utf8')
 
     const result = await manager.openProject(projectDir)
 
@@ -97,7 +97,7 @@ describe('cloud sync project warnings', () => {
     expect(update.data.projectWarnings).toEqual(expectedWarnings)
 
     await manager.saveProject()
-    const persisted = JSON.parse(readFileSync(join(projectDir, 'Manifest.manifestproject'), 'utf8'))
+    const persisted = JSON.parse(readFileSync(join(projectDir, 'Layertrail.layertrail'), 'utf8'))
     expect(persisted.projectWarnings).toBeUndefined()
   })
 

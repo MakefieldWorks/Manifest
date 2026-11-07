@@ -4,9 +4,9 @@
 //   - 'snapshot' entries come from history.db rows (delta-encoded — only
 //     present when the node actually changed at that snapshot)
 //   - 'revert' entries are synthesized by reading the target snapshot's
-//     manifest and comparing the node's state to whatever was last shown
+//     document and comparing the node's state to whatever was last shown
 //   - 'recover' entries are synthesized similarly from the recovery point's
-//     manifest file
+//     document file
 //
 // Snapshots, reverts, and recoveries that left this node unchanged emit
 // no entry — the result is a clean transition log.
@@ -23,7 +23,7 @@ export interface NodeHistoryWalk {
   events: SnapshotTimelineEvent[]
   rowsBySnapshot: Map<string, NodeHistoryRow>
   recoveryPoints: RecoveryPoint[]
-  readSnapshotManifest: (snapshotId: string) => Promise<string>
+  readSnapshotDocument: (snapshotId: string) => Promise<string>
   parse: (raw: string) => Result<Project>
   logger: Logger
 }
@@ -31,19 +31,19 @@ export interface NodeHistoryWalk {
 export async function walkNodeHistory(walk: NodeHistoryWalk): Promise<NodeHistoryEntry[]> {
   const { nodeId, projectPath, events, rowsBySnapshot, recoveryPoints, parse, logger } = walk
 
-  // Cache snapshot manifests so multiple reverts targeting the same
+  // Cache snapshot documents so multiple reverts targeting the same
   // snapshot don't pay the read cost twice.
-  const snapshotManifestCache = new Map<string, Project | null>()
+  const snapshotDocumentCache = new Map<string, Project | null>()
   const readSnapshotProject = async (snapshotId: string): Promise<Project | null> => {
-    if (snapshotManifestCache.has(snapshotId)) return snapshotManifestCache.get(snapshotId)!
+    if (snapshotDocumentCache.has(snapshotId)) return snapshotDocumentCache.get(snapshotId)!
     try {
-      const raw = await walk.readSnapshotManifest(snapshotId)
+      const raw = await walk.readSnapshotDocument(snapshotId)
       const parsed = parse(raw)
       const result = parsed.ok ? parsed.data : null
-      snapshotManifestCache.set(snapshotId, result)
+      snapshotDocumentCache.set(snapshotId, result)
       return result
     } catch {
-      snapshotManifestCache.set(snapshotId, null)
+      snapshotDocumentCache.set(snapshotId, null)
       return null
     }
   }
@@ -100,7 +100,7 @@ export async function walkNodeHistory(walk: NodeHistoryWalk): Promise<NodeHistor
       if (!recoveryPointId) continue
       const point = recoveryPoints.find(p => p.id === recoveryPointId)
       if (!point) continue
-      const recoveryFile = join(projectPath, ...point.manifestPath.split(/[\\/]/))
+      const recoveryFile = join(projectPath, ...point.payloadPath.split(/[\\/]/))
       let recoveredProject: Project | null = null
       try {
         if (existsSync(recoveryFile)) {
@@ -110,7 +110,7 @@ export async function walkNodeHistory(walk: NodeHistoryWalk): Promise<NodeHistor
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
-        logger.warn('history: recovery manifest read failed', { recoveryPointId, error: msg })
+        logger.warn('history: recovery document read failed', { recoveryPointId, error: msg })
       }
       if (!recoveredProject) continue
       const newState = projectStateForNode(recoveredProject, nodeId)

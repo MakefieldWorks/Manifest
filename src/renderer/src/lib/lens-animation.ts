@@ -8,7 +8,7 @@
 //
 // All functions in this module are pure: same inputs produce the same
 // outputs, no DOM, no rAF. The animation timing (rAF, easing curves) lives
-// in ManifestView.svelte; this file owns the math.
+// in ProjectTreeView.svelte; this file owns the math.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ export type AnimPhase = 'stable' | 'entering' | 'exiting'
 
 /**
  * One item in the merged display sequence rendered during a transition.
- * `payload` is opaque to this module — ManifestView holds the actual
+ * `payload` is opaque to this module — ProjectTreeView holds the actual
  * `RenderItem` (row or fold) and uses `key` to look it up.
  */
 export interface DisplayedItem<P> {

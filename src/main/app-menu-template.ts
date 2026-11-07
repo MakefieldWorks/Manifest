@@ -202,7 +202,7 @@ export function buildAppMenuTemplate(options: AppMenuTemplateOptions): MenuItemC
     label: 'Help',
     submenu: [
       {
-        label: 'Manifest Help',
+        label: 'Layertrail Help',
         click: options.openHelp,
       },
       {

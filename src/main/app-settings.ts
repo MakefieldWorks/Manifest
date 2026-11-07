@@ -7,7 +7,7 @@ import {
   type AppearancePreference,
 } from '../shared/theme'
 import { clampPaneWidth, PANE_WIDTH_LIMITS } from '../shared/pane-layout'
-import { findProjectDocument } from './project-launcher'
+import { findProjectDocument } from './project-document-file'
 
 export interface WindowBounds {
   x: number

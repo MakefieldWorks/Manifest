@@ -1,5 +1,5 @@
 // Schema migration pipeline: forward-only, lossless.
-// Each migration is a pure function (input manifest → output manifest).
+// Each migration is a pure function (input document → output document).
 // Unknown fields are preserved through migrations.
 
 import { v7 as uuidv7 } from 'uuid'
@@ -99,7 +99,7 @@ export class SchemaVersionError extends Error {
     public readonly toVersion: number
   ) {
     super(
-      `Cannot migrate manifest from version ${fromVersion} to ${toVersion}: no migrator registered`
+      `Cannot migrate document from version ${fromVersion} to ${toVersion}: no migrator registered`
     )
     this.name = 'SchemaVersionError'
   }
@@ -112,7 +112,7 @@ export function migrate(data: any): any {
   }
   if (data.version > CURRENT_VERSION) {
     throw new Error(
-      `Manifest version ${data.version} is newer than this app supports (v${CURRENT_VERSION}). Please update Manifest.`
+      `Project format version ${data.version} is newer than this app supports (v${CURRENT_VERSION}). Please update Layertrail.`
     )
   }
   while (data.version < CURRENT_VERSION) {

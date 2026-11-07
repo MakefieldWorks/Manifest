@@ -1,5 +1,5 @@
-// Schema migration pipeline for `.manifest/history.json`.
-// Mirrors the manifest migrate pattern in src/shared/migration.ts.
+// Schema migration pipeline for `.layertrail/history.json`.
+// Mirrors the document migrate pattern in src/shared/migration.ts.
 //
 // History tracking shipped at version 1. Future versions plug in here:
 // register a migrator under its target version, bump CURRENT_VERSION, done.
@@ -118,8 +118,8 @@ function validateHistory(data: Record<string, unknown>): void {
   for (const point of data.recoveryPoints) {
     if (!isRecord(point) || typeof point.id !== 'string' || !point.id || recoveryIds.has(point.id) ||
         typeof point.createdAt !== 'string' || !Number.isFinite(Date.parse(point.createdAt)) ||
-        (point.reason !== 'pre-revert' && point.reason !== 'reconciled') || typeof point.manifestPath !== 'string' ||
-        !/^\.manifest[/\\]recovery[/\\][^/\\]+\.json$/.test(point.manifestPath) || point.manifestPath.includes('..')) {
+        (point.reason !== 'pre-revert' && point.reason !== 'reconciled') || typeof point.payloadPath !== 'string' ||
+        !/^\.layertrail[/\\]recovery[/\\][^/\\]+\.json$/.test(point.payloadPath) || point.payloadPath.includes('..')) {
       throw new Error('Invalid recovery point metadata')
     }
     recoveryIds.add(point.id)

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { buildMergedTree, computeSubtreeSummaries, templatesForNode } from '../../../src/shared/merged-tree'
 import { diffProjects } from '../../../src/shared/diff-engine'
-import type { Project, ManifestNode } from '../../../src/shared/types'
+import type { Project, ProjectNode } from '../../../src/shared/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeProject(nodes: ManifestNode[]): Project {
+function makeProject(nodes: ProjectNode[]): Project {
   return {
     version: 2,
     id: 'project-id',
@@ -21,8 +21,8 @@ function n(
   parentId: string | null,
   order: number,
   name = id,
-  properties: ManifestNode['properties'] = {}
-): ManifestNode {
+  properties: ProjectNode['properties'] = {}
+): ProjectNode {
   return {
     id,
     parentId,
@@ -35,7 +35,7 @@ function n(
 }
 
 /** Build a merged tree from two flat node lists — diffs derived automatically. */
-function merge(fromNodes: ManifestNode[], toNodes: ManifestNode[]) {
+function merge(fromNodes: ProjectNode[], toNodes: ProjectNode[]) {
   const from = makeProject(fromNodes)
   const to = makeProject(toNodes)
   const diffs = diffProjects(from, to)

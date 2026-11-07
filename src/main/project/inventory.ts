@@ -2,7 +2,7 @@
 // already-selected nodes into sorted rows, pages, or CSV. Node selection
 // (which may hit the search index) stays in ProjectManager.
 
-import type { ManifestNode, Project, Result } from '../../shared/types'
+import type { ProjectNode, Project, Result } from '../../shared/types'
 import { ok, err, ErrorCode } from '../../shared/errors'
 import { serializeCsv } from '../../shared/csv'
 import { validateInventoryFilters } from '../../shared/inventory-filters'
@@ -68,7 +68,7 @@ export function normalizeInventoryTableRequest(project: Project | null, rawReque
 }
 
 // Rows carry the sort column even when it is not displayed.
-export function buildSortedInventory(project: Project, nodes: ManifestNode[], request: InventoryTableRequest): PreparedInventoryTable {
+export function buildSortedInventory(project: Project, nodes: ProjectNode[], request: InventoryTableRequest): PreparedInventoryTable {
   const rowColumns = request.columns.includes(request.sortColumn)
     ? request.columns
     : [...request.columns, request.sortColumn]
@@ -102,6 +102,6 @@ export function inventoryCsvContent({ request, rows }: PreparedInventoryTable): 
 export function inventoryCsvSuggestedName(project: Project | null): string {
   const projectName = project?.name.trim()
     .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-|-$/g, '') || 'manifest'
+    .replace(/^-|-$/g, '') || 'project'
   return `${projectName}-inventory.csv`
 }

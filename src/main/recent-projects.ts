@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { basename, dirname } from 'path'
 import type { Project } from '../shared/types'
-import { findProjectDocument } from './project-launcher'
+import { findProjectDocument } from './project-document-file'
 
 const MAX_RECENT_PROJECTS = 10
 
@@ -78,7 +78,7 @@ export class RecentProjectsStore {
 }
 
 export function getRecentDocumentPath(projectPath: string): string | null {
-  return findProjectDocument(projectPath)?.path ?? null
+  return findProjectDocument(projectPath)
 }
 
 function projectPathLooksOpenable(projectPath: string): boolean {

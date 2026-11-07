@@ -2,15 +2,15 @@ import { _electron as electron, type ElectronApplication, type Page } from '@pla
 import { cpSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { expect, test } from './fixtures'
-import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../src/main/project-document-file'
 import type { Project } from '../../src/shared/types'
 
 const ROOT_DIR = process.cwd()
 const MAIN_ENTRY = join(ROOT_DIR, 'out', 'main', 'index.js')
-const dogfoodProjectPath = process.env['MANIFEST_DOGFOOD_PROJECT']
-const packagedExecutable = process.env['MANIFEST_DOGFOOD_EXECUTABLE']
+const dogfoodProjectPath = process.env['LAYERTRAIL_DOGFOOD_PROJECT']
+const packagedExecutable = process.env['LAYERTRAIL_DOGFOOD_EXECUTABLE']
 
-test.skip(!dogfoodProjectPath, 'Set MANIFEST_DOGFOOD_PROJECT to run the generated project durability coverage.')
+test.skip(!dogfoodProjectPath, 'Set LAYERTRAIL_DOGFOOD_PROJECT to run the generated project durability coverage.')
 
 async function firstAppWindow(electronApp: ElectronApplication): Promise<Page> {
   const page = await electronApp.firstWindow({ timeout: 30_000 })
@@ -22,7 +22,7 @@ async function firstAppWindow(electronApp: ElectronApplication): Promise<Page> {
 test('edits, snapshots, reverts, and reopens the generated dogfood project', async ({ workspaceDir }) => {
   // Includes three real process launches, including on slower Windows runners.
   test.setTimeout(process.platform === 'win32' ? 180_000 : 120_000)
-  if (!dogfoodProjectPath) throw new Error('Missing MANIFEST_DOGFOOD_PROJECT')
+  if (!dogfoodProjectPath) throw new Error('Missing LAYERTRAIL_DOGFOOD_PROJECT')
   if (!packagedExecutable && !existsSync(MAIN_ENTRY)) throw new Error(`Built Electron entrypoint not found: ${MAIN_ENTRY}`)
   if (packagedExecutable && !existsSync(packagedExecutable)) throw new Error(`Packaged Electron executable not found: ${packagedExecutable}`)
   if (!existsSync(dogfoodProjectPath)) throw new Error(`Dogfood project not found: ${dogfoodProjectPath}`)
@@ -48,7 +48,7 @@ test('edits, snapshots, reverts, and reopens the generated dogfood project', asy
     env: {
       ...process.env,
       NODE_ENV: 'test',
-      MANIFEST_EXAMPLE_PROJECTS_DIR: join(workspaceDir, 'example-projects'),
+      LAYERTRAIL_EXAMPLE_PROJECTS_DIR: join(workspaceDir, 'example-projects'),
     },
   })
 

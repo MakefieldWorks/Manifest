@@ -4,7 +4,7 @@
 // returns the planned (parentId, name, properties) tuples plus per-row issues.
 
 import type {
-  ManifestNode,
+  ProjectNode,
   NodeTemplate,
   ImportMapping,
   ImportIssue,
@@ -79,7 +79,7 @@ export function planImport(
   headers: string[],
   mapping: ImportMapping,
   templates: Record<string, NodeTemplate>,
-  nodes: ManifestNode[],
+  nodes: ProjectNode[],
   // Internal: false when re-planning to verify a suggested name column.
   suggest = true,
 ): PlanOutput {
@@ -146,7 +146,7 @@ export function planImport(
   const rootName = nodes.find(n => n.parentId === null)?.name ?? ''
 
   // ── Indexes for parent resolution + collision checks ────────────────────────
-  const childrenByParent = new Map<string, ManifestNode[]>()
+  const childrenByParent = new Map<string, ProjectNode[]>()
   for (const n of nodes) {
     if (n.parentId === null) continue
     const arr = childrenByParent.get(n.parentId)
@@ -160,8 +160,8 @@ export function planImport(
   // wins" mirrors the previous Array.find() semantics for duplicate-named
   // siblings. childrenByParent is never mutated during planning (in-batch nodes
   // live in batchChildren), so the index stays valid for the whole plan.
-  const nameIndexByParent = new Map<string, Map<string, ManifestNode>>()
-  const childByName = (parentId: string, name: string): ManifestNode | undefined => {
+  const nameIndexByParent = new Map<string, Map<string, ProjectNode>>()
+  const childByName = (parentId: string, name: string): ProjectNode | undefined => {
     let idx = nameIndexByParent.get(parentId)
     if (!idx) {
       idx = new Map()
@@ -237,8 +237,8 @@ export function planImport(
   // sharing a key value don't both create (which would make a re-import ambiguous).
   const batchKeyClaims = new Map<string, Set<string>>()
   // Lazy per-parent index of existing children by normalized key-property value.
-  const propIndexByParent = new Map<string, Map<string, ManifestNode[]>>()
-  const findMatches = (parentId: string, keyValue: string): ManifestNode[] => {
+  const propIndexByParent = new Map<string, Map<string, ProjectNode[]>>()
+  const findMatches = (parentId: string, keyValue: string): ProjectNode[] => {
     if (keyPropKey === null) {                  // name is the key
       const m = childByName(parentId, keyValue)
       return m ? [m] : []
@@ -499,7 +499,7 @@ function verifiedNameColumn(
   headers: string[],
   mapping: ImportMapping,
   templates: Record<string, NodeTemplate>,
-  nodes: ManifestNode[],
+  nodes: ProjectNode[],
   fields: ReturnType<typeof templateFields>,
   out: PlanOutput,
 ): string | null {

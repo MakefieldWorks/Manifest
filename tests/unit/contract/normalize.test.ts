@@ -50,8 +50,8 @@ describe('contract normalize()', () => {
   })
 
   it('scrubs the longest matching path first (prefix-overlapping scrub strings)', () => {
-    const out = normalize({ path: '/tmp/a/b/Manifest.manifestproject' }, ['/tmp/a', '/tmp/a/b']) as Record<string, unknown>
-    expect(out).toEqual({ path: '<path>/Manifest.manifestproject' })
+    const out = normalize({ path: '/tmp/a/b/Layertrail.layertrail' }, ['/tmp/a', '/tmp/a/b']) as Record<string, unknown>
+    expect(out).toEqual({ path: '<path>/Layertrail.layertrail' })
   })
 
   it('leaves an already-normalized placeholder untouched', () => {
@@ -61,14 +61,14 @@ describe('contract normalize()', () => {
 
   it('scrubs JSON-escaped (Windows-style) paths too', () => {
     const winDir = 'C:\\Users\\rob\\proj'
-    const out = normalize({ path: `${winDir}\\Manifest.manifestproject` }, [winDir]) as Record<string, unknown>
-    expect(out).toEqual({ path: '<path>\\Manifest.manifestproject' })
+    const out = normalize({ path: `${winDir}\\Layertrail.layertrail` }, [winDir]) as Record<string, unknown>
+    expect(out).toEqual({ path: '<path>\\Layertrail.layertrail' })
   })
 
   it('scrubs literal paths passed in scrub list', () => {
-    const dir = '/tmp/manifest-xyz-123'
-    const out = normalize({ path: `${dir}/Manifest.manifestproject` }, [dir]) as Record<string, unknown>
-    expect(out).toEqual({ path: '<path>/Manifest.manifestproject' })
+    const dir = '/tmp/layertrail-xyz-123'
+    const out = normalize({ path: `${dir}/Layertrail.layertrail` }, [dir]) as Record<string, unknown>
+    expect(out).toEqual({ path: '<path>/Layertrail.layertrail' })
   })
 
   it('preserves the contract: names, structure, statuses, counts, error codes', () => {

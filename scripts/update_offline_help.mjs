@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Rebuilds resources/help/ (the offline Help bundle) from a manifest-website
-// checkout. See docs/OFFLINE_HELP.md.
+// Rebuilds resources/help/ (the offline Help bundle) from a website repo
+// checkout (layertrail-website, formerly document-website). See docs/OFFLINE_HELP.md.
 //
-//   bun run help:update -- ../manifest-website [--allow-dirty]
+//   bun run help:update -- ../layertrail-website [--allow-dirty]
 //
 // The website repo owns the docs and how they are exported; this script only
 // runs that export and replaces the committed copy, so app builds never need
@@ -18,7 +18,11 @@ const HELP_DIR = join(ROOT_DIR, 'resources', 'help')
 
 const args = process.argv.slice(2)
 const allowDirty = args.includes('--allow-dirty')
-const websiteDir = resolve(args.find(arg => !arg.startsWith('--')) ?? join(ROOT_DIR, '..', 'manifest-website'))
+// Default to a sibling checkout, under the website repo's current or former name.
+const defaultWebsiteDir = ['layertrail-website', 'layertrail-website']
+  .map(name => join(ROOT_DIR, '..', name))
+  .find(dir => existsSync(dir)) ?? join(ROOT_DIR, '..', 'layertrail-website')
+const websiteDir = resolve(args.find(arg => !arg.startsWith('--')) ?? defaultWebsiteDir)
 const outputDir = join(websiteDir, 'dist-offline-help')
 
 function fail(message) {
@@ -27,7 +31,7 @@ function fail(message) {
 }
 
 if (!existsSync(join(websiteDir, 'scripts', 'offline-help', 'build.mjs'))) {
-  fail(`${websiteDir} is not a manifest-website checkout with the offline Help build`)
+  fail(`${websiteDir} is not a website checkout with the offline Help build`)
 }
 
 const status = execFileSync('git', ['status', '--porcelain'], { cwd: websiteDir, encoding: 'utf8' }).trim()
@@ -49,5 +53,5 @@ const info = JSON.parse(readFileSync(join(outputDir, 'offline-help.json'), 'utf8
 rmSync(HELP_DIR, { recursive: true, force: true })
 cpSync(outputDir, HELP_DIR, { recursive: true })
 
-console.log(`\nUpdated resources/help/ from manifest-website ${info.source.commit.slice(0, 7)}${info.source.dirty ? ' (uncommitted changes)' : ''}.`)
+console.log(`\nUpdated resources/help/ from the website at ${info.source.commit.slice(0, 7)}${info.source.dirty ? ' (uncommitted changes)' : ''}.`)
 console.log('Run `bun run test` to check the bundle, then commit resources/help/.')

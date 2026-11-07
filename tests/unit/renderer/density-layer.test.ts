@@ -9,12 +9,12 @@ import {
   type LensNavItem,
 } from '../../../src/renderer/src/lib/density-layer'
 import type { VisibleRow } from '../../../src/renderer/src/lib/tree-rows'
-import type { ManifestNode } from '../../../src/shared/types'
+import type { ProjectNode } from '../../../src/shared/types'
 import type { SubtreeSummary } from '../../../src/shared/merged-tree'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-function manifestNode(id: string): ManifestNode {
+function projectNode(id: string): ProjectNode {
   return {
     id,
     parentId: null,
@@ -31,7 +31,7 @@ function normal(id: string, depth = 0, opts: { expanded?: boolean; hasChildren?:
     kind: 'normal',
     id,
     depth,
-    node: manifestNode(id),
+    node: projectNode(id),
     hasChildren: opts.hasChildren ?? false,
     childCount: 0,
     expanded: opts.expanded ?? false,
@@ -45,7 +45,7 @@ function decorated(id: string, depth = 0): VisibleRow {
     kind: 'decorated',
     id,
     depth,
-    node: manifestNode(id),
+    node: projectNode(id),
     hasChildren: false,
     childCount: 0,
     expanded: false,
@@ -61,7 +61,7 @@ function ghost(originalId: string, depth = 0): VisibleRow {
     kind: 'ghost',
     id: `ghost:${originalId}`,
     depth,
-    node: manifestNode(originalId),
+    node: projectNode(originalId),
     hasChildren: false,
     expanded: false,
     status: 'removed',

@@ -1,8 +1,8 @@
-# Manifest Architecture (Initial Draft)
+# Layertrail Architecture (Initial Draft)
 
 ## Goals
 
-This document proposes the initial technical shape for Manifest as a **greenfield Electron + TypeScript + Svelte 5 + Tailwind** desktop application.
+This document proposes the initial technical shape for Layertrail as a **greenfield Electron + TypeScript + Svelte 5 + Tailwind** desktop application.
 
 The goal is not to reproduce Archon’s Wails/Go architecture. The goal is to keep the strongest *concepts* while simplifying the implementation model and tightening the desktop UX.
 
@@ -23,7 +23,7 @@ The goal is not to reproduce Archon’s Wails/Go architecture. The goal is to ke
 
 ## High-level system shape
 
-Manifest should have four explicit layers:
+Layertrail should have four explicit layers:
 
 ### 1. Main process
 Responsible for:
@@ -165,7 +165,7 @@ exists unless it's in this table. Add new channels here before implementing them
 A straightforward app layout should be enough for v1:
 
 ```text
-manifest/
+layertrail/
   src/
     main/
     preload/
@@ -189,7 +189,7 @@ not need manager state belongs in that folder.
 
 ## Data model direction
 
-Based on Archon’s strongest ideas, Manifest should likely preserve:
+Based on Archon’s strongest ideas, Layertrail should likely preserve:
 
 - **stable immutable IDs** for nodes
 - **sibling-local naming rules** rather than global uniqueness
@@ -200,9 +200,9 @@ Based on Archon’s strongest ideas, Manifest should likely preserve:
 
 ```text
 myproject/
-  Manifest.manifestproject        # single canonical file, all nodes inline
+  Layertrail.layertrail            # single canonical file, all nodes inline
   .git/                            # auto-initialized, hidden behind snapshot UX
-  .manifest/
+  .layertrail/
     index/search.db                # derived, rebuildable SQLite + FTS5
     logs/                          # structured rotating logs
 ```
@@ -214,11 +214,11 @@ if benchmarks demand it.
 **Performance targets:**
 - Project open (parse + validate + index rebuild): <1 second for 5000 nodes
 - Show a loading indicator during project open
-- Diff computation: <2 seconds for comparing two 5000-node manifests
+- Diff computation: <2 seconds for comparing two 5000-node documents
 - Search query: <100ms response time
 - Autosave write: <200ms for 5000 nodes
 
-**Manifest.manifestproject envelope:**
+**Layertrail.layertrail envelope:**
 
 ```json
 {
@@ -294,19 +294,19 @@ a product UX that never exposes Git directly.
 
 ### Git integration mechanics
 
-- **Auto-init:** On "Create Project," Manifest runs `git init` in the project directory.
+- **Auto-init:** On "Create Project," Layertrail runs `git init` in the project directory.
   The `.git` directory is never shown in the UI.
 - **Snapshot creation:** User provides a name and may add an immutable description
-  of up to 2,000 characters. Manifest stores the description in
-  `.manifest/history.json`, then runs:
-  `git add Manifest.manifestproject && git commit -m "<name>" && git tag "snapshot/<name>"`.
+  of up to 2,000 characters. Layertrail stores the description in
+  `.layertrail/history.json`, then runs:
+  `git add Layertrail.layertrail && git commit -m "<name>" && git tag "snapshot/<name>"`.
 - **Snapshot listing:** `git tag --list "snapshot/*" --sort=-creatordate` to enumerate.
-- **Snapshot compare:** `git show snapshot/<name1>:Manifest.manifestproject` vs
-  `git show snapshot/<name2>:Manifest.manifestproject`, then run the semantic diff engine.
+- **Snapshot compare:** `git show snapshot/<name1>:Layertrail.layertrail` vs
+  `git show snapshot/<name2>:Layertrail.layertrail`, then run the semantic diff engine.
   Either side may be the `@current` sentinel ref, in which case that side is read
   from the live in-memory current project instead of git, so the user can compare
   unsnapshotted work against a snapshot without creating one first.
-- **Restore:** `git show snapshot/<name>:Manifest.manifestproject > Manifest.manifestproject` to restore
+- **Restore:** `git show snapshot/<name>:Layertrail.layertrail > Layertrail.layertrail` to restore
   a prior state (creates a new working state, does not rewrite history).
 - **Concurrency guard (UI):** Disable snapshot UI controls (create, restore) while
   any git operation is in flight. Re-enable on success or failure.
@@ -318,7 +318,7 @@ a product UX that never exposes Git directly.
 
 ### Semantic diff engine
 
-Compares two Manifest.manifestproject snapshots node-by-node using stable `id` as the join key:
+Compares two Layertrail.layertrail snapshots node-by-node using stable `id` as the join key:
 
 | Change type | Detection | Severity | Classification |
 |---|---|---|---|
@@ -393,12 +393,12 @@ inventing node rows.
 
 ### Autosave vs snapshot boundary
 
-- **Autosave** writes `Manifest.manifestproject` to disk only. No Git operations.
+- **Autosave** writes `Layertrail.layertrail` to disk only. No Git operations.
   Debounce at 2-3 seconds. Uses atomic write (temp file + rename).
 - **Snapshot** writes to disk, then runs `git add + commit + tag`.
   Only triggered by explicit user action ("Create Snapshot").
 - Between snapshots, the Git working tree is intentionally dirty.
-  `Manifest.manifestproject` on disk is always the latest state. Snapshots are
+  `Layertrail.layertrail` on disk is always the latest state. Snapshots are
   explicit named checkpoints in Git history.
 - **Snapshot flush rule:** Before any snapshot git operations, flush pending
   autosave state. Cancel the debounce timer, write current in-memory state
@@ -410,7 +410,7 @@ inventing node rows.
 
 ### Schema migration
 
-On project open, check `Manifest.manifestproject` `version` field:
+On project open, check `Layertrail.layertrail` `version` field:
 
 ```typescript
 // Migration pipeline: run sequentially, each step is lossless
@@ -431,7 +431,7 @@ function migrate(data: any): any {
 
 Rules:
 - Migrations are always forward-only and lossless
-- Each migration is a pure function (input manifest -> output manifest)
+- Each migration is a pure function (input document -> output document)
 - After migration, auto-save the upgraded file to disk
 - If migration fails, show error with the version mismatch and do not modify the file
 - Never silently drop fields. Unknown fields are preserved through migrations.
@@ -481,11 +481,11 @@ so keep that script. An empty list does not work: Bun treats it as unset.
 ### Search index lifecycle
 
 - **Full rebuild:** On project open, or if `search.db` is missing/corrupt.
-  Delete and recreate from `Manifest.manifestproject`. For 5000 nodes, target <1 second.
+  Delete and recreate from `Layertrail.layertrail`. For 5000 nodes, target <1 second.
 - **Incremental sync:** On each node create/update/delete, update the
   corresponding FTS5 row. This is a single INSERT/UPDATE/DELETE per
   operation, not a full reindex.
-- **No rebuild on autosave.** Autosave writes `Manifest.manifestproject` to disk;
+- **No rebuild on autosave.** Autosave writes `Layertrail.layertrail` to disk;
   the search index is already current from incremental sync.
 
 ---
@@ -529,7 +529,7 @@ export const ErrorCode = {
 
 | Error | Rescue action | User sees |
 |---|---|---|
-| GitCorruptError | Attempt `git fsck --full`. If repairable, fix silently. If not, offer to re-init .git from current Manifest.manifestproject (loses history but preserves current state). Log full diagnostics. | "Project history may be damaged. [Repair] [Start fresh history]" |
+| GitCorruptError | Attempt `git fsck --full`. If repairable, fix silently. If not, offer to re-init .git from current Layertrail.layertrail (loses history but preserves current state). Log full diagnostics. | "Project history may be damaged. [Repair] [Start fresh history]" |
 | GitCommitError | Log stderr from Git. If auth-related, surface. If lock-related, retry once after 500ms. Otherwise show dialog with raw error. | "Could not save snapshot. [Details] [Retry]" |
 | DiffTimeoutError | Cap diff computation at 5 seconds. If exceeded, show partial results with a warning. Log the node count and elapsed time. | "Comparison is taking too long (N nodes). Showing partial results." |
 | InvalidHierarchyError | Log the specific violation (circular ref, orphaned node). Refuse to save. Show diagnostic with node IDs. | "Project structure has an error: [specific issue]. Please fix before saving." |
@@ -545,7 +545,7 @@ libraries needed.
 ### Logging
 
 - Structured JSON logs, namespaced by subsystem (e.g., `git`, `persistence`, `diff`, `search`)
-- Rotating file logs in `.manifest/logs/`, max 5 files x 5MB each
+- Rotating file logs in `.layertrail/logs/`, max 5 files x 5MB each
 - Log levels: error, warn, info, debug
 - Every rescued error logs: what was attempted, with what arguments, what failed, what recovery was taken
 - Logs are never shown in the UI by default but are accessible via a "Show Logs" developer menu item
@@ -568,7 +568,7 @@ tests/
     shared/     # validation, diff-engine, migration
     main/       # project-manager, git-service, search-index
   e2e/          # full user flows via Playwright
-  fixtures/     # sample Manifest.manifestproject files for testing
+  fixtures/     # sample Layertrail.layertrail files for testing
 ```
 
 ### Coverage targets per phase
@@ -585,7 +585,7 @@ The diff engine is the core differentiator. It gets:
 
 - One test per change type (6 types)
 - Multi-change scenarios (moved + renamed)
-- Edge cases (empty manifests, 5000 nodes, root changes)
+- Edge cases (empty documents, 5000 nodes, root changes)
 - Property type variations (string, number, boolean, null)
 
 ### Git service: integration tests
@@ -632,7 +632,7 @@ exec(`git tag "snapshot/${name}"`, { cwd: projectDir })
 - No `remote` module usage
 - Content Security Policy: restrict to `self` only, no external resource loading
 
-### Manifest.json parsing
+### Layertrail.json parsing
 
 - Use `JSON.parse` with a size check first (reject files > 50MB)
 - Validate schema version before processing nodes
@@ -677,7 +677,7 @@ CI/CD pipeline (GitHub Actions) deferred until Phase 1 is functional.
 
 ## Plugin/integration stance
 
-Archon’s plugin taxonomy is strong, but Manifest should be much more conservative early on.
+Archon’s plugin taxonomy is strong, but Layertrail should be much more conservative early on.
 
 ### Recommendation
 
@@ -689,7 +689,7 @@ Archon’s plugin taxonomy is strong, but Manifest should be much more conservat
 
 ## Key architecture decisions to hold for now
 
-1. **Manifest is local-first.**
+1. **Layertrail is local-first.**
 2. **The renderer never talks directly to the filesystem.**
 3. **Project data stays inspectable on disk.**
 4. **The search index is rebuildable and non-authoritative.**
@@ -702,7 +702,7 @@ Archon’s plugin taxonomy is strong, but Manifest should be much more conservat
 
 Resolved:
 1. ~~Git?~~ Required, hidden behind snapshot UX. System Git CLI only.
-2. ~~Sharded vs single file?~~ Single Manifest.manifestproject. Sharding earned later.
+2. ~~Sharded vs single file?~~ Single Layertrail.layertrail. Sharding earned later.
 3. ~~Thinnest diff?~~ Node add/remove/move/rename + property changes + order changes.
 
 Still open:

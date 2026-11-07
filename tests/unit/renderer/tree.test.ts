@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { buildTree, getAncestorIds, getDescendantIds, getSiblings, getSiblingIndex } from '../../../src/renderer/src/lib/tree'
-import type { ManifestNode } from '../../../src/shared/types'
+import type { ProjectNode } from '../../../src/shared/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function node(id: string, parentId: string | null, order = 0, name = id): ManifestNode {
+function node(id: string, parentId: string | null, order = 0, name = id): ProjectNode {
   return { id, parentId, name, order, properties: {}, created: '', modified: '' }
 }
 
-function baseNodes(): ManifestNode[] {
+function baseNodes(): ProjectNode[] {
   return [
     node('root', null, 0, 'Root'),
     node('a', 'root', 0, 'A'),
@@ -66,8 +66,8 @@ describe('buildTree', () => {
 
 // ─── buildTree generic variant ────────────────────────────────────────────────
 
-describe('buildTree<N extends ManifestNode> (generic)', () => {
-  interface ExtendedNode extends ManifestNode {
+describe('buildTree<N extends ProjectNode> (generic)', () => {
+  interface ExtendedNode extends ProjectNode {
     tag: string
   }
 
@@ -75,7 +75,7 @@ describe('buildTree<N extends ManifestNode> (generic)', () => {
     return { id, parentId, name: id, order, properties: {}, created: '', modified: '', tag }
   }
 
-  it('accepts a subtype of ManifestNode and preserves extra fields', () => {
+  it('accepts a subtype of ProjectNode and preserves extra fields', () => {
     const nodes: ExtendedNode[] = [
       extNode('root', null, 0, 'root-tag'),
       extNode('child', 'root', 0, 'child-tag'),
@@ -86,10 +86,10 @@ describe('buildTree<N extends ManifestNode> (generic)', () => {
     expect(tree!.children[0].node.tag).toBe('child-tag')
   })
 
-  it('infers the generic bound when called with plain ManifestNode[]', () => {
+  it('infers the generic bound when called with plain ProjectNode[]', () => {
     const nodes = baseNodes()
     const tree = buildTree(nodes)
-    // TypeScript should infer ManifestNode — compiles and runs correctly.
+    // TypeScript should infer ProjectNode — compiles and runs correctly.
     expect(tree).not.toBeNull()
     expect(tree!.node.id).toBe('root')
   })

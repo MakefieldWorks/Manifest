@@ -1,6 +1,6 @@
-// ManifestAPI contract / conformance suite.
+// LayertrailAPI contract / conformance suite.
 //
-// Scripted scenarios drive the core ManifestAPI surface end-to-end against the
+// Scripted scenarios drive the core LayertrailAPI surface end-to-end against the
 // real backend (ProjectManager + real GitService + SQLite indices, in a temp
 // git repo). Each call's Result<T> is normalized (see normalize.ts) and the
 // ordered log is compared to a committed golden file.
@@ -8,7 +8,7 @@
 // WHY: a backend-agnostic behavioral spec. The IPC handlers in
 // src/main/index.ts are thin pass-throughs to ProjectManager, so this IS the
 // API contract. A future backend (e.g. a Rust/Tauri rewrite) implementing the
-// same ManifestAPI must reproduce these goldens when driven through the same
+// same LayertrailAPI must reproduce these goldens when driven through the same
 // scenarios — turning "did we preserve behavior?" into a runnable diff.
 //
 // Regenerate goldens after an intentional contract change:
@@ -42,7 +42,7 @@ import { ProjectManager } from '../../../src/main/project-manager'
 import { GitService } from '../../../src/main/git-service'
 import { CURRENT_PROJECT_REF } from '../../../src/shared/snapshot-ref'
 import type { Logger } from '../../../src/main/logger'
-import type { ManifestNode, NodeTemplate, Project, Result } from '../../../src/shared/types'
+import type { ProjectNode, NodeTemplate, Project, Result } from '../../../src/shared/types'
 import { MAX_VERSION_LEN } from '../../../src/shared/validation'
 import { ok } from '../../../src/shared/errors'
 import { normalize } from './normalize'
@@ -58,7 +58,7 @@ let tmpDir: string
 let managers: ProjectManager[] = []
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
   managers = []
 })
@@ -149,7 +149,7 @@ async function runScenario(goldenName: string, fn: (ctx: Ctx) => Promise<void>):
   expect(log).toEqual(JSON.parse(readFileSync(golden, 'utf8')))
 }
 
-const nodeId = (project: { nodes: ManifestNode[] }, name: string) =>
+const nodeId = (project: { nodes: ProjectNode[] }, name: string) =>
   project.nodes.find((n) => n.name === name)!.id
 
 const instrumentTemplate: NodeTemplate = {
@@ -161,7 +161,7 @@ const instrumentTemplate: NodeTemplate = {
   },
 }
 
-describe('ManifestAPI contract', () => {
+describe('LayertrailAPI contract', () => {
   it('canonical lifecycle — full backend surface', async () => {
     await runScenario('lifecycle.json', async ({ record, recordSearch, setupProject }) => {
       const { m, created, rootId } = await setupProject('Contract Lab')
@@ -198,7 +198,7 @@ describe('ManifestAPI contract', () => {
       record('nodeDelete(Rack Alpha) force', m.nodeDelete(rackAId, { unlinkReferences: true }))
       // getCurrent is the one method whose IPC handler wraps the bare
       // ProjectManager return in ok() — record the Result<Project|null> envelope
-      // so the golden matches the actual ManifestAPI contract, not the internal.
+      // so the golden matches the actual LayertrailAPI contract, not the internal.
       record('getCurrent', ok(m.getCurrent()))
     })
   })

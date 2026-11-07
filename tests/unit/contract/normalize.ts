@@ -1,7 +1,7 @@
-// Normalizer for the ManifestAPI contract suite.
+// Normalizer for the LayertrailAPI contract suite.
 //
 // The contract goldens must be reproducible by ANY backend that implements the
-// same ManifestAPI (today's TypeScript ProjectManager; tomorrow a Rust/Tauri
+// same LayertrailAPI (today's TypeScript ProjectManager; tomorrow a Rust/Tauri
 // backend). So before a Result<T> is compared to a golden, we scrub the values
 // that are legitimately nondeterministic across runs and implementations:
 //

@@ -10,7 +10,7 @@
 // parsed snapshots are already available) and the result is serialised across
 // the IPC boundary as a single payload.
 
-import type { ComparisonScope, ManifestNode, DiffEntry, Project, TemplateDiffEntry, NodeTemplate } from './types'
+import type { ComparisonScope, ProjectNode, DiffEntry, Project, TemplateDiffEntry, NodeTemplate } from './types'
 import { diffTemplates } from './diff-engine'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,13 +28,13 @@ export type MergedStatus =
   | 'mixed'          // two or more non-Low-severity changes
 
 /**
- * A ManifestNode extended with compare-mode metadata.
- * Structurally compatible with ManifestNode so buildTree<MergedTreeNode>()
+ * A ProjectNode extended with compare-mode metadata.
+ * Structurally compatible with ProjectNode so buildTree<MergedTreeNode>()
  * reuses the same DFS without a second implementation.
  *
  * Ghost nodes (status 'removed' | 'moved-from') have id = `ghost:${originalId}`.
  */
-export interface MergedTreeNode extends ManifestNode {
+export interface MergedTreeNode extends ProjectNode {
   status: MergedStatus
   /** Set when the node has values that changed from A to B. */
   previous?: {
@@ -88,12 +88,12 @@ export const GHOST_ID_PREFIX = 'ghost:'
  * still resolves by what it actually is, not by how its id reads.
  */
 export function templatesForNode(
-  // Accepts a plain ManifestNode (normal mode — no status, resolves to the
+  // Accepts a plain ProjectNode (normal mode — no status, resolves to the
   // to-side) or a MergedTreeNode (compare mode — carries status). The optional
-  // `status` intersection keeps a bare ManifestNode assignable while still
+  // `status` intersection keeps a bare ProjectNode assignable while still
   // letting us read the merged status; `{ status?: MergedStatus }` alone is a
-  // weak type that a status-less ManifestNode can't satisfy.
-  node: (ManifestNode & { status?: MergedStatus }) | null | undefined,
+  // weak type that a status-less ProjectNode can't satisfy.
+  node: (ProjectNode & { status?: MergedStatus }) | null | undefined,
   tree: Pick<MergedTree, 'fromTemplates' | 'toTemplates'>
 ): Record<string, NodeTemplate> {
   const fromSide = node?.status === 'removed' || node?.status === 'moved-from'
@@ -210,8 +210,8 @@ function deriveLiveStatus(diffs: DiffEntry[]): MergedStatus {
 }
 
 function buildPrevious(
-  nodeA: ManifestNode,
-  nodeB: ManifestNode,
+  nodeA: ProjectNode,
+  nodeB: ProjectNode,
   diffs: DiffEntry[]
 ): MergedTreeNode['previous'] | undefined {
   const types = new Set(diffs.map(d => d.changeType))
@@ -251,9 +251,9 @@ function buildPrevious(
  * ghost (ghost:parentId). This lets buildTree() correctly nest ghosts.
  */
 function makeGhost(
-  nodeA: ManifestNode,
+  nodeA: ProjectNode,
   status: 'removed' | 'moved-from',
-  nodesB: Map<string, ManifestNode>,
+  nodesB: Map<string, ProjectNode>,
   diffs: DiffEntry[] = []
 ): MergedTreeNode {
   const ghostParentId = resolveGhostParent(nodeA.parentId, nodesB)
@@ -269,7 +269,7 @@ function makeGhost(
 
 function resolveGhostParent(
   originalParentId: string | null,
-  nodesB: Map<string, ManifestNode>
+  nodesB: Map<string, ProjectNode>
 ): string | null {
   if (originalParentId === null) return null
   // If the parent still exists in B as a live node, point to it directly.

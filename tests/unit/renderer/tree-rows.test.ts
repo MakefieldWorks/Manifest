@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { flattenTree } from '../../../src/renderer/src/lib/tree-rows'
 import { buildTree } from '../../../src/renderer/src/lib/tree'
-import type { ManifestNode } from '../../../src/shared/types'
+import type { ProjectNode } from '../../../src/shared/types'
 import type { MergedTreeNode } from '../../../src/shared/merged-tree'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@ function node(
   parentId: string | null,
   order: number,
   name = id
-): ManifestNode {
+): ProjectNode {
   return {
     id,
     parentId,
@@ -23,7 +23,7 @@ function node(
   }
 }
 
-function makeTree(nodes: ManifestNode[]) {
+function makeTree(nodes: ProjectNode[]) {
   const tree = buildTree(nodes)
   if (!tree) throw new Error('buildTree returned null for non-empty input')
   return tree
@@ -252,8 +252,8 @@ function mergedNode(
 }
 
 function makeCompareTree(nodes: MergedTreeNode[]) {
-  // buildTree accepts any N extends ManifestNode — MergedTreeNode qualifies.
-  const tree = buildTree(nodes as unknown as ManifestNode[])
+  // buildTree accepts any N extends ProjectNode — MergedTreeNode qualifies.
+  const tree = buildTree(nodes as unknown as ProjectNode[])
   if (!tree) throw new Error('buildTree returned null')
   return tree
 }

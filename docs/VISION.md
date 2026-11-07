@@ -1,8 +1,8 @@
-# Manifest Vision
+# Layertrail Vision
 
 ## One-line vision
 
-**Manifest is a calm, modern desktop workspace for structured projects, with first-class hierarchy, history, and meaningful change awareness.**
+**Layertrail is a calm, modern desktop workspace for structured projects, with first-class hierarchy, history, and meaningful change awareness.**
 
 It should carry forward the best conceptual ideas from Archon — identity, snapshots, semantic change, and local-first reliability — while feeling like a **clean, intentional new product** rather than “Archon rewritten in another stack.”
 
@@ -10,7 +10,7 @@ It should carry forward the best conceptual ideas from Archon — identity, snap
 
 ## Positioning
 
-Manifest is **not** intended to be a line-for-line port of Archon.
+Layertrail is **not** intended to be a line-for-line port of Archon.
 
 It is a greenfield product that should:
 
@@ -42,7 +42,7 @@ Plugins and integrations matter, but only after the core experience is excellent
 
 ## Likely target users
 
-Manifest should initially optimize for people who need to manage **structured, evolving information**:
+Layertrail should initially optimize for people who need to manage **structured, evolving information**:
 
 - product and research leads
 - technical planners and architects
@@ -53,7 +53,7 @@ Manifest should initially optimize for people who need to manage **structured, e
 
 ## Non-goals for v1
 
-Manifest v1 should **not** try to be all of the following at once:
+Layertrail v1 should **not** try to be all of the following at once:
 
 - a full clone of Archon
 - a full real-time collaboration platform
@@ -74,13 +74,13 @@ A user can:
 5. review meaningful changes over time,
 6. trust that their work is recoverable and durable.
 
-If Manifest gets those basics right with a polished desktop UX, it will already feel distinct and valuable.
+If Layertrail gets those basics right with a polished desktop UX, it will already feel distinct and valuable.
 
 ---
 
 ## v1 success criteria
 
-Manifest v1 is successful if it delivers:
+Layertrail v1 is successful if it delivers:
 
 - a polished hierarchy editor
 - stable project storage and recovery
@@ -93,4 +93,4 @@ Manifest v1 is successful if it delivers:
 
 ## Product statement to keep in mind
 
-> **Manifest should inherit Archon’s strongest ideas, not its obligations.**
+> **Layertrail should inherit Archon’s strongest ideas, not its obligations.**

@@ -4,13 +4,13 @@ import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { RecentProjectsStore, getRecentDocumentPath } from '../../../src/main/recent-projects'
-import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-launcher'
+import { PROJECT_DOCUMENT_FILE } from '../../../src/main/project-document-file'
 import type { Project } from '../../../src/shared/types'
 
 let tmpDir: string
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-recent-projects-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-recent-projects-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-07-01T12:00:00.000Z'))
@@ -36,7 +36,7 @@ function project(path: string, name = 'Lab'): Project {
 function writeProjectDir(name: string): string {
   const projectDir = join(tmpDir, name)
   mkdirSync(projectDir, { recursive: true })
-  writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+  writeFileSync(join(projectDir, 'Layertrail.layertrail'), '{}', 'utf8')
   return projectDir
 }
 
@@ -70,7 +70,7 @@ describe('RecentProjectsStore', () => {
     expect(entries.filter(entry => entry.path === paths[0])).toHaveLength(1)
   })
 
-  it('marks projects without a manifest as missing', () => {
+  it('marks projects without a document as missing', () => {
     const store = new RecentProjectsStore(join(tmpDir, 'recent-projects.json'))
     const projectDir = join(tmpDir, 'Deleted')
 
@@ -104,7 +104,7 @@ describe('RecentProjectsStore', () => {
 
 describe('getRecentDocumentPath', () => {
   it('returns the dedicated project document for OS recent documents', () => {
-    const projectDir = writeProjectDir('ManifestOnly')
+    const projectDir = writeProjectDir('DocumentOnly')
 
     expect(getRecentDocumentPath(projectDir)).toBe(join(projectDir, PROJECT_DOCUMENT_FILE))
   })

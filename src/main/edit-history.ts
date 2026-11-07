@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util'
-import type { EditHistoryState, ManifestNode, Project } from '../shared/types'
+import type { EditHistoryState, ProjectNode, Project } from '../shared/types'
 
-interface NodeAtPosition { node: ManifestNode; index: number }
+interface NodeAtPosition { node: ProjectNode; index: number }
 interface Edit {
   label: string
   before: NodeAtPosition[]
@@ -10,7 +10,7 @@ interface Edit {
   bytes: number
 }
 
-function sameNode(a: ManifestNode, b: ManifestNode): boolean {
+function sameNode(a: ProjectNode, b: ProjectNode): boolean {
   if (a === b) return true
   const { modified: _a, ...before } = a
   const { modified: _b, ...after } = b
@@ -77,7 +77,7 @@ export class EditHistory {
     const unchanged = project.nodes.filter(node => !affected.has(node.id))
     const target = direction === 'undo' ? edit.before : edit.after
     const positions = new Map(target.map(entry => [entry.index, entry.node]))
-    const nodes: ManifestNode[] = []
+    const nodes: ProjectNode[] = []
     let nextUnchanged = 0
     for (let index = 0; index < unchanged.length + target.length; index++) {
       const restored = positions.get(index)

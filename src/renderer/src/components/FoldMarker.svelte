@@ -28,7 +28,7 @@
      * True when the currently-selected node lives inside this fold. The
      * marker renders a stronger ring so the user can see WHERE their
      * selection landed after auto-scroll. Pairs with
-     * ManifestView's findDisplayedIndexForNode, which scrolls this marker
+     * ProjectTreeView's findDisplayedIndexForNode, which scrolls this marker
      * into view when the selection is inside.
      */
     containsSelection?: boolean

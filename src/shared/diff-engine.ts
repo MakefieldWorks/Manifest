@@ -1,6 +1,6 @@
 import type {
   DiffEntry,
-  ManifestNode,
+  ProjectNode,
   Project,
   NodeTemplate,
   TemplateField,
@@ -26,16 +26,16 @@ const CHANGE_WEIGHT = {
   'order-changed': 6,
 } as const
 
-type NodeMap = Map<string, ManifestNode>
+type NodeMap = Map<string, ProjectNode>
 type DraftDiffEntry = Omit<DiffEntry, 'classification'>
 type RemovedDescendantImpact = NonNullable<DiffEntry['context']['removalImpact']>['descendants'][number]
 type IncomingReferenceImpact = NonNullable<DiffEntry['context']['removalImpact']>['incomingReferences'][number]
 
-function buildNodeMap(nodes: ManifestNode[]): NodeMap {
+function buildNodeMap(nodes: ProjectNode[]): NodeMap {
   return new Map(nodes.map((node) => [node.id, node]))
 }
 
-function getPath(node: ManifestNode, nodeMap: NodeMap): string[] {
+function getPath(node: ProjectNode, nodeMap: NodeMap): string[] {
   const path: string[] = []
   let currentParentId = node.parentId
 
@@ -49,7 +49,7 @@ function getPath(node: ManifestNode, nodeMap: NodeMap): string[] {
   return path
 }
 
-function makeContext(node: ManifestNode, nodeMap: NodeMap) {
+function makeContext(node: ProjectNode, nodeMap: NodeMap) {
   const parent = node.parentId ? nodeMap.get(node.parentId) ?? null : null
   return {
     nodeName: node.name,
@@ -58,7 +58,7 @@ function makeContext(node: ManifestNode, nodeMap: NodeMap) {
   }
 }
 
-function propertiesEqual(a: ManifestNode['properties'], b: ManifestNode['properties']): boolean {
+function propertiesEqual(a: ProjectNode['properties'], b: ProjectNode['properties']): boolean {
   const aKeys = Object.keys(a).sort()
   const bKeys = Object.keys(b).sort()
 
@@ -73,8 +73,8 @@ function propertiesEqual(a: ManifestNode['properties'], b: ManifestNode['propert
   return true
 }
 
-function buildChildrenMap(nodes: ManifestNode[]): Map<string | null, ManifestNode[]> {
-  const byParent = new Map<string | null, ManifestNode[]>()
+function buildChildrenMap(nodes: ProjectNode[]): Map<string | null, ProjectNode[]> {
+  const byParent = new Map<string | null, ProjectNode[]>()
   for (const node of nodes) {
     const children = byParent.get(node.parentId) ?? []
     children.push(node)
@@ -85,7 +85,7 @@ function buildChildrenMap(nodes: ManifestNode[]): Map<string | null, ManifestNod
 
 function descendantImpact(
   nodeId: string,
-  childrenByParent: Map<string | null, ManifestNode[]>,
+  childrenByParent: Map<string | null, ProjectNode[]>,
   nodeMap: NodeMap,
 ): RemovedDescendantImpact[] {
   const out: RemovedDescendantImpact[] = []
@@ -130,7 +130,7 @@ function buildIncomingReferenceImpact(project: Project, nodeMap: NodeMap): Map<s
   return references
 }
 
-function hasRemovedAncestor(node: ManifestNode, nodes: NodeMap, removedIds: Set<string>): boolean {
+function hasRemovedAncestor(node: ProjectNode, nodes: NodeMap, removedIds: Set<string>): boolean {
   let currentParentId = node.parentId
   while (currentParentId !== null) {
     if (removedIds.has(currentParentId)) return true
@@ -140,8 +140,8 @@ function hasRemovedAncestor(node: ManifestNode, nodes: NodeMap, removedIds: Set<
 }
 
 function changedPropertyKeys(
-  a: ManifestNode['properties'],
-  b: ManifestNode['properties']
+  a: ProjectNode['properties'],
+  b: ProjectNode['properties']
 ): string[] {
   return Array.from(new Set([...Object.keys(a), ...Object.keys(b)]))
     .filter(key => a[key] !== b[key])
@@ -172,8 +172,8 @@ function mostImportantSeverity(values: Severity[]): Severity {
 }
 
 function propertyImportance(
-  nodeA: ManifestNode,
-  nodeB: ManifestNode,
+  nodeA: ProjectNode,
+  nodeB: ProjectNode,
   projectA: Project,
   projectB: Project,
   keys: string[]
@@ -210,8 +210,8 @@ function referenceLabel(value: unknown, nodeMap: NodeMap): string | undefined {
 }
 
 function propertyValueLabels(
-  nodeA: ManifestNode,
-  nodeB: ManifestNode,
+  nodeA: ProjectNode,
+  nodeB: ProjectNode,
   projectA: Project,
   projectB: Project,
   nodesA: NodeMap,
@@ -386,7 +386,7 @@ export function diffProjects(projectA: Project, projectB: Project): DiffEntry[] 
 // not tied to any single node, so they are returned separately from the node
 // DiffEntry[] (surfaced through MergedTree.templateChanges). Without this, a
 // snapshot whose only change is a template/schema edit would compare as
-// "no changes" — Manifest must never silently hide a real change.
+// "no changes" — Layertrail must never silently hide a real change.
 
 function fieldsEqual(a: TemplateField, b: TemplateField): boolean {
   if (a.type !== b.type) return false
@@ -410,7 +410,7 @@ function diffTemplateFields(
   b: NodeTemplate,
   out: TemplateDiffEntry[]
 ): void {
-  // templateFields() is null-safe — snapshot manifests are parsed without
+  // templateFields() is null-safe — snapshot documents are parsed without
   // rejecting malformed templates, so a side with no/invalid `fields` (e.g.
   // a hand-edited `{ label: 'Bad' }`) must not throw here.
   const fieldsA = templateFields(a)

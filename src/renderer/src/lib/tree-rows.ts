@@ -6,7 +6,7 @@
 // PR #1 emits only 'normal' rows. The 'decorated' and 'ghost' variants are defined
 // here so PR #2 can light them up without changing the discriminant shape.
 
-import type { ManifestNode } from '../../../shared/types'
+import type { ProjectNode } from '../../../shared/types'
 import type { MergedTreeNode, MergedStatus } from '../../../shared/merged-tree'
 import type { TreeNode } from './tree'
 
@@ -19,7 +19,7 @@ export interface NormalRow {
   kind: 'normal'
   id: string
   depth: number
-  node: ManifestNode
+  node: ProjectNode
   hasChildren: boolean
   childCount: number
   expanded: boolean
@@ -34,7 +34,7 @@ export interface DecoratedRow {
   kind: 'decorated'
   id: string
   depth: number
-  node: ManifestNode
+  node: ProjectNode
   hasChildren: boolean
   childCount: number
   expanded: boolean
@@ -61,7 +61,7 @@ export interface GhostRow {
   kind: 'ghost'
   id: string          // always `ghost:${originalNodeId}`
   depth: number
-  node: ManifestNode  // the removed/moved node's data (from snapshot A)
+  node: ProjectNode  // the removed/moved node's data (from snapshot A)
   hasChildren: false
   expanded: false
   status: 'removed' | 'moved-from'

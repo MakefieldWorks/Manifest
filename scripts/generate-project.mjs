@@ -52,19 +52,19 @@ function main(argv) {
   const siblingCounts = new Map([[project.nodes[0].id, 0]])
 
   populateNodes(project, metadata, siblingCounts, options, rng, clock)
-  writeManifest(projectDir, project)
+  writeDocument(projectDir, project)
   initializeGit(projectDir)
 
   if (options.snapshots > 0) {
     for (let index = 1; index <= options.snapshots; index++) {
       applySnapshotChanges(project, metadata, siblingCounts, options, rng, clock, index)
-      writeManifest(projectDir, project)
+      writeDocument(projectDir, project)
       createSnapshot(projectDir, `generated-${String(index).padStart(2, '0')}`)
     }
   }
 
   const summary = summarizeProject(project, metadata)
-  console.log(`Generated Manifest project at ${projectDir}`)
+  console.log(`Generated Layertrail project at ${projectDir}`)
   console.log(`Nodes: ${summary.nodeCount}`)
   console.log(`Depth: ${summary.maxDepth}`)
   console.log(`Leaf nodes: ${summary.leafCount}`)
@@ -410,19 +410,19 @@ function countChildren(project, parentId, excludeId = null) {
   return project.nodes.filter((node) => node.parentId === parentId && node.id !== excludeId).length
 }
 
-function writeManifest(projectDir, project) {
-  writeFileSync(`${projectDir}/Manifest.manifestproject`, JSON.stringify(project, null, 2), 'utf8')
+function writeDocument(projectDir, project) {
+  writeFileSync(`${projectDir}/Layertrail.layertrail`, JSON.stringify(project, null, 2), 'utf8')
 }
 
 function initializeGit(projectDir) {
   runGit(projectDir, ['init'])
-  runGit(projectDir, ['add', 'Manifest.manifestproject'])
-  runGit(projectDir, ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '-m', 'Initial generated project'])
+  runGit(projectDir, ['add', 'Layertrail.layertrail'])
+  runGit(projectDir, ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '-m', 'Initial generated project'])
 }
 
 function createSnapshot(projectDir, name) {
-  runGit(projectDir, ['add', 'Manifest.manifestproject'])
-  runGit(projectDir, ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '--allow-empty', '-m', name])
+  runGit(projectDir, ['add', 'Layertrail.layertrail'])
+  runGit(projectDir, ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '--allow-empty', '-m', name])
   runGit(projectDir, ['tag', `snapshot/${name}`])
 }
 

@@ -15,18 +15,18 @@ import {
 describe('theme definitions', () => {
   it('ships complete, validated light and dark token sets', () => {
     expect(BUILT_IN_THEMES.map(theme => theme.id)).toEqual([
-      'manifest-light',
-      'manifest-graphite-light',
-      'manifest-dark',
-      'manifest-graphite-dark',
+      'layertrail-light',
+      'layertrail-graphite-light',
+      'layertrail-dark',
+      'layertrail-graphite-dark',
     ])
     expect(themesForScheme('light').map(theme => theme.id)).toEqual([
-      'manifest-light',
-      'manifest-graphite-light',
+      'layertrail-light',
+      'layertrail-graphite-light',
     ])
     expect(themesForScheme('dark').map(theme => theme.id)).toEqual([
-      'manifest-dark',
-      'manifest-graphite-dark',
+      'layertrail-dark',
+      'layertrail-graphite-dark',
     ])
 
     for (const theme of BUILT_IN_THEMES) {
@@ -36,25 +36,25 @@ describe('theme definitions', () => {
   })
 
   it('resolves independently selected light and dark theme IDs', () => {
-    expect(resolveTheme(DEFAULT_APPEARANCE_PREFERENCE, 'light').id).toBe('manifest-light')
-    expect(resolveTheme(DEFAULT_APPEARANCE_PREFERENCE, 'dark').id).toBe('manifest-dark')
+    expect(resolveTheme(DEFAULT_APPEARANCE_PREFERENCE, 'light').id).toBe('layertrail-light')
+    expect(resolveTheme(DEFAULT_APPEARANCE_PREFERENCE, 'dark').id).toBe('layertrail-dark')
     expect(resolveTheme({
       ...DEFAULT_APPEARANCE_PREFERENCE,
       mode: 'light',
-    }, 'dark').id).toBe('manifest-light')
+    }, 'dark').id).toBe('layertrail-light')
     expect(resolveTheme({
       ...DEFAULT_APPEARANCE_PREFERENCE,
       mode: 'dark',
-    }, 'light').id).toBe('manifest-dark')
+    }, 'light').id).toBe('layertrail-dark')
     const graphitePreference = {
       ...DEFAULT_APPEARANCE_PREFERENCE,
-      lightThemeId: 'manifest-graphite-light',
-      darkThemeId: 'manifest-graphite-dark',
+      lightThemeId: 'layertrail-graphite-light',
+      darkThemeId: 'layertrail-graphite-dark',
     }
-    expect(resolveTheme(graphitePreference, 'light').id).toBe('manifest-graphite-light')
-    expect(resolveTheme(graphitePreference, 'dark').id).toBe('manifest-graphite-dark')
-    expect(resolveTheme({ ...graphitePreference, mode: 'light' }, 'dark').id).toBe('manifest-graphite-light')
-    expect(resolveTheme({ ...graphitePreference, mode: 'dark' }, 'light').id).toBe('manifest-graphite-dark')
+    expect(resolveTheme(graphitePreference, 'light').id).toBe('layertrail-graphite-light')
+    expect(resolveTheme(graphitePreference, 'dark').id).toBe('layertrail-graphite-dark')
+    expect(resolveTheme({ ...graphitePreference, mode: 'light' }, 'dark').id).toBe('layertrail-graphite-light')
+    expect(resolveTheme({ ...graphitePreference, mode: 'dark' }, 'light').id).toBe('layertrail-graphite-dark')
     expect(resolveTheme(graphitePreference, 'light').tokens['surface-canvas'])
       .not.toBe(resolveTheme(DEFAULT_APPEARANCE_PREFERENCE, 'light').tokens['surface-canvas'])
   })
@@ -66,22 +66,22 @@ describe('theme definitions', () => {
       darkThemeId: 'unknown',
     })).toEqual({
       mode: 'dark',
-      lightThemeId: 'manifest-light',
-      darkThemeId: 'manifest-dark',
+      lightThemeId: 'layertrail-light',
+      darkThemeId: 'layertrail-dark',
     })
     expect(normalizeAppearancePreference({
       mode: 'system',
-      lightThemeId: 'manifest-graphite-light',
-      darkThemeId: 'manifest-graphite-dark',
+      lightThemeId: 'layertrail-graphite-light',
+      darkThemeId: 'layertrail-graphite-dark',
     })).toEqual({
       mode: 'system',
-      lightThemeId: 'manifest-graphite-light',
-      darkThemeId: 'manifest-graphite-dark',
+      lightThemeId: 'layertrail-graphite-light',
+      darkThemeId: 'layertrail-graphite-dark',
     })
     expect(normalizeAppearancePreference({
       mode: 'system',
-      lightThemeId: 'manifest-graphite-dark',
-      darkThemeId: 'manifest-graphite-light',
+      lightThemeId: 'layertrail-graphite-dark',
+      darkThemeId: 'layertrail-graphite-light',
     })).toEqual(DEFAULT_APPEARANCE_PREFERENCE)
   })
 

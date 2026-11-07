@@ -4,11 +4,11 @@
 
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc'
-import type { AppPreferences, ManifestAPI, WorkspaceSettings } from '../shared/ipc'
+import type { AppPreferences, LayertrailAPI, WorkspaceSettings } from '../shared/ipc'
 import { isMenuCommandId } from '../shared/menu-commands'
 import { desktopChromeForPlatform } from '../shared/desktop-chrome'
 
-const api: ManifestAPI = {
+const api: LayertrailAPI = {
   historyOperation: {
     status: () => ipcRenderer.invoke(IPC.HISTORY_OPERATION_STATUS),
     review: () => ipcRenderer.invoke(IPC.HISTORY_OPERATION_REVIEW),
@@ -46,7 +46,7 @@ const api: ManifestAPI = {
     editHistory: () => ipcRenderer.invoke(IPC.PROJECT_EDIT_HISTORY),
     onOpenedFromOs: (handler) => {
       const listener = (_event: Electron.IpcRendererEvent, result: unknown) => {
-        handler(result as Awaited<ReturnType<ManifestAPI['project']['open']>>)
+        handler(result as Awaited<ReturnType<LayertrailAPI['project']['open']>>)
       }
       ipcRenderer.on(IPC.PROJECT_OPENED_FROM_OS, listener)
       return () => {

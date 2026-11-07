@@ -9,7 +9,7 @@
   //      "promote to template field" action
   //   4. an add-property form (ad-hoc, untyped)
   import { tick } from 'svelte'
-  import type { ManifestNode, NodeTemplate, PropertyType } from '../../../shared/types'
+  import type { ProjectNode, NodeTemplate, PropertyType } from '../../../shared/types'
   import type { MergedTreeNode } from '../../../shared/merged-tree'
   import {
     validatePropertyKey,
@@ -22,9 +22,9 @@
   import TemplateFieldControl from './TemplateFieldControl.svelte'
 
   interface Props {
-    node: ManifestNode | MergedTreeNode
+    node: ProjectNode | MergedTreeNode
     templates: Record<string, NodeTemplate>
-    referenceNodes: ManifestNode[]
+    referenceNodes: ProjectNode[]
     readOnly?: boolean
     onUpdate: (id: string, changes: {
       name?: string

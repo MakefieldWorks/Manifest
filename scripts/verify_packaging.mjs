@@ -11,7 +11,7 @@ import plist from 'plist'
 const ROOT_DIR = fileURLToPath(new URL('..', import.meta.url))
 const DIST_DIR = join(ROOT_DIR, 'dist')
 const REQUIRED_ASSETS = [
-  join(ROOT_DIR, 'resources', 'manifest.svg'),
+  join(ROOT_DIR, 'resources', 'layertrail.svg'),
   join(ROOT_DIR, 'resources', 'icon.png'),
   join(ROOT_DIR, 'resources', 'icon.icns'),
   join(ROOT_DIR, 'resources', 'icon.ico'),
@@ -86,9 +86,9 @@ function verifyMacBundle() {
   ensureFile(infoPlistPath)
 
   const info = plist.parse(readFileSync(infoPlistPath, 'utf8'))
-  assert(info.CFBundleDisplayName === 'Manifest' || info.CFBundleName === 'Manifest', 'Packaged app bundle is not branded as Manifest')
+  assert(info.CFBundleDisplayName === 'Layertrail' || info.CFBundleName === 'Layertrail', 'Packaged app bundle is not branded as Layertrail')
 
-  const iconBaseName = String(info.CFBundleIconFile ?? 'Manifest')
+  const iconBaseName = String(info.CFBundleIconFile ?? 'Layertrail')
   const iconFileName = iconBaseName.endsWith('.icns') ? iconBaseName : `${iconBaseName}.icns`
   ensureFile(join(appBundle, 'Contents', 'Resources', iconFileName))
 
@@ -112,7 +112,7 @@ function verifyAsarAssets(asarPath) {
   verifyAsarOfflineHelp(asarEntries)
 }
 
-// Help → Manifest Help reads the bundle from app.asar, so every file of the
+// Help → Layertrail Help reads the bundle from app.asar, so every file of the
 // committed bundle must be packaged, not just its entry page.
 function verifyAsarOfflineHelp(asarEntries) {
   const helpDir = join(ROOT_DIR, 'resources', 'help')
@@ -135,7 +135,7 @@ function listFiles(dir) {
 function verifyWindowsBundle() {
   const unpackedDir = join(DIST_DIR, 'win-unpacked')
   assert(existsSync(unpackedDir), `Could not find Windows unpacked output at ${unpackedDir}`)
-  ensureFile(join(unpackedDir, 'Manifest.exe'))
+  ensureFile(join(unpackedDir, 'Layertrail.exe'))
   verifyAsarAssets(join(unpackedDir, 'resources', 'app.asar'))
 }
 
@@ -144,7 +144,7 @@ function verifyWindowsBundle() {
 function verifyLinuxBundle() {
   const unpackedDir = join(DIST_DIR, 'linux-unpacked')
   assert(existsSync(unpackedDir), `Could not find Linux unpacked output at ${unpackedDir}`)
-  ensureFile(join(unpackedDir, 'manifest'))
+  ensureFile(join(unpackedDir, 'layertrail'))
   verifyAsarAssets(join(unpackedDir, 'resources', 'app.asar'))
 }
 

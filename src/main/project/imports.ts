@@ -10,7 +10,7 @@ import type {
   ImportMapping,
   ImportPlan,
   ImportResult,
-  ManifestNode,
+  ProjectNode,
   NetboxImportOptions,
   NetboxImportPlan,
   NetboxImportResult,
@@ -40,7 +40,7 @@ function checkImportFileSize(path: string, label: string): Result<void> {
 
 // Per-parent order counters seeded from existing child counts, so appended
 // nodes land after their existing siblings.
-function childCountsByParent(nodes: ManifestNode[]): Map<string, number> {
+function childCountsByParent(nodes: ProjectNode[]): Map<string, number> {
   const orderByParent = new Map<string, number>()
   for (const n of nodes) {
     if (n.parentId !== null) orderByParent.set(n.parentId, (orderByParent.get(n.parentId) ?? 0) + 1)
@@ -53,9 +53,9 @@ function childCountsByParent(nodes: ManifestNode[]): Map<string, number> {
 // their parent) wire up correctly.
 function materializePlannedNodes(
   planned: PlannedNode[],
-  existing: ManifestNode[],
+  existing: ProjectNode[],
   now: string,
-): ManifestNode[] {
+): ProjectNode[] {
   const orderByParent = childCountsByParent(existing)
   const idMap = new Map<string, string>()
   return planned.map(p => {
@@ -167,11 +167,11 @@ export function planCsvImport(
   // `templateId` omitted ⇒ leave the existing binding). The planner already
   // validated rebinds against the new template, so no invalid node is committed.
   const updateById = new Map(out.update.map(u => [u.nodeId, u]))
-  const updatedNodeList: ManifestNode[] = []
-  const updatedNodes: ManifestNode[] = project.nodes.map(n => {
+  const updatedNodeList: ProjectNode[] = []
+  const updatedNodes: ProjectNode[] = project.nodes.map(n => {
     const u = updateById.get(n.id)
     if (!u) return n
-    const updated: ManifestNode = {
+    const updated: ProjectNode = {
       ...n,
       name: u.name,
       properties: u.properties,

@@ -1,5 +1,5 @@
 // Unit tests for diff-report export in ProjectManager. Stub git serves two
-// snapshot manifests so buildReport runs the real loadAndDiff + formatters.
+// snapshot documents so buildReport runs the real loadAndDiff + formatters.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, writeFileSync } from 'fs'
 import { rm } from 'fs/promises'
@@ -11,14 +11,14 @@ import { parseCsv } from '../../../src/shared/csv'
 const noopLogger = { error() {}, warn() {}, info() {}, debug() {} }
 const TS = '2026-01-01T00:00:00.000Z'
 
-function manifest(nodes: unknown[], templates: Record<string, unknown> = {}) {
+function document(nodes: unknown[], templates: Record<string, unknown> = {}) {
   return { version: 3, id: 'rep-id', name: 'Lab', created: TS, modified: TS, templates, nodes }
 }
-const before = manifest([
+const before = document([
   { id: 'root', parentId: null, name: 'Lab', order: 0, properties: {}, created: TS, modified: TS },
   { id: 'b1', parentId: 'root', name: 'B1', order: 0, properties: { serial: 'SN-1' }, created: TS, modified: TS },
 ])
-const after = manifest([
+const after = document([
   { id: 'root', parentId: null, name: 'Lab', order: 0, properties: {}, created: TS, modified: TS },
   { id: 'b1', parentId: 'root', name: 'B1', order: 0, properties: { serial: 'SN-2' }, created: TS, modified: TS },
   { id: 'b2', parentId: 'root', name: 'B2', order: 1, properties: {}, created: TS, modified: TS },
@@ -48,7 +48,7 @@ function makeGit(over: Record<string, unknown> = {}) {
     initialCommit: async () => {},
     run: async () => ({ stdout: '', stderr: '' }),
     listSnapshots: async () => SNAPS,
-    readSnapshotManifest: async (_p: string, name: string) =>
+    readSnapshotDocument: async (_p: string, name: string) =>
       name === 'before' ? JSON.stringify(before) : JSON.stringify(after),
     ...over,
   }
@@ -58,16 +58,16 @@ let tmpDir: string
 let manager: ProjectManager
 
 async function open(git = makeGit()): Promise<void> {
-  writeFileSync(join(tmpDir, 'Manifest.manifestproject'), JSON.stringify(after, null, 2), 'utf8')
-  mkdirSync(join(tmpDir, '.manifest'), { recursive: true })
-  writeFileSync(join(tmpDir, '.manifest', 'history.json'), JSON.stringify(HISTORY, null, 2), 'utf8')
+  writeFileSync(join(tmpDir, 'Layertrail.layertrail'), JSON.stringify(after, null, 2), 'utf8')
+  mkdirSync(join(tmpDir, '.layertrail'), { recursive: true })
+  writeFileSync(join(tmpDir, '.layertrail', 'history.json'), JSON.stringify(HISTORY, null, 2), 'utf8')
   manager = new ProjectManager(git as any, noopLogger as any)
   const r = await manager.openProject(tmpDir)
   expect(r.ok).toBe(true)
 }
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `manifest-report-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  tmpDir = join(tmpdir(), `layertrail-report-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(tmpDir, { recursive: true })
 })
 afterEach(async () => {
@@ -119,7 +119,7 @@ describe('buildReport', () => {
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.data.content).toMatch(/^<!doctype html>/)
-    expect(r.data.content).toContain('Manifest change review')
+    expect(r.data.content).toContain('Layertrail change review')
     expect(r.data.content).toContain('Known-good baseline')
     expect(r.data.content).toContain('B2')
     expect(r.data.suggestedName).toBe('Lab-changes-before-to-after.html')
@@ -132,8 +132,8 @@ describe('buildReport', () => {
     if (!r.ok) expect(r.error.code).toBe('VALIDATION_FAILED')
   })
 
-  it('returns an error when a snapshot manifest is unreadable', async () => {
-    await open(makeGit({ readSnapshotManifest: async () => { throw new Error('bad object') } }))
+  it('returns an error when a snapshot document is unreadable', async () => {
+    await open(makeGit({ readSnapshotDocument: async () => { throw new Error('bad object') } }))
     const r = await manager.buildReport('before', 'after', 'markdown')
     expect(r.ok).toBe(false)
   })

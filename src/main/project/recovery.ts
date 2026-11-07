@@ -1,5 +1,5 @@
 // Read-only review of recovery material: unlisted files in
-// .manifest/recovery that could be registered as recovery points, and the
+// .layertrail/recovery that could be registered as recovery points, and the
 // automatic history backup. Both return a token over everything they read so
 // a later write can refuse when anything changed since the user reviewed it.
 
@@ -25,9 +25,9 @@ export function scanRecoveryFiles(
   readHistory: () => SnapshotHistoryState,
   parse: (raw: string) => Result<Project>,
 ): RecoveryFilePreview {
-  const directory = join(project.path!, '.manifest', 'recovery')
-  const manifestDirectory = join(project.path!, '.manifest')
-  if (existsSync(manifestDirectory) && lstatSync(manifestDirectory).isSymbolicLink()) {
+  const directory = join(project.path!, '.layertrail', 'recovery')
+  const metadataDirectory = join(project.path!, '.layertrail')
+  if (existsSync(metadataDirectory) && lstatSync(metadataDirectory).isSymbolicLink()) {
     throw new Error('The metadata directory must not be a link.')
   }
   if (existsSync(directory) && (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink())) {
@@ -43,7 +43,7 @@ export function scanRecoveryFiles(
   let uninspectedCount = 0
   let inspectedBytes = 0
   if (!existsSync(directory)) return { token: hash.digest('hex'), files, uninspectedCount }
-  const registered = new Set(history.recoveryPoints.map(point => point.manifestPath.split(/[/\\]/).pop()))
+  const registered = new Set(history.recoveryPoints.map(point => point.payloadPath.split(/[/\\]/).pop()))
   for (const name of readdirSync(directory).sort()) {
     hash.update(JSON.stringify(name))
     if (registered.has(name) || name.startsWith('.')) continue
@@ -54,7 +54,7 @@ export function scanRecoveryFiles(
       const path = join(directory, name)
       const stat = lstatSync(path)
       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Not a regular local file.')
-      if (!/^recovery-[a-zA-Z0-9-]+\.manifest\.json$/.test(name)) throw new Error('Unrecognized recovery filename; left untouched.')
+      if (!/^recovery-[a-zA-Z0-9-]+\.document\.json$/.test(name)) throw new Error('Unrecognized recovery filename; left untouched.')
       if (stat.size > MAX_FILE_SIZE_BYTES) throw new Error(`Recovery file exceeds the ${MAX_FILE_SIZE_MB} MB limit.`)
       if (inspectedBytes + stat.size > MAX_FILE_SIZE_BYTES) throw new Error('Not inspected: this review reached its 50 MB total limit. Move other unlisted files to a safe external folder and review again.')
       const bytes = readFileSync(path)
@@ -66,7 +66,7 @@ export function scanRecoveryFiles(
       const parsed = parse(bytes.toString('utf8'))
       if (!parsed.ok) throw new Error(parsed.error.message)
       if (parsed.data.id !== project.id) throw new Error('This file belongs to another project.')
-      const id = name.slice(0, -'.manifest.json'.length)
+      const id = name.slice(0, -'.document.json'.length)
       if (history.recoveryPoints.some(point => point.id === id)) throw new Error('Recovery ID is already registered to another file.')
       file.eligible = true
       file.projectName = parsed.data.name
@@ -107,7 +107,7 @@ export async function validateHistoryBackup(
   if (unavailable.length) throw new Error(`Backup snapshots are unavailable: ${[...new Set(unavailable)].join(', ')}`)
   const payloadHashes: string[] = []
   for (const point of candidate.history.recoveryPoints) {
-    const path = join(project.path, ...point.manifestPath.split(/[\\/]/))
+    const path = join(project.path, ...point.payloadPath.split(/[\\/]/))
     const payload = readFileSync(path)
     payloadHashes.push(createHash('sha256').update(payload).digest('hex'))
     const parsed = parse(payload.toString('utf8'))
@@ -132,13 +132,13 @@ export async function validateHistoryBackup(
     else candidate.history.events.splice(index, 0, event)
   }
   let recoveryFiles: string[] = []
-  try { recoveryFiles = readdirSync(join(project.path, '.manifest', 'recovery')) } catch (error) {
+  try { recoveryFiles = readdirSync(join(project.path, '.layertrail', 'recovery')) } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
-  const registered = new Set(candidate.history.recoveryPoints.map(point => point.manifestPath.split(/[\\/]/).pop()))
+  const registered = new Set(candidate.history.recoveryPoints.map(point => point.payloadPath.split(/[\\/]/).pop()))
   const token = createHash('sha256').update(JSON.stringify([
     candidate.sourceToken, snapshots.map(snapshot => [snapshot.id, snapshot.commitHash]).sort(), payloadHashes, recoveryFiles.sort(),
   ])).digest('hex')
   return { ...candidate, token, missingSnapshots: missing.map(snapshot => snapshot.name),
-    unlistedRecoveryFiles: recoveryFiles.filter(name => name.endsWith('.manifest.json') && !registered.has(name)).sort() }
+    unlistedRecoveryFiles: recoveryFiles.filter(name => name.endsWith('.document.json') && !registered.has(name)).sort() }
 }

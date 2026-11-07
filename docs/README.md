@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../resources/manifest.svg" alt="Manifest logo" width="120" />
+  <img src="../resources/layertrail.svg" alt="Layertrail logo" width="120" />
 </p>
 
-# Manifest — Docs
+# Layertrail — Docs
 
-Planning and architecture documentation for Manifest.
+Planning and architecture documentation for Layertrail.
 
-Manifest is a local-first desktop app for managing structured, hierarchical projects with named snapshots, semantic change awareness, and a clean diff view. Built with Electron + TypeScript + Svelte 5 + Tailwind.
+Layertrail is a local-first desktop app for managing structured, hierarchical projects with named snapshots, semantic change awareness, and a clean diff view. Built with Electron + TypeScript + Svelte 5 + Tailwind.
 
 ---
 
@@ -55,14 +55,14 @@ through the diff and exported review.
 
 Self-contained HTML reviews carry snapshot context, scope, complete prioritized
 findings, severity, classification, and detailed changes into an offline browser
-artifact that can be shared or printed without Manifest.
+artifact that can be shared or printed without Layertrail.
 
 ---
 
 ## Key decisions (locked)
 
 - **Stack:** Electron + TypeScript + Svelte 5 + Tailwind + electron-vite
-- **Storage:** Single `Manifest.manifestproject` per project, Git-backed snapshots
+- **Storage:** Single `Layertrail.layertrail` per project, Git-backed snapshots
 - **Snapshots:** System `git` CLI only, hidden behind product UX
 - **IPC:** Typed `contextBridge` whitelist (~31 channels), domain calls use the `Result<T>` envelope
 - **Search:** SQLite FTS5 via `better-sqlite3`, rebuildable, non-authoritative

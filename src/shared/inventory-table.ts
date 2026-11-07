@@ -1,4 +1,4 @@
-import type { ManifestNode, NodeTemplate, Project } from './types'
+import type { ProjectNode, NodeTemplate, Project } from './types'
 import type { InventoryFilters } from './inventory-filters'
 import { MAX_PROPERTY_KEY_LENGTH } from './inventory-filters'
 
@@ -59,12 +59,12 @@ export function inventoryPropertyKeys(project: Project): string[] {
 
 export function buildInventoryRows(
   project: Project,
-  nodes: ManifestNode[],
+  nodes: ProjectNode[],
   columns: InventoryColumn[],
 ): InventoryTableRow[] {
   const nodeMap = new Map(project.nodes.map(node => [node.id, node]))
   const pathCache = new Map<string, string>()
-  const pathFor = (node: ManifestNode): string => {
+  const pathFor = (node: ProjectNode): string => {
     const cached = pathCache.get(node.id)
     if (cached !== undefined) return cached
     const names = [node.name]
@@ -105,7 +105,7 @@ export function sortInventoryRows(
 }
 
 function inventoryCellValue(
-  node: ManifestNode,
+  node: ProjectNode,
   templates: Record<string, NodeTemplate> | undefined,
   column: InventoryColumn,
   path: string,

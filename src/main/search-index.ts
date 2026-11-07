@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
-import type { ManifestNode, Project } from '../shared/types'
+import type { ProjectNode, Project } from '../shared/types'
 
 export const SEARCH_RESULT_LIMIT = 50
 export const MAX_SEARCH_RESULT_LIMIT = 200
@@ -57,7 +57,7 @@ export class SearchIndexService {
         'INSERT INTO node_search (node_id, node_name, properties_text) VALUES (?, ?, ?)'
       )
 
-      const rebuildAll = db.transaction((nodes: ManifestNode[]) => {
+      const rebuildAll = db.transaction((nodes: ProjectNode[]) => {
         clear.run()
         for (const node of nodes) {
           insert.run(node.id, node.name, serializeProperties(node))
@@ -79,9 +79,9 @@ export class SearchIndexService {
     this.indexedNodeIds.clear()
   }
 
-  upsertNode(projectPath: string, node: ManifestNode): void {
+  upsertNode(projectPath: string, node: ProjectNode): void {
     const db = this.requireDatabase(projectPath)
-    const upsert = db.transaction((searchNode: ManifestNode) => {
+    const upsert = db.transaction((searchNode: ProjectNode) => {
       db.prepare<[string]>('DELETE FROM node_search WHERE node_id = ?').run(searchNode.id)
       db.prepare<[string, string, string]>(
         'INSERT INTO node_search (node_id, node_name, properties_text) VALUES (?, ?, ?)'
@@ -300,8 +300,8 @@ export class SearchIndexService {
   }
 
   private openDatabase(projectPath: string): { db: Database.Database; dbPath: string } {
-    const dbPath = join(projectPath, '.manifest', 'index', 'search.db')
-    mkdirSync(join(projectPath, '.manifest', 'index'), { recursive: true })
+    const dbPath = join(projectPath, '.layertrail', 'index', 'search.db')
+    mkdirSync(join(projectPath, '.layertrail', 'index'), { recursive: true })
 
     const db = new Database(dbPath)
     db.pragma('journal_mode = WAL')
@@ -319,7 +319,7 @@ export class SearchIndexService {
   }
 }
 
-function serializeProperties(node: ManifestNode): string {
+function serializeProperties(node: ProjectNode): string {
   return Object.entries(node.properties)
     .map(([key, value]) => `${key}: ${value === null ? 'null' : String(value)}`)
     .join('\n')

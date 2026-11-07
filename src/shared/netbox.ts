@@ -2,7 +2,7 @@
 // Django `dumpdata` JSON: a flat array of `{ model, pk, fields }` where relations
 // are integer foreign keys (a device points at its site/rack/device_type by pk).
 //
-// This adapter resolves those relations into Manifest's hierarchy —
+// This adapter resolves those relations into Layertrail's hierarchy —
 //   Site → Location → Rack → Device
 // — with device/rack/site attributes as TYPED properties bound to auto-generated
 // templates. Like the CSV planner (import.ts), it is the single source of truth
@@ -12,7 +12,7 @@
 // referenced by `localId`) that apply resolves to real uuids in order.
 
 import type {
-  ManifestNode,
+  ProjectNode,
   NodeTemplate,
   TemplateField,
   ImportIssue,
@@ -201,7 +201,7 @@ export function planNetbox(
   objects: NetboxObject[],
   baseParentId: string,
   existingTemplates: Record<string, NodeTemplate>,
-  existingNodes: ManifestNode[],
+  existingNodes: ProjectNode[],
 ): NetboxPlanOutput {
   const skipped: ImportIssue[] = []
   const warnings: ImportIssue[] = []

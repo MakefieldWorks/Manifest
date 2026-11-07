@@ -1,10 +1,10 @@
 <svelte:options runes />
 
 <script lang="ts">
-  import type { ManifestWarning } from '../../../shared/types'
+  import type { DocumentWarning } from '../../../shared/types'
 
   interface Props {
-    warnings: ManifestWarning[]
+    warnings: DocumentWarning[]
     onDismiss: () => void
   }
 

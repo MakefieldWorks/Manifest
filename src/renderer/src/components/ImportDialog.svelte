@@ -5,7 +5,7 @@
   // path / typed properties, validate the WHOLE file, then import. Main is
   // authoritative — this dialog only drives it and shows results.
   import type {
-    ManifestNode, NodeTemplate, ImportMapping, ImportInspect, ImportPlan, ImportResult, Project,
+    ProjectNode, NodeTemplate, ImportMapping, ImportInspect, ImportPlan, ImportResult, Project,
     NetboxInspect, NetboxImportPlan,
   } from '../../../shared/types'
   import { isUsableTemplate, templateLabel, templateFields, validatePropertyKey } from '../../../shared/validation'
@@ -13,7 +13,7 @@
   import ImportIssueList from './ImportIssueList.svelte'
 
   interface Props {
-    baseParent: ManifestNode
+    baseParent: ProjectNode
     templates: Record<string, NodeTemplate>
     onClose: () => void
     onImported: (project: Project, summary: ImportResult) => void

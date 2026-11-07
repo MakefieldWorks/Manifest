@@ -2,12 +2,12 @@
 
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import type { ManifestNode } from '../../../shared/types'
+  import type { ProjectNode } from '../../../shared/types'
   import { getDescendantIds } from '../lib/tree'
 
   interface Props {
     nodeId: string
-    nodes: ManifestNode[]
+    nodes: ProjectNode[]
     onConfirm: (targetParentId: string) => void
     onCancel: () => void
   }
@@ -87,7 +87,7 @@
     return value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
   }
 
-  function resolvePath(candidate: ManifestNode, cache: Map<string, string>, visiting: Set<string>): string {
+  function resolvePath(candidate: ProjectNode, cache: Map<string, string>, visiting: Set<string>): string {
     const cached = cache.get(candidate.id)
     if (cached) return cached
     if (!candidate.parentId || visiting.has(candidate.id)) {

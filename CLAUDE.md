@@ -1,8 +1,8 @@
-# Manifest — Claude Code Instructions
+# Layertrail — Claude Code Instructions
 
 ## Project
 
-Manifest is a local-first desktop app for structured project management.
+Layertrail is a local-first desktop app for structured project management.
 Electron + TypeScript + Svelte 5 + Tailwind + electron-vite.
 
 See `docs/ARCHITECTURE.md` for the full technical spec.
@@ -64,4 +64,4 @@ making Windows/macOS opt-in only via a PR label (e.g. `ci:full`) — see
   itself the bottleneck, self-hosted runners are the next lever — but they
   are registered per-repo, not shared. `vpp3_electron`'s runners
   (`mac-mini-always-on`, `XIDAX`) are scoped to that repo only and cannot be
-  pointed at Manifest; a separate registration would be needed here.
+  pointed at Layertrail; a separate registration would be needed here.
