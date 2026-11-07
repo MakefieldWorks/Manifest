@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { collectProjectOpenTargets, isDefaultAppPathTarget } from '../../../src/main/launch-arguments'
 import { resolve } from 'path'
 
-const appPath = '/Applications/Manifest.app'
+const appPath = '/Applications/Layertrail.app'
 
 describe('collectProjectOpenTargets', () => {
   it('does not treat the default Electron app path as a project target', () => {
@@ -15,17 +15,17 @@ describe('collectProjectOpenTargets', () => {
   it('keeps a project target passed after the default Electron app path', () => {
     expect(collectProjectOpenTargets([
       '/usr/local/bin/electron',
-      '/Users/robert/Code/Manifest/out/main/index.js',
+      '/Users/robert/Code/Layertrail/out/main/index.js',
       '/Users/robert/Documents/Network Lab',
     ], {
       defaultApp: true,
-      appPath: '/Users/robert/Code/Manifest',
+      appPath: '/Users/robert/Code/Layertrail',
     })).toEqual(['/Users/robert/Documents/Network Lab'])
   })
 
   it('keeps a project target for a packaged application while ignoring flags', () => {
     expect(collectProjectOpenTargets([
-      '/Applications/Manifest.app/Contents/MacOS/Manifest',
+      '/Applications/Layertrail.app/Contents/MacOS/Layertrail',
       '--user-data-dir=/tmp/manifest',
       '/Users/robert/Documents/Network Lab',
     ], {
@@ -36,13 +36,13 @@ describe('collectProjectOpenTargets', () => {
 
   it('does not discard later open targets that happen to look like scripts', () => {
     expect(collectProjectOpenTargets([
-      '/Applications/Manifest.app/Contents/MacOS/Manifest',
-      '/Applications/Manifest.app/Contents/Resources/app.asar/out/main/index.js',
-      '/Applications/Manifest.app/Contents/Resources/example.js',
+      '/Applications/Layertrail.app/Contents/MacOS/Layertrail',
+      '/Applications/Layertrail.app/Contents/Resources/app.asar/out/main/index.js',
+      '/Applications/Layertrail.app/Contents/Resources/example.js',
     ], {
       defaultApp: false,
       appPath,
-    })).toEqual(['/Applications/Manifest.app/Contents/Resources/example.js'])
+    })).toEqual(['/Applications/Layertrail.app/Contents/Resources/example.js'])
   })
 })
 

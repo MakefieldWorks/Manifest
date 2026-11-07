@@ -41,10 +41,13 @@ import { isE2eBackground } from './e2e-background'
 import { DOCUMENTATION_URL, REPORT_ISSUE_URL, RELEASES_URL, WEBSITE_URL } from '../shared/external-links'
 import { closeHelpWindow, installHelpProtocol, openHelpWindow, registerHelpScheme } from './help-window'
 import { helpRootFor, readOfflineHelpInfo } from './offline-help'
+import { migratePreviousUserData } from './user-data-migration'
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 
 const userData = app.getPath('userData')
+// Carry Recent projects and settings over from the pre-rename Manifest folder.
+const migratedUserData = migratePreviousUserData(userData, app.getPath('appData'))
 const logDir   = join(userData, 'logs')
 
 const appLogger     = createLogger('app',     join(logDir, 'app.log'))
@@ -90,7 +93,7 @@ function createWindow(): BrowserWindow {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: 'Manifest',
+    title: 'Layertrail',
     icon: iconPath,
     backgroundColor: windowBackgroundColor(),
     titleBarStyle: desktopChrome.titleBarStyle,
@@ -169,7 +172,7 @@ function createSettingsWindow(): BrowserWindow {
     maximizable: false,
     fullscreenable: false,
     show: false,
-    title: 'Manifest Settings',
+    title: 'Layertrail Settings',
     icon: getBrandIconPath(),
     backgroundColor: windowBackgroundColor(),
     titleBarStyle: desktopChrome.titleBarStyle,
@@ -284,8 +287,8 @@ function registerIpcHandlers(): void {
       const project = projectManager.getCurrent()
       if (!project) return err(ErrorCode.PROJECT_NOT_FOUND, 'No project is currently open')
       const selected = await dialog.showSaveDialog({ title: 'Export project archive',
-        defaultPath: join(app.getPath('documents'), 'Manifest.manifestarchive'),
-        filters: [{ name: 'Manifest project archive', extensions: ['manifestarchive'] }] })
+        defaultPath: join(app.getPath('documents'), 'Layertrail.layertrailarchive'),
+        filters: [{ name: 'Layertrail project archive', extensions: ['layertrailarchive'] }] })
       if (selected.canceled || !selected.filePath) return ok(null)
       if (projectManager.getCurrent()?.path !== project.path) return err(ErrorCode.VALIDATION_FAILED, 'Project changed. Export again.')
       return projectManager.exportProjectArchive(selected.filePath)
@@ -294,7 +297,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.ARCHIVE_INSPECT, async () => {
     try {
       const selected = await dialog.showOpenDialog({ title: 'Review project archive', properties: ['openFile'],
-        filters: [{ name: 'Manifest project archive', extensions: ['manifestarchive'] }] })
+        // .manifestarchive files were exported before the rename and still restore.
+        filters: [{ name: 'Layertrail project archive', extensions: ['layertrailarchive', 'manifestarchive'] }] })
       if (selected.canceled || !selected.filePaths[0]) return ok(null)
       return projectManager.inspectProjectArchive(selected.filePaths[0])
     } catch (error) { return err(ErrorCode.ARCHIVE_FAILED, String(error)) }
@@ -323,9 +327,9 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.PROJECT_OPEN_EXAMPLE, async () => {
-    const configuredDirectory = process.env['MANIFEST_EXAMPLE_PROJECTS_DIR']?.trim()
+    const configuredDirectory = process.env['LAYERTRAIL_EXAMPLE_PROJECTS_DIR']?.trim()
     // The example is a user-owned project, so keep it visible alongside their documents.
-    const examplesDirectory = configuredDirectory || join(app.getPath('documents'), 'Manifest Examples')
+    const examplesDirectory = configuredDirectory || join(app.getPath('documents'), 'Layertrail Examples')
     const result = await openExampleProject(projectManager, examplesDirectory)
     trackRecentProject(result)
     return result
@@ -649,6 +653,7 @@ app.whenReady().then(async () => {
     app.dock?.hide()
   }
   appLogger.info('app starting', { version: app.getVersion(), platform: process.platform })
+  if (migratedUserData.length > 0) appLogger.info('settings copied from the Manifest user data folder', { files: migratedUserData })
   synchronizeNativeAppearance()
 
   const gitStatus = await gitService.checkVersion()
@@ -658,7 +663,7 @@ app.whenReady().then(async () => {
     await dialog.showMessageBox({
       type: 'error',
       title: 'Git Not Found',
-      message: 'Manifest requires Git to manage project history.',
+      message: 'Layertrail requires Git to manage project history.',
       detail: getGitInstallInstructions(),
       buttons: ['OK'],
     })
@@ -667,7 +672,7 @@ app.whenReady().then(async () => {
     const { response } = await dialog.showMessageBox({
       type: 'warning',
       title: 'Git Version Too Old',
-      message: `Manifest requires Git ${gitStatus.minimumVersion}+`,
+      message: `Layertrail requires Git ${gitStatus.minimumVersion}+`,
       detail: `Found Git ${gitStatus.version}. Some features may not work correctly. Please update Git.`,
       buttons: ['Continue Anyway', 'Quit'],
       defaultId: 0,
@@ -683,7 +688,7 @@ app.whenReady().then(async () => {
   installApplicationMenu({
     platform: process.platform,
     isDev: Boolean(process.env['ELECTRON_RENDERER_URL']),
-    appName: app.name || 'Manifest',
+    appName: app.name || 'Layertrail',
     logsPath: logDir,
     logger: appLogger,
     recentProjects: recentProjects.all(),
@@ -767,10 +772,10 @@ function getBrandIconPath(): string | undefined {
 
 function configureAboutPanel(iconPath: string | undefined): void {
   app.setAboutPanelOptions({
-    applicationName: app.name || 'Manifest',
+    applicationName: app.name || 'Layertrail',
     applicationVersion: app.getVersion(),
     version: app.getVersion(),
-    copyright: `Copyright © ${new Date().getFullYear()} Manifest contributors`,
+    copyright: `Copyright © ${new Date().getFullYear()} Layertrail contributors`,
     website: WEBSITE_URL,
     iconPath,
   })
@@ -957,7 +962,7 @@ async function showHelpUnavailable(): Promise<void> {
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Help Not Available',
-    message: 'This copy of Manifest does not include its offline Help.',
+    message: 'This copy of Layertrail does not include its offline Help.',
     detail: `The same documentation is online at:\n${DOCUMENTATION_URL}`,
     buttons: ['Open Online Documentation', 'Close'],
     defaultId: 0,
@@ -977,8 +982,8 @@ async function openOnlineDocumentation(): Promise<void> {
     await showMessageBoxSafely('online documentation error dialog', mainWindow ?? BrowserWindow.getFocusedWindow(), {
       type: 'error',
       title: 'Could Not Open Documentation',
-      message: 'Manifest could not open the online documentation in your browser.',
-      detail: `Open this address in a browser:\n${DOCUMENTATION_URL}\n\nHelp → Manifest Help has the same documentation and works without internet access.`,
+      message: 'Layertrail could not open the online documentation in your browser.',
+      detail: `Open this address in a browser:\n${DOCUMENTATION_URL}\n\nHelp → Layertrail Help has the same documentation and works without internet access.`,
       buttons: ['OK'],
     })
   }
@@ -993,7 +998,7 @@ async function openReleasesPage(): Promise<void> {
     await showMessageBoxSafely('releases page error dialog', mainWindow ?? BrowserWindow.getFocusedWindow(), {
       type: 'error',
       title: 'Could Not Open Releases',
-      message: 'Manifest could not open the releases page in your browser.',
+      message: 'Layertrail could not open the releases page in your browser.',
       detail: `Open this address in a browser to view available releases:\n${RELEASES_URL}\n\nYour local projects can still be used without internet access.`,
       buttons: ['OK'],
     })
@@ -1020,7 +1025,7 @@ async function reportIssue(): Promise<void> {
   await showMessageBoxSafely('issue report error dialog', mainWindow ?? BrowserWindow.getFocusedWindow(), {
     type: 'error',
     title: 'Could Not Open Issue Form',
-    message: 'Manifest could not open the issue form in your browser.',
+    message: 'Layertrail could not open the issue form in your browser.',
     detail: [
       `Open this address in a browser to report an issue:\n${REPORT_ISSUE_URL}`,
       copied
@@ -1039,7 +1044,7 @@ function copyDiagnostics(): void {
 
 async function collectDiagnostics(): Promise<string> {
   return buildDiagnostics({
-    appName: app.name || 'Manifest',
+    appName: app.name || 'Layertrail',
     appVersion: app.getVersion(),
     platform: process.platform,
     arch: process.arch,

@@ -58,7 +58,7 @@ let tmpDir: string
 let manager: ProjectManager
 
 async function open(git = makeGit()): Promise<void> {
-  writeFileSync(join(tmpDir, 'Manifest.manifestproject'), JSON.stringify(after, null, 2), 'utf8')
+  writeFileSync(join(tmpDir, 'Layertrail.layertrail'), JSON.stringify(after, null, 2), 'utf8')
   mkdirSync(join(tmpDir, '.manifest'), { recursive: true })
   writeFileSync(join(tmpDir, '.manifest', 'history.json'), JSON.stringify(HISTORY, null, 2), 'utf8')
   manager = new ProjectManager(git as any, noopLogger as any)
@@ -119,7 +119,7 @@ describe('buildReport', () => {
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.data.content).toMatch(/^<!doctype html>/)
-    expect(r.data.content).toContain('Manifest change review')
+    expect(r.data.content).toContain('Layertrail change review')
     expect(r.data.content).toContain('Known-good baseline')
     expect(r.data.content).toContain('B2')
     expect(r.data.suggestedName).toBe('Lab-changes-before-to-after.html')

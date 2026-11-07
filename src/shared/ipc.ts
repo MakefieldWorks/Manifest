@@ -164,7 +164,7 @@ export interface AppPreferencesPatch {
   appearance?: Partial<AppearancePreference>
 }
 
-/** A project shown in Manifest's desktop project hub and native File > Open Recent menu. */
+/** A project shown in Layertrail's desktop project hub and native File > Open Recent menu. */
 export interface RecentProject {
   path: string
   name: string
@@ -202,7 +202,7 @@ export interface ManifestAPI {
   project: {
     create(name: string, parentPath: string): Promise<Result<Project>>
     open(path: string): Promise<Result<Project>>
-    /** Creates (once) and opens Manifest's user-owned sample project. */
+    /** Creates (once) and opens Layertrail's user-owned sample project. */
     openExample(): Promise<Result<Project>>
     save(): Promise<Result<void>>
     getCurrent(): Promise<Result<Project | null>>

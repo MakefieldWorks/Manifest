@@ -5,7 +5,7 @@ import type { NodeTemplate, Project, Result } from '../shared/types'
 import { ProjectManager } from './project-manager'
 import { findProjectDocument } from './project-launcher'
 
-export const EXAMPLE_PROJECT_NAME = 'Manifest Sample Lab'
+export const EXAMPLE_PROJECT_NAME = 'Layertrail Sample Lab'
 
 const locationTemplate: NodeTemplate = {
   label: 'Location',
@@ -71,7 +71,7 @@ export async function openExampleProject(
   if (existsSync(projectPath)) {
     return err(
       ErrorCode.PROJECT_EXISTS,
-      `Cannot create the sample project because "${projectPath}" already exists and is not a Manifest project. Rename or remove that folder, then try again.`,
+      `Cannot create the sample project because "${projectPath}" already exists and is not a Layertrail project. Rename or remove that folder, then try again.`,
     )
   }
 

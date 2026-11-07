@@ -112,7 +112,7 @@ export function migrate(data: any): any {
   }
   if (data.version > CURRENT_VERSION) {
     throw new Error(
-      `Manifest version ${data.version} is newer than this app supports (v${CURRENT_VERSION}). Please update Manifest.`
+      `Project format version ${data.version} is newer than this app supports (v${CURRENT_VERSION}). Please update Layertrail.`
     )
   }
   while (data.version < CURRENT_VERSION) {

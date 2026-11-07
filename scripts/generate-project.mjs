@@ -64,7 +64,7 @@ function main(argv) {
   }
 
   const summary = summarizeProject(project, metadata)
-  console.log(`Generated Manifest project at ${projectDir}`)
+  console.log(`Generated Layertrail project at ${projectDir}`)
   console.log(`Nodes: ${summary.nodeCount}`)
   console.log(`Depth: ${summary.maxDepth}`)
   console.log(`Leaf nodes: ${summary.leafCount}`)
@@ -411,18 +411,18 @@ function countChildren(project, parentId, excludeId = null) {
 }
 
 function writeManifest(projectDir, project) {
-  writeFileSync(`${projectDir}/Manifest.manifestproject`, JSON.stringify(project, null, 2), 'utf8')
+  writeFileSync(`${projectDir}/Layertrail.layertrail`, JSON.stringify(project, null, 2), 'utf8')
 }
 
 function initializeGit(projectDir) {
   runGit(projectDir, ['init'])
-  runGit(projectDir, ['add', 'Manifest.manifestproject'])
-  runGit(projectDir, ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '-m', 'Initial generated project'])
+  runGit(projectDir, ['add', 'Layertrail.layertrail'])
+  runGit(projectDir, ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '-m', 'Initial generated project'])
 }
 
 function createSnapshot(projectDir, name) {
-  runGit(projectDir, ['add', 'Manifest.manifestproject'])
-  runGit(projectDir, ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '--allow-empty', '-m', name])
+  runGit(projectDir, ['add', 'Layertrail.layertrail'])
+  runGit(projectDir, ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '--allow-empty', '-m', name])
   runGit(projectDir, ['tag', `snapshot/${name}`])
 }
 

@@ -108,7 +108,7 @@ describe('project editing history', () => {
     expect(content()).toEqual(imported)
     value(manager.undo())
     value(await manager.flushAndClose())
-    const persisted = JSON.parse(readFileSync(join(directory, 'Lab', 'Manifest.manifestproject'), 'utf8'))
+    const persisted = JSON.parse(readFileSync(join(directory, 'Lab', 'Layertrail.layertrail'), 'utf8'))
     expect(persisted.nodes).toEqual(before.nodes)
     value(await manager.openProject(join(directory, 'Lab')))
     expect(manager.editHistoryState()).toEqual({ undoLabel: null, redoLabel: null })

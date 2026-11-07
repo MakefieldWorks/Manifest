@@ -36,7 +36,7 @@ function project(path: string, name = 'Lab'): Project {
 function writeProjectDir(name: string): string {
   const projectDir = join(tmpDir, name)
   mkdirSync(projectDir, { recursive: true })
-  writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+  writeFileSync(join(projectDir, 'Layertrail.layertrail'), '{}', 'utf8')
   return projectDir
 }
 

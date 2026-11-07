@@ -332,25 +332,25 @@ const graphiteDarkTokens: ThemeTokens = {
 export const BUILT_IN_THEMES: readonly ThemeDefinition[] = [
   {
     id: 'manifest-light',
-    label: 'Manifest Light',
+    label: 'Layertrail Light',
     scheme: 'light',
     tokens: lightTokens,
   },
   {
     id: 'manifest-graphite-light',
-    label: 'Manifest Graphite Light',
+    label: 'Layertrail Graphite Light',
     scheme: 'light',
     tokens: graphiteLightTokens,
   },
   {
     id: 'manifest-dark',
-    label: 'Manifest Dark',
+    label: 'Layertrail Dark',
     scheme: 'dark',
     tokens: darkTokens,
   },
   {
     id: 'manifest-graphite-dark',
-    label: 'Manifest Graphite Dark',
+    label: 'Layertrail Graphite Dark',
     scheme: 'dark',
     tokens: graphiteDarkTokens,
   },

@@ -6,7 +6,7 @@
 // each version-tracked). Power supplies and waveform generators are calibrated
 // test equipment; custom electronics boards fail and get repaired/replaced.
 //
-// Output is a v3 Manifest project (Manifest.manifestproject with a `templates` map and
+// Output is a v3 Layertrail project (Layertrail.layertrail with a `templates` map and
 // typed property values) under a git repo, plus a timeline of daily snapshots
 // (git commit + `snapshot/<name>` tag) applying realistic configuration churn:
 // CSCI version bumps on test days, status changes, recalibrations, grouped
@@ -550,7 +550,7 @@ function node(ctx, parentId, name, templateId, properties) {
 }
 
 // Deterministic UUID-shaped id derived purely from the seeded RNG, so the same
-// --seed reproduces the same Manifest.manifestproject byte-for-byte (uuidv7 would mix in
+// --seed reproduces the same Layertrail.layertrail byte-for-byte (uuidv7 would mix in
 // wall-clock/random state and break reproducibility).
 function gid(ctx) {
   let h = ''
@@ -699,17 +699,17 @@ function writeSampleCsv(projectDir, project) {
 // ─── IO / git ────────────────────────────────────────────────────────────────────
 
 function writeManifest(projectDir, project) {
-  writeFileSync(join(projectDir, 'Manifest.manifestproject'), JSON.stringify(project, null, 2), 'utf8')
+  writeFileSync(join(projectDir, 'Layertrail.layertrail'), JSON.stringify(project, null, 2), 'utf8')
 }
 
 function initGit(projectDir, dateIso) {
   git(projectDir, ['init'])
-  git(projectDir, ['add', 'Manifest.manifestproject'])
+  git(projectDir, ['add', 'Layertrail.layertrail'])
   commit(projectDir, 'Initial lab project', dateIso)
 }
 
 function snapshot(projectDir, name, dateIso) {
-  git(projectDir, ['add', 'Manifest.manifestproject'])
+  git(projectDir, ['add', 'Layertrail.layertrail'])
   commit(projectDir, name, dateIso)
   // Lightweight tag — its creatordate is the commit's committer date, which we
   // pin to the simulated day below.
@@ -719,7 +719,7 @@ function snapshot(projectDir, name, dateIso) {
 function commit(projectDir, message, dateIso) {
   git(
     projectDir,
-    ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '--allow-empty', '-m', message],
+    ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '--allow-empty', '-m', message],
     { GIT_AUTHOR_DATE: dateIso, GIT_COMMITTER_DATE: dateIso }
   )
 }

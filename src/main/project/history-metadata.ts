@@ -41,7 +41,7 @@ export function readSnapshotHistoryFile(projectPath: string, projectId: string, 
     logger.warn('snapshot history unavailable; preserving original metadata', { path: historyPath, error: msg })
     throw new HistoryMetadataReadError(
       `History metadata could not be read. The original file is preserved at ${historyPath}. ` +
-      'Restore this file from a known-good backup, or open the project with a Manifest version that supports it, then refresh. ' +
+      'Restore this file from a known-good backup, or open the project with a Layertrail version that supports it, then refresh. ' +
       `Snapshot creation, revert, and recovery are blocked until it can be read. Details: ${msg}`
     )
   }
@@ -179,7 +179,7 @@ export async function createSafetyRecoveryPointIfNeeded(project: Project, git: G
   const id = `recovery-${uuidv7()}`
   const recoveryDir = join(project.path, '.manifest', 'recovery')
   // Recovery payloads are internal sidecars, not user-openable documents.
-  // Keep their JSON suffix so they cannot be mistaken for Manifest projects.
+  // Keep their JSON suffix so they cannot be mistaken for Layertrail projects.
   const manifestPath = join('.manifest', 'recovery', `${id}.manifest.json`)
   mkdirSync(recoveryDir, { recursive: true })
   writeFileSync(join(project.path, manifestPath), current, 'utf8')

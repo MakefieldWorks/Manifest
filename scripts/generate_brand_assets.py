@@ -12,7 +12,7 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE_SVG = ROOT / "resources" / "manifest.svg"
+SOURCE_SVG = ROOT / "resources" / "layertrail.svg"
 RESOURCES_DIR = ROOT / "resources"
 RENDERER_PUBLIC_DIR = ROOT / "src" / "renderer" / "public"
 
@@ -27,7 +27,7 @@ def ensure_source() -> None:
 
 
 def render_base_png(target: Path) -> None:
-    with tempfile.TemporaryDirectory(prefix="manifest-brand-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="layertrail-brand-") as tmpdir:
         tmp_path = Path(tmpdir)
         run(["qlmanage", "-t", "-s", "1024", "-o", str(tmp_path), str(SOURCE_SVG)])
         thumbnail = tmp_path / f"{SOURCE_SVG.name}.png"
@@ -37,8 +37,8 @@ def render_base_png(target: Path) -> None:
 
 
 def generate_icns(base_png: Path, target: Path) -> None:
-    with tempfile.TemporaryDirectory(prefix="manifest-iconset-") as tmpdir:
-        iconset_dir = Path(tmpdir) / "manifest.iconset"
+    with tempfile.TemporaryDirectory(prefix="layertrail-iconset-") as tmpdir:
+        iconset_dir = Path(tmpdir) / "layertrail.iconset"
         iconset_dir.mkdir()
 
         sizes = {
@@ -68,10 +68,10 @@ def generate_ico(base_png: Path, target: Path) -> None:
 
 def generate_web_assets(base_png: Path) -> None:
     RENDERER_PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(SOURCE_SVG, RENDERER_PUBLIC_DIR / "manifest-mark.svg")
+    shutil.copy2(SOURCE_SVG, RENDERER_PUBLIC_DIR / "layertrail-mark.svg")
 
     image = Image.open(base_png)
-    image.resize((512, 512), Image.Resampling.LANCZOS).save(RENDERER_PUBLIC_DIR / "manifest-mark.png")
+    image.resize((512, 512), Image.Resampling.LANCZOS).save(RENDERER_PUBLIC_DIR / "layertrail-mark.png")
     image.resize((256, 256), Image.Resampling.LANCZOS).save(RENDERER_PUBLIC_DIR / "favicon.png")
 
 
@@ -88,12 +88,12 @@ def main() -> int:
     generate_ico(base_png, ico_path)
     generate_web_assets(base_png)
 
-    print("Generated branding assets from resources/manifest.svg")
+    print("Generated branding assets from resources/layertrail.svg")
     print(f"- {base_png.relative_to(ROOT)}")
     print(f"- {icns_path.relative_to(ROOT)}")
     print(f"- {ico_path.relative_to(ROOT)}")
-    print(f"- {(RENDERER_PUBLIC_DIR / 'manifest-mark.svg').relative_to(ROOT)}")
-    print(f"- {(RENDERER_PUBLIC_DIR / 'manifest-mark.png').relative_to(ROOT)}")
+    print(f"- {(RENDERER_PUBLIC_DIR / 'layertrail-mark.svg').relative_to(ROOT)}")
+    print(f"- {(RENDERER_PUBLIC_DIR / 'layertrail-mark.png').relative_to(ROOT)}")
     print(f"- {(RENDERER_PUBLIC_DIR / 'favicon.png').relative_to(ROOT)}")
     return 0
 

@@ -269,7 +269,7 @@ describe('interrupted history operations', () => {
     expect(manager.nodeCreate(manager.getCurrent()!.nodes[0].id, 'Blocked').ok).toBe(false)
     expect(manager.undo().ok).toBe(false)
     expect((await manager.snapshotCreate('blocked')).ok).toBe(false)
-    expect((await manager.exportProjectArchive(join(root, 'blocked.manifestarchive'))).ok).toBe(false)
+    expect((await manager.exportProjectArchive(join(root, 'blocked.layertrailarchive'))).ok).toBe(false)
     const preview = review()
     expect(preview.beforeNodeCount).toBe(beforeCount)
     expect(readFileSync(join(path, PROJECT_DOCUMENT_FILE))).toEqual(diskBefore)

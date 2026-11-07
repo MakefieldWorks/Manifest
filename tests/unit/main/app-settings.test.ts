@@ -165,7 +165,7 @@ describe('AppSettingsStore', () => {
   it('resets window and pane layout without clearing project history', () => {
     const projectDir = join(tmpDir, 'Workspace Lab')
     mkdirSync(projectDir)
-    writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+    writeFileSync(join(projectDir, 'Layertrail.layertrail'), '{}', 'utf8')
     const store = new AppSettingsStore(storePath())
     store.updateWindowState({
       bounds: { x: 40, y: 50, width: 1200, height: 900 },
@@ -189,7 +189,7 @@ describe('AppSettingsStore', () => {
   it('tracks last project and marks missing projects', () => {
     const projectDir = join(tmpDir, 'Workspace Lab')
     mkdirSync(projectDir)
-    writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+    writeFileSync(join(projectDir, 'Layertrail.layertrail'), '{}', 'utf8')
 
     const store = new AppSettingsStore(storePath())
     store.recordLastProject(project(projectDir))
@@ -199,7 +199,7 @@ describe('AppSettingsStore', () => {
       exists: true,
     })
 
-    rmSync(join(projectDir, 'Manifest.manifestproject'))
+    rmSync(join(projectDir, 'Layertrail.layertrail'))
     expect(store.getWorkspaceSettings().lastProject).toMatchObject({
       path: projectDir,
       exists: false,

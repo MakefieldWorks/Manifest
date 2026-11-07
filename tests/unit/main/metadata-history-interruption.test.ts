@@ -269,7 +269,7 @@ describe('metadata-only history interruption protection', () => {
     const interrupted = interruptCleanup()
     const restored = await manager.restoreHistoryBackup({ token: status.data.token })
     if (!restored.ok || !restored.data.preservedPath) throw new Error(JSON.stringify(restored))
-    writeFileSync(restored.data.preservedPath, 'changed outside Manifest')
+    writeFileSync(restored.data.preservedPath, 'changed outside Layertrail')
     interrupted.mockRestore()
 
     await reopen()

@@ -178,7 +178,7 @@ test('exports and reviews a portable archive before restoring a separate project
   await openSnapshotsPanel(appPage)
   await createSnapshot(appPage, 'baseline', 'Archive context')
   await addChildNode(appPage, 'Portable Lab', 'Current rack')
-  const archive = join(workspaceDir, 'Portable.manifestarchive')
+  const archive = join(workspaceDir, 'Portable.layertrailarchive')
   await electronApp.evaluate(({ dialog }, path) => {
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
   }, archive)
@@ -191,15 +191,15 @@ test('exports and reviews a portable archive before restoring a separate project
   await expect(modal.getByTestId('archive-preview')).toContainText('Portable Lab')
   await modal.screenshot({ path: test.info().outputPath('project-archive-preview.png') })
   await modal.getByRole('button', { name: 'Cancel', exact: true }).click()
-  expect(readdirSync(workspaceDir).filter(name => name.startsWith('Manifest-restored-'))).toEqual([])
+  expect(readdirSync(workspaceDir).filter(name => name.startsWith('Layertrail-restored-'))).toEqual([])
   await modal.getByTestId('archive-review').click()
   await expect(modal.getByTestId('archive-preview')).toBeVisible()
   await setDialogPath(electronApp, workspaceDir)
   await modal.getByTestId('archive-restore').click()
   await expect(modal.getByRole('status')).toContainText('Verified project restored')
-  const restored = readdirSync(workspaceDir).filter(name => name.startsWith('Manifest-restored-'))
+  const restored = readdirSync(workspaceDir).filter(name => name.startsWith('Layertrail-restored-'))
   expect(restored).toHaveLength(1)
-  const document = JSON.parse(readFileSync(join(workspaceDir, restored[0], 'Manifest.manifestproject'), 'utf8'))
+  const document = JSON.parse(readFileSync(join(workspaceDir, restored[0], 'Layertrail.layertrail'), 'utf8'))
   expect(document.nodes.some((node: { name: string }) => node.name === 'Current rack')).toBe(true)
   const current = await appPage.evaluate(() => window.api.project.getCurrent())
   expect(current.ok && current.data?.path).not.toBe(join(workspaceDir, restored[0]))
@@ -216,7 +216,7 @@ test('reviews unfinished history, preserves evidence on cancel, and explicitly r
   })
   if (!current.ok || !current.data?.path) throw new Error('Missing project')
   const path = current.data.path
-  const file = join(path, 'Manifest.manifestproject')
+  const file = join(path, 'Layertrail.layertrail')
   const store = new HistoryOperationStore(path, current.data.id)
   // Simulate the durable boundary immediately before an interrupted operation.
   store.begin('Create snapshot: interrupted', readFileSync(file, 'utf8'), JSON.stringify({ version: 1, events: [], snapshots: {}, recoveryPoints: [], currentBaseSnapshotId: null, pendingRevertEventId: null }))
@@ -248,7 +248,7 @@ test('automatically accepts exact evidence that an interrupted snapshot complete
   const current = await appPage.evaluate(() => window.api.project.getCurrent())
   if (!current.ok || !current.data?.path) throw new Error('Missing project')
   const path = current.data.path
-  const document = readFileSync(join(path, 'Manifest.manifestproject'))
+  const document = readFileSync(join(path, 'Layertrail.layertrail'))
   const history = readFileSync(join(path, '.manifest', 'history.json'))
   const parsedHistory = JSON.parse(history.toString())
   const event = parsedHistory.events.at(-1)
@@ -291,7 +291,7 @@ test('reviews an interrupted metadata restore while history is unreadable', asyn
   const current = await appPage.evaluate(() => window.api.project.getCurrent())
   if (!current.ok || !current.data?.path) throw new Error('Missing project')
   const path = current.data.path
-  const document = readFileSync(join(path, 'Manifest.manifestproject'))
+  const document = readFileSync(join(path, 'Layertrail.layertrail'))
   const backup = readFileSync(join(path, '.manifest', 'history.backup.json'))
   const damaged = Buffer.from('{damaged history')
   writeFileSync(join(path, '.manifest', 'history.json'), damaged)
@@ -325,7 +325,7 @@ for (const choice of ['keep-local', 'load-external'] as const) {
     await addChildNode(appPage, 'Conflict Lab', 'Local rack')
     const current = await appPage.evaluate(() => window.api.project.getCurrent())
     if (!current.ok || !current.data?.path) throw new Error('Missing project')
-    const file = join(current.data.path, 'Manifest.manifestproject')
+    const file = join(current.data.path, 'Layertrail.layertrail')
     const external = JSON.parse(readFileSync(file, 'utf8'))
     external.nodes = external.nodes.filter((node: { parentId: string | null }) => node.parentId === null)
     external.nodes[0].name = 'Outside root'

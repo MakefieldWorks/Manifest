@@ -30,14 +30,14 @@ export const test = base.extend<ManifestFixtures>({
     }
 
     const electronApp = await electron.launch({
-      // Keep each test independent from a running copy of Manifest and from
+      // Keep each test independent from a running copy of Layertrail and from
       // any persisted user preferences on the development machine.
       args: [MAIN_ENTRY, `--user-data-dir=${join(workspaceDir, 'electron-user-data')}`],
       cwd: ROOT_DIR,
       env: {
         ...process.env,
         NODE_ENV: 'test',
-        MANIFEST_EXAMPLE_PROJECTS_DIR: join(workspaceDir, 'example-projects'),
+        LAYERTRAIL_EXAMPLE_PROJECTS_DIR: join(workspaceDir, 'example-projects'),
       },
     })
 
@@ -63,7 +63,7 @@ export { expect }
 // filtering, so suppress only the popup and keep normal input events.
 export async function fillPropertyKey(page: Page, value: string): Promise<void> {
   const input = page.getByTestId('inventory-filter-property-key')
-  if (process.env['MANIFEST_E2E_BACKGROUND'] === '1') {
+  if (process.env['LAYERTRAIL_E2E_BACKGROUND'] === '1') {
     await input.evaluate(element => element.removeAttribute('list'))
   }
   await input.fill(value)

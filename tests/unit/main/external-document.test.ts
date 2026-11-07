@@ -143,7 +143,7 @@ describe('external project document preservation', () => {
     if (operation === 'snapshot') expect((await manager.snapshotCreate('blocked')).ok).toBe(false)
     if (operation === 'revert') expect((await manager.snapshotRevert({ name: 'baseline' })).ok).toBe(false)
     if (operation === 'close') expect((await manager.flushAndClose()).ok).toBe(false)
-    if (operation === 'archive') expect((await manager.exportProjectArchive(join(root, 'blocked.manifestarchive'))).ok).toBe(false)
+    if (operation === 'archive') expect((await manager.exportProjectArchive(join(root, 'blocked.layertrailarchive'))).ok).toBe(false)
     if (operation === 'focus') manager.checkExternalDocument()
     expect(readFileSync(file)).toEqual(external)
     expect(readFileSync(join(path, '.manifest', 'history.json'))).toEqual(history)

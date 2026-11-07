@@ -134,7 +134,7 @@ async function closeSettingsWindow(settingsPage: Page): Promise<void> {
 async function writeFixtureProject(targetDir: string, fixtureName: string): Promise<void> {
   mkdirSync(targetDir, { recursive: true })
   const fixturePath = join(process.cwd(), 'tests', 'fixtures', fixtureName)
-  writeFileSync(join(targetDir, 'Manifest.manifestproject'), readFileSync(fixturePath, 'utf8'), 'utf8')
+  writeFileSync(join(targetDir, 'Layertrail.layertrail'), readFileSync(fixturePath, 'utf8'), 'utf8')
 }
 
 async function launchAppWithArgs(args: string[], userDataDir: string): Promise<ElectronApplication> {
@@ -227,9 +227,9 @@ test('creates and opens an example project from the empty project hub', async ({
   await expect(treeRow(appPage, 'Telemetry Gateway')).toBeVisible()
 
   const project = await currentProject(appPage)
-  expect(project.name).toBe('Manifest Sample Lab')
+  expect(project.name).toBe('Layertrail Sample Lab')
   expect(project.path).toBe(
-    join(workspaceDir, 'example-projects', 'Manifest Sample Lab'),
+    join(workspaceDir, 'example-projects', 'Layertrail Sample Lab'),
   )
 
   const snapshots = await appPage.evaluate(() => window.api.snapshot.list())
@@ -366,7 +366,7 @@ test('reopens the last project when that launch behavior is selected', async ({ 
 })
 
 test('mutes the interface when its native window loses focus', async ({ appPage, electronApp }) => {
-  test.skip(process.env['MANIFEST_E2E_BACKGROUND'] === '1', 'Native focus requires a visible E2E run')
+  test.skip(process.env['LAYERTRAIL_E2E_BACKGROUND'] === '1', 'Native focus requires a visible E2E run')
   await expect.poll(() => appPage.evaluate(() => document.documentElement.dataset.windowFocused)).toBe('true')
 
   await electronApp.evaluate(({ BrowserWindow }) => {
@@ -465,7 +465,7 @@ test('reorders siblings and reparents nodes', async ({ appPage, electronApp, wor
   const projectDir = join(workspaceDir, 'Reorder Lab')
   mkdirSync(projectDir, { recursive: true })
   writeFileSync(
-    join(projectDir, 'Manifest.manifestproject'),
+    join(projectDir, 'Layertrail.layertrail'),
     JSON.stringify({
       version: 2,
       id: '01900000-0000-7000-8000-000000000100',
@@ -602,7 +602,7 @@ test('shows an empty state when search finds no matches', async ({ appPage, elec
 
 test('autosaves edits to disk and reopens them cleanly', async ({ appPage, electronApp, workspaceDir }) => {
   const projectDir = await createProjectThroughUi(appPage, electronApp, workspaceDir, 'Autosave Lab')
-  const manifestPath = join(projectDir, 'Manifest.manifestproject')
+  const manifestPath = join(projectDir, 'Layertrail.layertrail')
 
   await openContextMenuAction(appPage, 'Autosave Lab', 'Add Child')
   await appPage.getByTestId('add-child-input').fill('Rack A')

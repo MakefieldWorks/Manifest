@@ -38,7 +38,7 @@ function makeManifest(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 function writeFixture(dir: string, data: object) {
-  writeFileSync(join(dir, 'Manifest.manifestproject'), JSON.stringify(data, null, 2), 'utf8')
+  writeFileSync(join(dir, 'Layertrail.layertrail'), JSON.stringify(data, null, 2), 'utf8')
 }
 
 async function openWith(data: object): Promise<Project> {
