@@ -20,7 +20,7 @@ afterEach(async () => {
 function writeProject(name = 'Lab'): string {
   const projectDir = join(tmpDir, name)
   mkdirSync(projectDir, { recursive: true })
-  writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+  writeFileSync(join(projectDir, 'Layertrail.layertrail'), '{}', 'utf8')
   return projectDir
 }
 
@@ -31,8 +31,44 @@ function writeLegacyProject(name = 'Legacy Lab'): string {
   return projectDir
 }
 
+function writePreviousProject(name = 'Manifest Lab'): string {
+  const projectDir = join(tmpDir, name)
+  mkdirSync(projectDir, { recursive: true })
+  writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+  return projectDir
+}
+
 describe('resolveProjectOpenTarget', () => {
-  it('accepts a project directory containing Manifest.manifestproject', () => {
+  it('accepts a project folder saved by Manifest before the rename', () => {
+    const projectDir = writePreviousProject()
+
+    expect(resolveProjectOpenTarget(projectDir)).toEqual({ ok: true, data: projectDir })
+  })
+
+  it('accepts a Manifest.manifestproject file saved before the rename', () => {
+    const projectDir = writePreviousProject()
+
+    expect(resolveProjectOpenTarget(join(projectDir, 'Manifest.manifestproject'))).toEqual({ ok: true, data: projectDir })
+  })
+
+  it('opens the folder from a leftover Manifest.manifestproject next to a current document', () => {
+    const projectDir = writeProject('Migrated Lab')
+    writeFileSync(join(projectDir, 'Manifest.manifestproject'), '{}', 'utf8')
+
+    expect(resolveProjectOpenTarget(join(projectDir, 'Manifest.manifestproject'))).toEqual({ ok: true, data: projectDir })
+  })
+
+  it('rejects a .layertrail file that is not its folder\'s project document', () => {
+    const projectDir = writeProject('Copied Lab')
+    const copy = join(projectDir, 'Copy.layertrail')
+    writeFileSync(copy, '{}', 'utf8')
+
+    const result = resolveProjectOpenTarget(copy)
+
+    expect(result.ok).toBe(false)
+  })
+
+  it('accepts a project directory containing Layertrail.layertrail', () => {
     const projectDir = writeProject()
 
     const result = resolveProjectOpenTarget(projectDir)
@@ -40,10 +76,10 @@ describe('resolveProjectOpenTarget', () => {
     expect(result).toEqual({ ok: true, data: projectDir })
   })
 
-  it('accepts a Manifest.manifestproject file and resolves to its project directory', () => {
+  it('accepts a Layertrail.layertrail file and resolves to its project directory', () => {
     const projectDir = writeProject()
 
-    const result = resolveProjectOpenTarget(join(projectDir, 'Manifest.manifestproject'))
+    const result = resolveProjectOpenTarget(join(projectDir, 'Layertrail.layertrail'))
 
     expect(result).toEqual({ ok: true, data: projectDir })
   })
@@ -91,7 +127,7 @@ describe('resolveProjectOpenTarget', () => {
 
     expect(result).toEqual({
       ok: false,
-      error: { code: 'VALIDATION_FAILED', message: 'Manifest project launcher is too large' },
+      error: { code: 'VALIDATION_FAILED', message: 'Layertrail project launcher is too large' },
     })
   })
 
@@ -105,14 +141,14 @@ describe('resolveProjectOpenTarget', () => {
     if (!result.ok) expect(result.error.message).toContain('legacy manifest.json file')
   })
 
-  it('rejects an existing folder that is not a Manifest project', () => {
+  it('rejects an existing folder that is not a Layertrail project', () => {
     const folder = join(tmpDir, 'Not A Project')
     mkdirSync(folder)
 
     const result = resolveProjectOpenTarget(folder)
 
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error.message).toContain('no Manifest project document was found')
+    if (!result.ok) expect(result.error.message).toContain('no Layertrail project document was found')
   })
 
   it('rejects malformed launchers', () => {

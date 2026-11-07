@@ -276,7 +276,7 @@ export class ProjectManager {
     if (this.archiveBusy) return err(ErrorCode.VALIDATION_FAILED, 'Wait for the archive operation to finish.')
     const document = findProjectDocument(projectPath)
     if (!document) {
-      return err(ErrorCode.PROJECT_NOT_FOUND, 'No Manifest project document was found')
+      return err(ErrorCode.PROJECT_NOT_FOUND, 'No Layertrail project document was found')
     }
     const documentPath = document.path
     try {
@@ -328,13 +328,14 @@ export class ProjectManager {
         })
       }
 
-      // Migrate legacy manifest.json projects to the dedicated document name on
-      // first successful open. Writing the new file atomically comes before
-      // removing the old one, so a failed write never risks project data.
+      // Migrate projects that use an older document name (Manifest.manifestproject
+      // or manifest.json) to the current one on first successful open. Writing
+      // the new file atomically comes before removing the old one, so a failed
+      // write never risks project data.
       if ((data.version !== originalVersion || document.isLegacy) && !new HistoryOperationStore(projectPath, project.id).pending()) {
         const persisted = await this.writeManifest(project, { touchModified: false, expectedDocumentHash: openingHash })
         if (!persisted.ok) return persisted as Result<Project>
-        if (document.isLegacy) unlinkSync(documentPath)
+        for (const superseded of document.supersededPaths) unlinkSync(superseded)
         this.logger.info('project document migrated', {
           path: projectPath,
           schemaFrom: originalVersion,
@@ -1711,7 +1712,7 @@ export class ProjectManager {
     try {
       if (readDocumentHash(path) === baseline) return
     } catch { /* An unreadable file must never be replaced blindly. */ }
-    let message = 'The project file changed outside Manifest or is no longer readable. Saving is paused. Review both versions before continuing.'
+    let message = 'The project file changed outside Layertrail or is no longer readable. Saving is paused. Review both versions before continuing.'
     if (this.currentProject?.path === projectPath) {
       try {
         const local = serializeProjectForPersistence(this.currentProject)

@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import type { Project, ProjectArchivePreview } from '../shared/types'
 import { migrateSnapshotHistory } from '../shared/snapshot-history-migration'
-import { PROJECT_DOCUMENT_FILE } from './project-launcher'
+import { PREVIOUS_PROJECT_DOCUMENT_FILE, PROJECT_DOCUMENT_FILE } from './project-launcher'
 import { GitService } from './git-service'
 import { writeHistoryFile } from './history-backup'
 
@@ -18,7 +18,10 @@ const digest = (bytes: Buffer | string) => createHash('sha256').update(bytes).di
 
 function allowedPath(path: string): boolean {
   if (path.split('/').some(part => /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(part) || part.length > 240)) return false
-  return path === PROJECT_DOCUMENT_FILE || path === 'snapshots.bundle' ||
+  // Archives exported before the rename to Layertrail store the document as
+  // Manifest.manifestproject; restoring one writes it under that name and the
+  // first open migrates it.
+  return path === PROJECT_DOCUMENT_FILE || path === PREVIOUS_PROJECT_DOCUMENT_FILE || path === 'snapshots.bundle' ||
     path === '.manifest/history.json' || path === '.manifest/history.backup.json' ||
     /^\.manifest\/history\.json\.damaged-[a-zA-Z0-9-]+$/.test(path) ||
     (/^\.manifest\/recovery\/[^/\\:]+$/.test(path) && !path.includes('..') && !/[\x00-\x1f]/.test(path))
@@ -93,7 +96,7 @@ export class ProjectArchive {
         entries: [...files].map(([path, bytes]) => ({ path, sha256: digest(bytes), data: bytes.toString('base64') })) }
       const output = JSON.stringify(archive)
       if (Buffer.byteLength(output) > MAX_ARCHIVE_BYTES) throw new Error('Encoded archive exceeds its size limit')
-      const candidatePath = join(scratch, 'candidate.manifestarchive')
+      const candidatePath = join(scratch, 'candidate.layertrailarchive')
       writeFileSync(candidatePath, output, { flag: 'wx' })
       // Verify the encoded container and an isolated reconstruction before
       // publishing, using exactly the same decoder as an imported archive.
@@ -123,12 +126,12 @@ export class ProjectArchive {
       names.add(entry.path.toLowerCase())
       this.checkSize(files)
     }
-    if (!files.has(PROJECT_DOCUMENT_FILE) || !files.has('snapshots.bundle')) throw new Error('Archive is missing current inventory or snapshot history')
+    if (files.has(PROJECT_DOCUMENT_FILE) === files.has(PREVIOUS_PROJECT_DOCUMENT_FILE) || !files.has('snapshots.bundle')) throw new Error('Archive is missing current inventory or snapshot history')
     return { archive, files, token: digest(bytes) }
   }
 
   private async materialize(files: Map<string, Buffer>, destination: string): Promise<{ project: Project; snapshotCount: number }> {
-    const document = files.get(PROJECT_DOCUMENT_FILE)!
+    const document = (files.get(PROJECT_DOCUMENT_FILE) ?? files.get(PREVIOUS_PROJECT_DOCUMENT_FILE))!
     if (document.length > 50 * 1024 * 1024) throw new Error('Current inventory exceeds the 50 MB project limit')
     const project = this.parseProject(document.toString('utf8'))
     for (const [path, bytes] of files) {
@@ -167,7 +170,7 @@ export class ProjectArchive {
 
   async inspect(path: string): Promise<ProjectArchivePreview> {
     const { archive, files, token } = this.decode(path)
-    const scratch = mkdtempSync(join(tmpdir(), 'manifest-archive-review-'))
+    const scratch = mkdtempSync(join(tmpdir(), 'layertrail-archive-review-'))
     try {
       const result = await this.materialize(files, scratch)
       return { token, projectName: result.project.name, createdAt: archive.createdAt, snapshotCount: result.snapshotCount,
@@ -180,7 +183,7 @@ export class ProjectArchive {
     if (token !== actualToken) throw new Error('Archive changed. Review it again before restoring.')
     // mkdtemp atomically reserves a new folder. No existing destination can be
     // overwritten, and failures remove only the folder this operation created.
-    const destination = mkdtempSync(join(parent, 'Manifest-restored-'))
+    const destination = mkdtempSync(join(parent, 'Layertrail-restored-'))
     try {
       await this.materialize(files, destination)
       return destination

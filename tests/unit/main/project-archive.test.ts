@@ -22,7 +22,7 @@ beforeEach(async () => {
   const result = await manager.createProject('Archive Lab', root)
   if (!result.ok) throw new Error(result.error.message)
   source = result.data.path!
-  archive = join(root, 'project.manifestarchive')
+  archive = join(root, 'project.layertrailarchive')
   target = join(root, 'restores')
   mkdirSync(target)
 })
@@ -106,6 +106,22 @@ describe('portable project archives', () => {
     expect(existsSync(join(b, PROJECT_DOCUMENT_FILE))).toBe(true)
   })
 
+  it('restores archives exported by Manifest before the rename', async () => {
+    await exportArchive()
+    editArchive(data => {
+      const entry = data.entries.find((entry: any) => entry.path === PROJECT_DOCUMENT_FILE)
+      entry.path = 'Manifest.manifestproject'
+    })
+    const restored = await restore()
+    expect(existsSync(join(restored, 'Manifest.manifestproject'))).toBe(true)
+
+    await manager.waitForHistoryBackfill()
+    const opened = await manager.openProject(restored)
+    expect(opened.ok).toBe(true)
+    expect(existsSync(join(restored, PROJECT_DOCUMENT_FILE))).toBe(true)
+    expect(existsSync(join(restored, 'Manifest.manifestproject'))).toBe(false)
+  })
+
   it.each(['hash', 'path', 'duplicate', 'future', 'missing', 'truncated', 'bundle'])('rejects %s corruption without destination writes', async fault => {
     await exportArchive()
     if (fault === 'truncated') writeFileSync(archive, readFileSync(archive).subarray(0, 60))
@@ -182,7 +198,7 @@ describe('portable project archives', () => {
     symlinkSync(source, alias)
     expect((await manager.exportProjectArchive(join(alias, PROJECT_DOCUMENT_FILE))).ok).toBe(false)
     mkdirSync(join(source, '..exports'))
-    expect((await manager.exportProjectArchive(join(source, '..exports', 'copy.manifestarchive'))).ok).toBe(false)
+    expect((await manager.exportProjectArchive(join(source, '..exports', 'copy.layertrailarchive'))).ok).toBe(false)
   })
 
   it('blocks edits during capture and refuses externally changed snapshot refs', async () => {

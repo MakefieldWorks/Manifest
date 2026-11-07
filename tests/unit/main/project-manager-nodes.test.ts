@@ -2,7 +2,7 @@
 // Uses real filesystem via tmp directories, never mocks.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -38,7 +38,7 @@ let project: Project
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function writeFixture(dir: string, data: object) {
-  writeFileSync(join(dir, 'Manifest.manifestproject'), JSON.stringify(data, null, 2), 'utf8')
+  writeFileSync(join(dir, 'Layertrail.layertrail'), JSON.stringify(data, null, 2), 'utf8')
 }
 
 // Build a minimal v2 manifest with a single root node.
@@ -142,12 +142,13 @@ describe('project document migration', () => {
   it('replaces a legacy manifest and its launcher after a successful open', async () => {
     await manager.waitForHistoryBackfill()
     manager.discardCurrentProject()
-    const canonicalPath = join(tmpDir, 'Manifest.manifestproject')
+    const canonicalPath = join(tmpDir, 'Layertrail.layertrail')
+    const launcherPath = join(tmpDir, 'Manifest.manifestproject')
     const legacyPath = join(tmpDir, 'manifest.json')
     rmSync(canonicalPath)
     writeFileSync(legacyPath, JSON.stringify(makeManifest(), null, 2), 'utf8')
-    // This is the old launcher shape that previously occupied the canonical name.
-    writeFileSync(canonicalPath, JSON.stringify({ version: 1, projectPath: '.' }), 'utf8')
+    // This is the old launcher shape that previously occupied the document name.
+    writeFileSync(launcherPath, JSON.stringify({ version: 1, projectPath: '.' }), 'utf8')
 
     const legacyManager = makeManager()
     const opened = await legacyManager.openProject(tmpDir)
@@ -157,6 +158,23 @@ describe('project document migration', () => {
     expect(opened.ok).toBe(true)
     expect(existsSync(canonicalPath)).toBe(true)
     expect(existsSync(legacyPath)).toBe(false)
+    expect(existsSync(launcherPath)).toBe(false)
+    expect(JSON.parse(readFileSync(canonicalPath, 'utf8'))).toMatchObject({ name: 'Test Project' })
+  })
+
+  it('renames a Manifest.manifestproject document saved before the rename to Layertrail', async () => {
+    await manager.waitForHistoryBackfill()
+    manager.discardCurrentProject()
+    const canonicalPath = join(tmpDir, 'Layertrail.layertrail')
+    const previousPath = join(tmpDir, 'Manifest.manifestproject')
+    renameSync(canonicalPath, previousPath)
+
+    const previousManager = makeManager()
+    const opened = await previousManager.openProject(tmpDir)
+    manager = previousManager
+
+    expect(opened.ok).toBe(true)
+    expect(existsSync(previousPath)).toBe(false)
     expect(JSON.parse(readFileSync(canonicalPath, 'utf8'))).toMatchObject({ name: 'Test Project' })
   })
 })

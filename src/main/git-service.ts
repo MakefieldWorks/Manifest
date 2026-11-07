@@ -7,7 +7,7 @@ import { createHash } from 'crypto'
 import { promisify } from 'util'
 import type { GitStatus, Snapshot } from '../shared/types'
 import type { Logger } from './logger'
-import { LEGACY_PROJECT_DOCUMENT_FILE, PROJECT_DOCUMENT_FILE } from './project-launcher'
+import { OLDER_PROJECT_DOCUMENT_FILES, PROJECT_DOCUMENT_FILE } from './project-launcher'
 
 const execFileAsync = promisify(execFile)
 
@@ -98,7 +98,7 @@ export class GitService {
   async restoreArchiveBundle(projectDir: string, bundle: string): Promise<void> {
     await this.queue.enqueue(async () => {
       // Start with fresh local configuration and no templates/hooks. Never
-      // checkout a bundled tree: it may contain paths unrelated to Manifest.
+      // checkout a bundled tree: it may contain paths unrelated to Layertrail.
       await archiveGit(projectDir, ['init', '--template='])
       await archiveGit(projectDir, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
       await archiveGit(projectDir, ['bundle', 'verify', bundle])
@@ -154,7 +154,7 @@ export class GitService {
       await execFileAsync('git', ['add', PROJECT_DOCUMENT_FILE], { cwd: projectDir })
       await execFileAsync(
         'git',
-        ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '-m', 'Initial project'],
+        ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '-m', 'Initial project'],
         { cwd: projectDir }
       )
       this.logger.info('initial git commit', { dir: projectDir })
@@ -168,15 +168,16 @@ export class GitService {
         const { stdout } = await execFileAsync('git', ['show', `:${PROJECT_DOCUMENT_FILE}`], { cwd: projectDir, maxBuffer: MAX_GIT_BUFFER, encoding: 'buffer' })
         if (createHash('sha256').update(stdout).digest('hex') !== expectedDocumentHash) {
           await execFileAsync('git', ['reset', '-q', '--', PROJECT_DOCUMENT_FILE], { cwd: projectDir })
-          throw new SnapshotDocumentChangedError('The staged project differs from the inventory Manifest saved. Review the external change before snapshotting.')
+          throw new SnapshotDocumentChangedError('The staged project differs from the inventory Layertrail saved. Review the external change before snapshotting.')
         }
       }
-      // The first snapshot after opening a legacy project records the document
-      // rename in Git. Old tags remain readable through the fallback below.
-      await execFileAsync('git', ['rm', '--ignore-unmatch', LEGACY_PROJECT_DOCUMENT_FILE], { cwd: projectDir })
+      // The first snapshot after opening a project with an older document name
+      // records the rename in Git. Old tags remain readable through the
+      // fallback below.
+      await execFileAsync('git', ['rm', '--ignore-unmatch', '--', ...OLDER_PROJECT_DOCUMENT_FILES], { cwd: projectDir })
       await execFileAsync(
         'git',
-        ['-c', 'user.email=manifest@local', '-c', 'user.name=Manifest', 'commit', '--allow-empty', '-m', name],
+        ['-c', 'user.email=layertrail@local', '-c', 'user.name=Layertrail', 'commit', '--allow-empty', '-m', name],
         { cwd: projectDir }
       )
       await execFileAsync('git', ['tag', `${SNAPSHOT_TAG_PREFIX}${name}`], { cwd: projectDir })
@@ -236,9 +237,10 @@ export class GitService {
   }
 
   private async readProjectDocumentAt(projectDir: string, ref: string): Promise<string> {
-    const documentPath = await gitPathExists(projectDir, ref, PROJECT_DOCUMENT_FILE)
-      ? PROJECT_DOCUMENT_FILE
-      : LEGACY_PROJECT_DOCUMENT_FILE
+    let documentPath: string = OLDER_PROJECT_DOCUMENT_FILES[OLDER_PROJECT_DOCUMENT_FILES.length - 1]
+    for (const candidate of [PROJECT_DOCUMENT_FILE, ...OLDER_PROJECT_DOCUMENT_FILES]) {
+      if (await gitPathExists(projectDir, ref, candidate)) { documentPath = candidate; break }
+    }
     const { stdout } = await execFileAsync('git', ['show', `${ref}:${documentPath}`], {
       cwd: projectDir,
       maxBuffer: MAX_GIT_BUFFER,
