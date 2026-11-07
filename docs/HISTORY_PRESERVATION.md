@@ -2,7 +2,7 @@
 
 Snapshot descriptions, revert lineage, timeline events, and retained recovery
 point references live in `.manifest/history.json`. Git tags alone cannot rebuild
-that information. Manifest therefore preserves an existing metadata file that
+that information. Layertrail therefore preserves an existing metadata file that
 cannot be read, rather than treating it as an empty history and overwriting it.
 
 Malformed JSON, unsupported versions, invalid records, and filesystem read
@@ -12,10 +12,10 @@ recovery payloads. Existing edit history remains available. Ordinary project
 editing and saving remain available.
 
 The timeline reports the affected file and offers a review of the automatic
-backup. Users can also restore a known-good file manually, or use a Manifest
+backup. Users can also restore a known-good file manually, or use a Layertrail
 version that supports its format. Failed refreshes clear stale timeline/recovery entries
 and do not display “No snapshots yet.” Restoring valid metadata makes history
-operations available again without restarting the app. Manifest does not
+operations available again without restarting the app. Layertrail does not
 automatically delete or reset damaged metadata.
 
 Lists and exports that require snapshot metadata report the same problem
@@ -78,7 +78,7 @@ the rename; file flushing alone does not guarantee crash durability.
 
 Once history metadata is readable, **Additional recovery files → Review recovery
 files** scans `.manifest/recovery` without changing it. Each unlisted file is
-shown with an eligibility explanation. Manifest accepts recognized recovery
+shown with an eligibility explanation. Layertrail accepts recognized recovery
 filenames containing a valid inventory for this project; malformed, foreign,
 unsupported, oversized, linked, and unrecognized files remain untouched.
 Hidden files are skipped. Each review lists at most 100 unlisted entries and
@@ -108,7 +108,7 @@ or invalid, allowing future backups to stop referencing an unusable payload.
 Retained files may appear in the next review. There is no file-deletion action.
 History metadata version 2 records the
 new reason; version 1 migrates without changing its existing records. Older
-Manifest versions will refuse the newer history metadata.
+Layertrail versions will refuse the newer history metadata.
 
 ## Verification
 

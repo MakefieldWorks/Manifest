@@ -1,6 +1,6 @@
 # External project-file changes
 
-Manifest remembers a SHA-256 fingerprint of the exact project document bytes it
+Layertrail remembers a SHA-256 fingerprint of the exact project document bytes it
 opened or last saved. Save checks that fingerprint before writing and again
 before replacing the file. Changes, deletion, unreadable files, and links pause
 saving instead of overwriting the outside version. This includes autosave and
@@ -33,7 +33,7 @@ files before proceeding. Malformed external bytes are preserved verbatim;
 missing files have no external bytes to copy. Resolution requires writable local
 recovery directories in the existing project folder. Unreadable, linked, or
 oversized external files must first be restored to a readable regular document;
-Manifest will not discard bytes it cannot preserve. A moved project folder must
+Layertrail will not discard bytes it cannot preserve. A moved project folder must
 be restored to its original location.
 
 - **Keep current** explicitly writes the current inventory over the external
@@ -51,7 +51,7 @@ remain intact, and metadata backups are protected before resolution.
 
 History operations check the current document before writing metadata backups,
 creating safety files, or changing Git. Snapshot creation additionally checks
-that the staged document exactly matches Manifest's saved bytes. A mismatch
+that the staged document exactly matches Layertrail's saved bytes. A mismatch
 unstages the document and aborts before commit/tag creation.
 
 These checks do not provide a filesystem transaction against arbitrary external

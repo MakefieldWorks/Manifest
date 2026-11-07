@@ -14,7 +14,7 @@ trail of what the configuration looked like at each meaningful moment. Their sit
 they change hardware or software, run a test, and later must answer *what did we change, and what did
 it look like before it broke?* Spreadsheets flatten the structure; Git is too technical for the job.
 
-Manifest ships publicly, so the audience is strangers with this job, not a known team. First-run,
+Layertrail ships publicly, so the audience is strangers with this job, not a known team. First-run,
 empty states, and activation are real product scope, not internal-tool afterthoughts.
 
 The three other personas documented in `docs/PRODUCT_USAGE_MODEL.md` (product/research lead,
@@ -23,10 +23,10 @@ incidentally; they must not drive v1 decisions or be cited as evidence of demand
 
 ## Product Purpose
 
-Manifest is a local-first desktop app for managing structured, hierarchical projects, with named
+Layertrail is a local-first desktop app for managing structured, hierarchical projects, with named
 snapshots and a diff view that explains what actually changed.
 
-A project lives as a readable `Manifest.manifestproject` file in the user's own folder. Manifest gives that file
+A project lives as a readable `Layertrail.layertrail` file in the user's own folder. Layertrail gives that file
 a real editing UI, saves named checkpoints of it, and compares any two states semantically.
 
 Success means a user can model an evolving structure, checkpoint it at meaningful moments, understand
@@ -71,7 +71,7 @@ enough that tree rendering is virtualized and search is indexed.
 
 Recorded from README "Current Features" — shipped behavior, not in-flight branch work.
 
-- Create and open Manifest projects.
+- Create and open Layertrail projects.
 - Hierarchical node trees: add, rename, delete, reorder, move.
 - Type-to-jump in the tree; Enter/Shift+Enter cycles matches, Escape clears.
 - Node properties in the detail pane, with optional project-level typed-property templates
@@ -90,12 +90,12 @@ This is the *intended* product model, from `docs/PRODUCT_USAGE_MODEL.md`. Parts 
 rather than verified as built — README claims only "create named snapshots and restore prior states."
 Treat this section as the contract design work must honor, not as a list of shipped behavior.
 
-1. **Current Project** — the only editable thing. Autosaved to `Manifest.manifestproject`.
+1. **Current Project** — the only editable thing. Autosaved to `Layertrail.layertrail`.
 2. **Immutable Snapshot Timeline** — append-only, chronological. A snapshot is never mutated in place.
 3. **Revert Events** — revert changes the current project to match a prior snapshot and appends an
    event. It does not rewrite or delete later snapshots.
 
-The event timeline is linear. Content lineage may fork, and Manifest records that honestly via
+The event timeline is linear. Content lineage may fork, and Layertrail records that honestly via
 `basedOnSnapshotId` and `createdAfterRevertEventId` — without exposing Git branches.
 
 Revert must preserve unsnapshotted work automatically, as a recovery point (not a first-class
@@ -143,8 +143,8 @@ a power-user CLI suite.
 
 ## Brand Commitments
 
-- Name: **Manifest**. Existing mark at `resources/manifest.svg`, with renderer assets at
-  `src/renderer/public/manifest-mark.svg` / `.png` and a generator at
+- Name: **Layertrail**. Existing mark at `resources/layertrail.svg`, with renderer assets at
+  `src/renderer/public/layertrail-mark.svg` / `.png` and a generator at
   `scripts/generate_brand_assets.py`.
 - Voice: plain, concrete, unhurried. The product explains structure and change without jargon and
   without borrowing developer-tool vocabulary.

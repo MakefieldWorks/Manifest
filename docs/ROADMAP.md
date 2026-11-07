@@ -1,4 +1,4 @@
-# Manifest Roadmap (Initial)
+# Layertrail Roadmap (Initial)
 
 This roadmap is intentionally biased toward a **smaller, sharper v1** than Archon’s full ambition.
 
@@ -19,7 +19,7 @@ Deliverables:
 
 Exit criteria:
 
-- confidence that Manifest is meaningfully distinct from Archon
+- confidence that Layertrail is meaningfully distinct from Archon
 - agreement on the first 2–3 milestones
 
 ---
@@ -48,7 +48,7 @@ Exit criteria:
 
 ## Phase 2 — Core editing experience
 
-**Goal:** deliver the first truly useful Manifest workflow.
+**Goal:** deliver the first truly useful Layertrail workflow.
 
 Scope:
 
@@ -88,7 +88,7 @@ Exit criteria:
 
 ## Phase 4 — Differentiators
 
-**Goal:** add the features that make Manifest feel special rather than merely competent.
+**Goal:** add the features that make Layertrail feel special rather than merely competent.
 
 Candidates:
 
@@ -122,7 +122,7 @@ Exit criteria:
 
 ## Scope discipline rules
 
-To keep Manifest from inheriting too much early complexity:
+To keep Layertrail from inheriting too much early complexity:
 
 - no broad plugin marketplace in v1
 - no full parity rewrite of Archon

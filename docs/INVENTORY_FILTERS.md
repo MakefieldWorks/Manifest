@@ -1,6 +1,6 @@
 # Inventory Filters
 
-Manifest's tree search can be narrowed with structured filters. Filters work on their own or together with name/property search text, and every active condition must match.
+Layertrail's tree search can be narrowed with structured filters. Filters work on their own or together with name/property search text, and every active condition must match.
 
 Available filters:
 
