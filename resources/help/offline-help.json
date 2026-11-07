@@ -1,10 +1,10 @@
 {
   "format": 1,
   "entry": "/docs/start/introduction/",
-  "site": "https://manifest.makefieldworks.com",
+  "site": "https://layertrail.app",
   "source": {
-    "repository": "manifest-website",
-    "commit": "61a7a4860c963bfee3ac7ebeaf53ebed59025044",
+    "repository": "layertrail-website",
+    "commit": "e47310df87f63534f9a3b610193091cf549fa7a4",
     "dirty": false
   }
 }
